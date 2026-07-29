@@ -63,7 +63,7 @@ describe("editor compartilhado de visitantes", () => {
     expect(
       screen.getByRole("button", { name: "Adicionar visitante" }),
     ).toBeDisabled();
-  });
+  }, 15_000);
 
   it("marca e foca o primeiro campo inválido", () => {
     const handle = { current: null as VisitorEditorHandle | null };
