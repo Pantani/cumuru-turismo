@@ -50,7 +50,12 @@ func TestCapabilityRejectsTampering(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	token := issued.Token[:len(issued.Token)-1] + "A"
+	identifier, mac, err := parseCapabilityToken(issued.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mac[0] ^= 1
+	token := encodeCapabilityToken(identifier, mac)
 	if _, err := codec.Resolve(token); err == nil {
 		t.Fatal("tampered capability accepted")
 	}
