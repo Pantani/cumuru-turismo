@@ -1,0 +1,24 @@
+project_name = "cumuru"
+environment  = "staging"
+aws_region   = "sa-east-1"
+
+ssh_public_key = "ssh-ed25519 AAAA... operador@exemplo"
+admin_cidr     = "203.0.113.10/32"
+domain_name    = "staging.turismo.prado.ba.gov.br"
+
+# Informe somente se a hosted zone já estiver no Route 53.
+route53_zone_id = null
+
+instance_type           = "t4g.small"
+root_volume_gib         = 30
+db_instance_class       = "db.t4g.micro"
+db_engine_version       = "17.10"
+db_allocated_storage_gib = 20
+db_max_allocated_storage_gib = 100
+
+rds_multi_az            = false
+rds_deletion_protection = true
+rds_final_snapshot      = true
+
+alert_email       = null
+monthly_budget_usd = 100

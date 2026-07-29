@@ -1,0 +1,8 @@
+---
+- name: Configurar e publicar Cumuru
+  hosts: cumuru
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: cumuru_host

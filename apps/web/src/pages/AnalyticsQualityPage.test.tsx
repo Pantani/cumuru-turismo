@@ -1,0 +1,81 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { AuthSessionProvider } from "../shared/auth/AuthSession";
+import AnalyticsQualityPage from "./AnalyticsQualityPage";
+
+function renderPage(token: string | null = null) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AuthSessionProvider accessToken={token}>
+        <AnalyticsQualityPage />
+      </AuthSessionProvider>
+    </QueryClientProvider>,
+  );
+}
+
+describe("rota interna de qualidade", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("falha fechada e não chama a API sem sessão", () => {
+    const fetcher = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetcher);
+
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Acesso institucional necessário" }),
+    ).toBeInTheDocument();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("usa a sessão existente para consultar a rota protegida", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const request = input as Request;
+      expect(request.headers.get("Authorization")).toBe("Bearer opaque-token");
+      return Response.json(
+        {
+          window: "last_30_days",
+          updated_at: "2026-07-28T12:00:00Z",
+          incomplete_stays: { status: "available", value: 0 },
+          overdue_planned_departures: { status: "available", value: 0 },
+          silent_accommodations: { status: "available", value: 0 },
+          aggregation_failures: { status: "available", value: 0 },
+          suspected_duplicates: {
+            status: "not_available",
+            reason_code: "pseudonym_not_approved",
+          },
+          fnrh_failures: {
+            status: "not_available",
+            reason_code: "phase_not_implemented",
+          },
+          coverage_by_category: [],
+        },
+        {
+          headers: {
+            "Cache-Control": "no-store",
+            "X-Request-ID": "request-quality-page-test",
+          },
+        },
+      );
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    renderPage("opaque-token");
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Resumo dos últimos 30 dias",
+      }),
+    ).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(document.body.textContent).not.toContain("opaque-token");
+  });
+});

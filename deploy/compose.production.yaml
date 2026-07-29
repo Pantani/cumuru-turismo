@@ -1,0 +1,100 @@
+name: cumuru
+
+services:
+  migrate:
+    image: ${MIGRATE_IMAGE:-migrate/migrate:v4.19.1@sha256:cc4ad8e19d66791e3689405d9a028ce6e9614f32032db14acda1469f7201d6e4}
+    command:
+      - -path=/migrations
+      - -database=${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
+      - up
+    volumes:
+      - ./migrations:/migrations:ro
+      - ./secrets/rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
+    networks: [private]
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  api:
+    image: ${CUMURU_API_IMAGE:?CUMURU_API_IMAGE is required}
+    command: ["/app/api"]
+    env_file:
+      - ./runtime.env
+    volumes:
+      - ./secrets/rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks: [private]
+
+  worker:
+    image: ${CUMURU_API_IMAGE:?CUMURU_API_IMAGE is required}
+    command: ["/app/worker"]
+    env_file:
+      - ./runtime.env
+    volumes:
+      - ./secrets/rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks: [private]
+
+  web:
+    image: ${CUMURU_WEB_IMAGE:?CUMURU_WEB_IMAGE is required}
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=32m,mode=0755
+      - /var/run:size=8m,mode=0755
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks: [private]
+
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d}
+    environment:
+      CUMURU_DOMAIN: ${CUMURU_DOMAIN:?CUMURU_DOMAIN is required}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - web
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add:
+      - NET_BIND_SERVICE
+    networks:
+      private:
+        ipv4_address: 172.31.0.10
+
+networks:
+  private:
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+
+volumes:
+  caddy-data:
+  caddy-config:

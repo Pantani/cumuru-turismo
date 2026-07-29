@@ -1,0 +1,6 @@
+bucket       = "cumuru-terraform-state-SEU_ACCOUNT_ID"
+key          = "cumuru/staging/terraform.tfstate"
+region       = "sa-east-1"
+encrypt      = true
+use_lockfile = true
+kms_key_id   = "arn:aws:kms:sa-east-1:SEU_ACCOUNT_ID:key/SEU_KMS_KEY_ID"

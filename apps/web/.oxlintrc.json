@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": [
+    "eslint-plugin-sonarjs"
+  ],
+  "options": {
+    "denyWarnings": true,
+    "reportUnusedDisableDirectives": "error",
+    "respectEslintDisableDirectives": false
+  },
+  "rules": {
+    "complexity": [
+      "error",
+      9
+    ],
+    "sonarjs/cognitive-complexity": [
+      "error",
+      9
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+---
+# Valores não secretos. O script render-ansible-inventory.sh gera a maior parte.
+cumuru_environment: staging
+cumuru_aws_region: sa-east-1
+cumuru_domain: staging.turismo.prado.ba.gov.br
+cumuru_acme_email: ti@prado.ba.gov.br
+
+cumuru_rds_address: cumuru-staging.example.sa-east-1.rds.amazonaws.com
+cumuru_rds_master_secret_arn: arn:aws:secretsmanager:sa-east-1:123456789012:secret:example
+cumuru_runtime_secret_arn: arn:aws:secretsmanager:sa-east-1:123456789012:secret:example
+
+cumuru_api_repository_url: 123456789012.dkr.ecr.sa-east-1.amazonaws.com/cumuru-staging-api
+cumuru_web_repository_url: 123456789012.dkr.ecr.sa-east-1.amazonaws.com/cumuru-staging-web
+cumuru_release_tag: 0.2.0-source-revision
+cumuru_api_image_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+cumuru_web_image_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+# Obrigatórios e institucionais. Não use fixtures locais.
+cumuru_oidc_issuer: https://identity.example.gov.br/realms/cumuru
+cumuru_oidc_audience: cumuru-staging
+cumuru_otel_endpoint: https://otel.example.gov.br/v1/traces

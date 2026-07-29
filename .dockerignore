@@ -1,0 +1,14 @@
+.git
+.github
+.codex
+.claude
+.agents
+_workspace
+.tools
+artifacts
+node_modules
+**/node_modules
+**/dist
+**/.cache
+*.env
+!.env.example

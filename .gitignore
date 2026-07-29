@@ -1,0 +1,35 @@
+_workspace/
+
+# AI assistants and local agent workspaces
+/.agents/
+/.claude/
+/.codex/
+/.aider/
+/.augment/
+/.cline/
+/.continue/
+/.cursor/
+/.gemini/
+/.goose/
+/.junie/
+/.kilocode/
+/.opencode/
+/.qodo/
+/.roo/
+/.tabnine/
+/.windsurf/
+
+# Local editor and operating-system metadata
+/.idea/
+/.vscode/
+.DS_Store
+
+.env
+.env.*
+!.env.example
+.tools/
+artifacts/
+node_modules/
+apps/web/dist/
+coverage/
+*.log

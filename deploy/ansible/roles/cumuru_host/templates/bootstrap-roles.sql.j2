@@ -1,0 +1,61 @@
+\set ON_ERROR_STOP on
+
+DO $roles$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'migration_admin') THEN
+    CREATE ROLE migration_admin NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_runtime') THEN
+    CREATE ROLE app_runtime NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'worker_runtime') THEN
+    CREATE ROLE worker_runtime NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'public_runtime') THEN
+    CREATE ROLE public_runtime NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'privacy_officer') THEN
+    CREATE ROLE privacy_officer NOLOGIN;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cumuru_migration') THEN
+    CREATE ROLE cumuru_migration LOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cumuru_app') THEN
+    CREATE ROLE cumuru_app LOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cumuru_worker') THEN
+    CREATE ROLE cumuru_worker LOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cumuru_public') THEN
+    CREATE ROLE cumuru_public LOGIN;
+  END IF;
+END
+$roles$;
+
+ALTER ROLE cumuru_migration
+  WITH LOGIN INHERIT PASSWORD '{{ cumuru_runtime_secret.database_migration_password }}';
+ALTER ROLE cumuru_app
+  WITH LOGIN INHERIT PASSWORD '{{ cumuru_runtime_secret.database_app_password }}';
+ALTER ROLE cumuru_worker
+  WITH LOGIN INHERIT PASSWORD '{{ cumuru_runtime_secret.database_worker_password }}';
+ALTER ROLE cumuru_public
+  WITH LOGIN INHERIT PASSWORD '{{ cumuru_runtime_secret.database_public_password }}';
+
+GRANT migration_admin TO cumuru_migration;
+GRANT app_runtime TO cumuru_app;
+GRANT worker_runtime TO cumuru_worker;
+GRANT public_runtime TO cumuru_public;
+
+GRANT CONNECT, CREATE, TEMPORARY ON DATABASE {{ cumuru_database_name }}
+  TO migration_admin;
+GRANT USAGE, CREATE ON SCHEMA public TO migration_admin;
+GRANT CONNECT ON DATABASE {{ cumuru_database_name }}
+  TO app_runtime, worker_runtime, public_runtime, privacy_officer;
+REVOKE CREATE, TEMPORARY ON DATABASE {{ cumuru_database_name }}
+  FROM PUBLIC, public_runtime, cumuru_public;
+
+ALTER ROLE cumuru_migration SET search_path = public;
+ALTER ROLE cumuru_app SET search_path = core, platform, public;
+ALTER ROLE cumuru_worker SET search_path = core, platform, public;
+ALTER ROLE cumuru_public SET search_path = public_data, public;

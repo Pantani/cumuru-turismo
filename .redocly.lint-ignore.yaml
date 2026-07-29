@@ -1,0 +1,6 @@
+# Probes públicos da Fase 1 não possuem um caminho 4xx na aplicação.
+# O ADR-012 registra que 429 só entra quando houver limiter e Retry-After.
+contracts/openapi.yaml:
+  operation-4xx-response:
+    - "#/paths/~1platform~1health/get/responses"
+    - "#/paths/~1platform~1readiness/get/responses"

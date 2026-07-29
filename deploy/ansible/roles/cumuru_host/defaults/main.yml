@@ -1,0 +1,24 @@
+---
+cumuru_install_dir: /opt/cumuru
+cumuru_runtime_user: cumuru
+cumuru_database_name: cumuru
+cumuru_database_port: 5432
+cumuru_trusted_proxy_cidr: 172.31.0.10/32
+cumuru_release_tag: ""
+cumuru_acme_email: ""
+cumuru_oidc_issuer: ""
+cumuru_oidc_audience: ""
+cumuru_otel_endpoint: ""
+cumuru_api_repository_url: ""
+cumuru_web_repository_url: ""
+cumuru_api_image_digest: ""
+cumuru_web_image_digest: ""
+cumuru_rds_address: ""
+cumuru_rds_master_secret_arn: ""
+cumuru_runtime_secret_arn: ""
+cumuru_aws_region: sa-east-1
+cumuru_environment: staging
+cumuru_rds_ca_url: https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+cumuru_postgres_admin_image: postgres:17.10-alpine3.23@sha256:8189a1f6e40904781fc9e2612687877791d21679866db58b1de996b31fc312e4
+cumuru_migrate_image: migrate/migrate:v4.19.1@sha256:cc4ad8e19d66791e3689405d9a028ce6e9614f32032db14acda1469f7201d6e4
+cumuru_caddy_image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d

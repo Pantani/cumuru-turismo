@@ -1,0 +1,158 @@
+name: cumuru
+
+x-phase2-local-environment: &phase2-local-environment
+  # Fixtures públicas, determinísticas e exclusivas de local/teste.
+  INVITE_BASE_URL: ${INVITE_BASE_URL:-http://127.0.0.1:4173/convites}
+  INVITE_TTL: ${INVITE_TTL:-72h}
+  IDEMPOTENCY_TTL: ${IDEMPOTENCY_TTL:-720h}
+  RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1m}
+  INVITE_CONTEXT_RATE_LIMIT: ${INVITE_CONTEXT_RATE_LIMIT:-30}
+  INVITE_SUBMIT_RATE_LIMIT: ${INVITE_SUBMIT_RATE_LIMIT:-10}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://127.0.0.1:4173,http://127.0.0.1:5173}
+  INVITE_HMAC_CURRENT_VERSION: ${INVITE_HMAC_CURRENT_VERSION:-local-v1}
+  INVITE_HMAC_KEYS: ${INVITE_HMAC_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtaW52aXRlLWtleS12MS0wMDA=}
+  ACTOR_HMAC_CURRENT_VERSION: ${ACTOR_HMAC_CURRENT_VERSION:-local-v1}
+  ACTOR_HMAC_KEYS: ${ACTOR_HMAC_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtYWN0b3Ita2V5LXYxLTAwMDA=}
+  IDEMPOTENCY_HMAC_CURRENT_VERSION: ${IDEMPOTENCY_HMAC_CURRENT_VERSION:-local-v1}
+  IDEMPOTENCY_HMAC_KEYS: ${IDEMPOTENCY_HMAC_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtaWRlbXBvdGVuY3ktdjEtMDA=}
+  RATE_LIMIT_HMAC_CURRENT_VERSION: ${RATE_LIMIT_HMAC_CURRENT_VERSION:-local-v1}
+  RATE_LIMIT_HMAC_KEYS: ${RATE_LIMIT_HMAC_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtcmF0ZS1saW1pdC12MS0wMDA=}
+  CURSOR_HMAC_CURRENT_VERSION: ${CURSOR_HMAC_CURRENT_VERSION:-local-v1}
+  CURSOR_HMAC_KEYS: ${CURSOR_HMAC_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtY3Vyc29yLWtleS12MS0wMDA=}
+  PHASE3_ENABLED: ${PHASE3_ENABLED:-true}
+  SURVEY_CAPABILITY_TTL: ${SURVEY_CAPABILITY_TTL:-24h}
+  SURVEY_FREE_TEXT_TTL: ${SURVEY_FREE_TEXT_TTL:-24h}
+  SURVEY_SUBMIT_RATE_LIMIT: ${SURVEY_SUBMIT_RATE_LIMIT:-10}
+  SURVEY_FREE_TEXT_CLEANUP_ENABLED: ${SURVEY_FREE_TEXT_CLEANUP_ENABLED:-true}
+  SURVEY_HMAC_CURRENT_VERSION: ${SURVEY_HMAC_CURRENT_VERSION:-local-v1}
+  SURVEY_HMAC_KEYS: ${SURVEY_HMAC_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3Qtc3VydmV5LWhtYWMtdjEtMDAw}
+  SURVEY_FREE_TEXT_CURRENT_VERSION: ${SURVEY_FREE_TEXT_CURRENT_VERSION:-local-v1}
+  SURVEY_FREE_TEXT_KEYS: ${SURVEY_FREE_TEXT_KEYS:-local-v1=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+  PHASE4_ENABLED: ${PHASE4_ENABLED:-true}
+  PUBLIC_DATABASE_TIMEOUT: ${PUBLIC_DATABASE_TIMEOUT:-3s}
+  PHASE4_PRIMARY_CELL_THRESHOLD: ${PHASE4_PRIMARY_CELL_THRESHOLD:-10}
+  PHASE4_MINIMUM_REPORTING_ACCOMMODATIONS: ${PHASE4_MINIMUM_REPORTING_ACCOMMODATIONS:-3}
+  PHASE4_ROUNDING_BASE: ${PHASE4_ROUNDING_BASE:-10}
+  PHASE4_PRE_REGISTERED_WEIGHT: ${PHASE4_PRE_REGISTERED_WEIGHT:-0.80}
+  PHASE4_INCREMENTAL_INTERVAL: ${PHASE4_INCREMENTAL_INTERVAL:-15m}
+  PHASE4_FULL_RECONCILIATION_INTERVAL: ${PHASE4_FULL_RECONCILIATION_INTERVAL:-24h}
+
+services:
+  postgres:
+    image: postgres:17.10-alpine3.23@sha256:8189a1f6e40904781fc9e2612687877791d21679866db58b1de996b31fc312e4
+    environment:
+      POSTGRES_DB: cumuru
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: cumuru-local-admin-only
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=postgres --dbname=cumuru"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [private]
+
+  migrate:
+    image: migrate/migrate:v4.19.1@sha256:cc4ad8e19d66791e3689405d9a028ce6e9614f32032db14acda1469f7201d6e4
+    command:
+      - -path=/migrations
+      - -database=postgres://cumuru_migration:cumuru-local-migration-only@postgres:5432/cumuru?sslmode=disable
+      - up
+    volumes:
+      - ./apps/api/migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [private]
+
+  api:
+    image: "cumuru-api:${CUMURU_IMAGE_TAG:-0.2.0}"
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        BUILD_VERSION: "${CUMURU_BUILD_VERSION:?build metadata wrapper is required}"
+        BUILD_REVISION: "${CUMURU_BUILD_REVISION:?build metadata wrapper is required}"
+        BUILD_TIME: "${CUMURU_BUILD_TIME:?build metadata wrapper is required}"
+    command: ["/app/api"]
+    environment:
+      <<: *phase2-local-environment
+      APP_ENV: local
+      HTTP_ADDRESS: 0.0.0.0:8080
+      OPERATIONS_ADDRESS: 0.0.0.0:9090
+      DATABASE_URL: postgres://cumuru_app:cumuru-local-app-only@postgres:5432/cumuru?sslmode=disable
+      PUBLIC_DATABASE_URL: postgres://cumuru_public:cumuru-local-public-only@postgres:5432/cumuru?sslmode=disable
+      OIDC_MODE: fake
+      OIDC_ISSUER: https://oidc.invalid/local
+      OIDC_AUDIENCE: cumuru-local
+      OTEL_EXPORTER: none
+      TRUSTED_PROXY_CIDRS: ${COMPOSE_TRUSTED_PROXY_CIDRS:-172.30.0.10/32}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [private]
+
+  worker:
+    image: "cumuru-api:${CUMURU_IMAGE_TAG:-0.2.0}"
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        BUILD_VERSION: "${CUMURU_BUILD_VERSION:?build metadata wrapper is required}"
+        BUILD_REVISION: "${CUMURU_BUILD_REVISION:?build metadata wrapper is required}"
+        BUILD_TIME: "${CUMURU_BUILD_TIME:?build metadata wrapper is required}"
+    command: ["/app/worker"]
+    environment:
+      <<: *phase2-local-environment
+      APP_ENV: local
+      DATABASE_URL: postgres://cumuru_worker:cumuru-local-worker-only@postgres:5432/cumuru?sslmode=disable
+      OIDC_MODE: fake
+      OIDC_ISSUER: https://oidc.invalid/local
+      OIDC_AUDIENCE: cumuru-local
+      OTEL_EXPORTER: none
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [private]
+
+  web:
+    image: "cumuru-web:${CUMURU_IMAGE_TAG:-0.2.0}"
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+        BUILD_VERSION: "${CUMURU_BUILD_VERSION:?build metadata wrapper is required}"
+        BUILD_REVISION: "${CUMURU_BUILD_REVISION:?build metadata wrapper is required}"
+        BUILD_TIME: "${CUMURU_BUILD_TIME:?build metadata wrapper is required}"
+    ports:
+      - "127.0.0.1:4173:8080"
+    depends_on:
+      api:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    networks:
+      private:
+        ipv4_address: 172.30.0.10
+
+networks:
+  private:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  postgres-data:

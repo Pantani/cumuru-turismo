@@ -1,0 +1,337 @@
+---
+- name: Validar arquitetura e entradas fail-closed
+  ansible.builtin.assert:
+    that:
+      - ansible_architecture in ["aarch64", "arm64"]
+      - cumuru_environment in ["staging", "production"]
+      - cumuru_aws_region == "sa-east-1"
+      - cumuru_domain | length > 3
+      - cumuru_acme_email is match("^[^@ ]+@[^@ ]+\\.[^@ ]+$")
+      - cumuru_release_tag is match("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+      - cumuru_api_repository_url | length > 10
+      - cumuru_web_repository_url | length > 10
+      - cumuru_api_image_digest is match("^sha256:[a-f0-9]{64}$")
+      - cumuru_web_image_digest is match("^sha256:[a-f0-9]{64}$")
+      - cumuru_postgres_admin_image is match("^[^@ ]+:[^@ ]+@sha256:[a-f0-9]{64}$")
+      - cumuru_migrate_image is match("^[^@ ]+:[^@ ]+@sha256:[a-f0-9]{64}$")
+      - cumuru_caddy_image is match("^[^@ ]+:[^@ ]+@sha256:[a-f0-9]{64}$")
+      - cumuru_rds_address is match("^[A-Za-z0-9.-]+$")
+      - cumuru_rds_master_secret_arn is match("^arn:aws:secretsmanager:")
+      - cumuru_runtime_secret_arn is match("^arn:aws:secretsmanager:")
+      - cumuru_oidc_issuer is match("^https://")
+      - cumuru_oidc_audience | length > 2
+      - cumuru_otel_endpoint is match("^https://")
+    fail_msg: "Entradas institucionais ou outputs Terraform estão ausentes/inválidos."
+
+- name: Atualizar cache apt
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Instalar runtime e ferramentas operacionais
+  ansible.builtin.apt:
+    name:
+      - awscli
+      - ca-certificates
+      - curl
+      - docker.io
+      - docker-compose-v2
+      - fail2ban
+      - jq
+      - openssl
+      - unattended-upgrades
+    state: present
+
+- name: Habilitar serviços do host
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - docker
+    - fail2ban
+
+- name: Criar usuário runtime sem login
+  ansible.builtin.user:
+    name: "{{ cumuru_runtime_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    groups: docker
+    append: true
+
+- name: Criar diretórios da release
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ cumuru_install_dir }}", group: "{{ cumuru_runtime_user }}", mode: "0750" }
+    - { path: "{{ cumuru_install_dir }}/migrations", group: "{{ cumuru_runtime_user }}", mode: "0750" }
+    - { path: "{{ cumuru_install_dir }}/secrets", group: "{{ cumuru_runtime_user }}", mode: "0750" }
+    - { path: "/run/cumuru", group: "root", mode: "0700" }
+
+- name: Instalar Compose de produção
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../compose.production.yaml"
+    dest: "{{ cumuru_install_dir }}/compose.yaml"
+    owner: root
+    group: "{{ cumuru_runtime_user }}"
+    mode: "0640"
+
+- name: Instalar migrations append-only
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../apps/api/migrations/"
+    dest: "{{ cumuru_install_dir }}/migrations/"
+    owner: root
+    group: "{{ cumuru_runtime_user }}"
+    mode: "0640"
+    directory_mode: "0750"
+
+- name: Instalar configuração Caddy sem logs de capability
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ cumuru_install_dir }}/Caddyfile"
+    owner: root
+    group: "{{ cumuru_runtime_user }}"
+    mode: "0640"
+
+- name: Baixar bundle oficial de CAs do RDS
+  ansible.builtin.get_url:
+    url: "{{ cumuru_rds_ca_url }}"
+    dest: "{{ cumuru_install_dir }}/secrets/rds-global-bundle.pem"
+    owner: root
+    group: "{{ cumuru_runtime_user }}"
+    mode: "0440"
+    force: true
+
+- name: Validar bundle RDS
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - crl2pkcs7
+      - -nocrl
+      - -certfile
+      - "{{ cumuru_install_dir }}/secrets/rds-global-bundle.pem"
+  changed_when: false
+  no_log: true
+
+- name: Instalar bootstrap de segredo runtime
+  ansible.builtin.copy:
+    src: bootstrap-runtime-secret.sh
+    dest: /usr/local/sbin/cumuru-bootstrap-runtime-secret
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Materializar ou recuperar segredo runtime
+  ansible.builtin.command:
+    argv:
+      - /usr/local/sbin/cumuru-bootstrap-runtime-secret
+      - "{{ cumuru_runtime_secret_arn }}"
+      - "{{ cumuru_aws_region }}"
+      - /run/cumuru/runtime-secret.json
+  changed_when: false
+  no_log: true
+
+- name: Ler segredo runtime temporário
+  ansible.builtin.slurp:
+    src: /run/cumuru/runtime-secret.json
+  register: cumuru_runtime_secret_file
+  no_log: true
+
+- name: Decodificar segredo runtime
+  ansible.builtin.set_fact:
+    cumuru_runtime_secret: "{{ cumuru_runtime_secret_file.content | b64decode | from_json }}"
+  no_log: true
+
+- name: Recuperar segredo mestre administrado pelo RDS
+  ansible.builtin.command:
+    argv:
+      - aws
+      - secretsmanager
+      - get-secret-value
+      - --secret-id
+      - "{{ cumuru_rds_master_secret_arn }}"
+      - --region
+      - "{{ cumuru_aws_region }}"
+      - --query
+      - SecretString
+      - --output
+      - text
+  register: cumuru_rds_master_secret_command
+  changed_when: false
+  no_log: true
+
+- name: Decodificar segredo mestre
+  ansible.builtin.set_fact:
+    cumuru_rds_master_secret: "{{ cumuru_rds_master_secret_command.stdout | from_json }}"
+  no_log: true
+
+- name: Renderizar bootstrap PostgreSQL temporário
+  ansible.builtin.template:
+    src: bootstrap-roles.sql.j2
+    dest: /run/cumuru/bootstrap-roles.sql
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Criar papéis PostgreSQL mínimos
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - host
+      - --env
+      - "PGPASSWORD={{ cumuru_rds_master_secret.password }}"
+      - --env
+      - PGSSLMODE=verify-full
+      - --env
+      - PGSSLROOTCERT=/rds-ca.pem
+      - --volume
+      - /run/cumuru/bootstrap-roles.sql:/bootstrap.sql:ro
+      - --volume
+      - "{{ cumuru_install_dir }}/secrets/rds-global-bundle.pem:/rds-ca.pem:ro"
+      - "{{ cumuru_postgres_admin_image }}"
+      - psql
+      - --host
+      - "{{ cumuru_rds_address }}"
+      - --port
+      - "{{ cumuru_database_port | string }}"
+      - --username
+      - "{{ cumuru_rds_master_secret.username }}"
+      - --dbname
+      - "{{ cumuru_database_name }}"
+      - --file
+      - /bootstrap.sql
+  register: cumuru_role_bootstrap
+  changed_when: "'CREATE ROLE' in cumuru_role_bootstrap.stdout"
+  no_log: true
+
+- name: Renderizar ambiente secreto runtime
+  ansible.builtin.template:
+    src: runtime.env.j2
+    dest: "{{ cumuru_install_dir }}/runtime.env"
+    owner: root
+    group: "{{ cumuru_runtime_user }}"
+    mode: "0640"
+  no_log: true
+
+- name: Renderizar release imutável
+  ansible.builtin.template:
+    src: release.env.j2
+    dest: "{{ cumuru_install_dir }}/release.env"
+    owner: root
+    group: "{{ cumuru_runtime_user }}"
+    mode: "0640"
+  no_log: true
+
+- name: Remover material temporário
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /run/cumuru/bootstrap-roles.sql
+    - /run/cumuru/runtime-secret.json
+  no_log: true
+
+- name: Autenticar Docker no ECR
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail &&
+      aws ecr get-login-password --region {{ cumuru_aws_region | quote }} |
+      docker login
+      --username AWS
+      --password-stdin
+      {{ (cumuru_api_repository_url.split('/')[0]) | quote }}
+    executable: /bin/bash
+  changed_when: false
+  no_log: true
+
+- name: Validar Compose de produção
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --env-file
+      - release.env
+      - --file
+      - compose.yaml
+      - config
+      - --quiet
+  args:
+    chdir: "{{ cumuru_install_dir }}"
+  changed_when: false
+  no_log: true
+
+- name: Baixar imagens imutáveis
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ cumuru_install_dir }}"
+    files:
+      - compose.yaml
+    env_files:
+      - release.env
+    policy: always
+
+- name: Aplicar migrations antes do runtime
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --env-file
+      - release.env
+      - --file
+      - compose.yaml
+      - run
+      - --rm
+      - migrate
+  args:
+    chdir: "{{ cumuru_install_dir }}"
+  changed_when: false
+  no_log: true
+
+- name: Subir release
+  community.docker.docker_compose_v2:
+    project_src: "{{ cumuru_install_dir }}"
+    files:
+      - compose.yaml
+    env_files:
+      - release.env
+    state: present
+    pull: never
+    remove_orphans: true
+    wait: true
+    wait_timeout: 180
+
+- name: Aguardar health HTTPS
+  ansible.builtin.uri:
+    url: "https://{{ cumuru_domain }}/api/v1/platform/health"
+    method: GET
+    status_code: 200
+    return_content: true
+    validate_certs: true
+  register: cumuru_health
+  until:
+    - cumuru_health.status == 200
+    - cumuru_health.json.status == "ok"
+  retries: 30
+  delay: 5
+
+- name: Validar readiness HTTPS
+  ansible.builtin.uri:
+    url: "https://{{ cumuru_domain }}/api/v1/platform/readiness"
+    method: GET
+    status_code: 200
+    return_content: true
+    validate_certs: true
+  register: cumuru_readiness
+  until:
+    - cumuru_readiness.status == 200
+    - cumuru_readiness.json.status == "ready"
+  retries: 12
+  delay: 5

@@ -1,0 +1,101 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CUMURU_IMAGE_TAG: ${{ github.sha }}
+      CUMURU_BUILD_REVISION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.26.5
+          cache-dependency-path: apps/api/go.sum
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 26.5.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: make install
+
+      - name: Install pinned Go quality tools
+        run: make tools
+
+      - name: Validate contract and generated artifacts
+        run: |
+          make openapi-lint
+          make generated-check
+
+      - name: Validate immutable infrastructure inputs
+        run: make infra-validation
+
+      - name: Verify migrations and database boundaries
+        run: make migration-test
+
+      - name: Run Phase 2 PostgreSQL integration as runtime role
+        run: make phase2-integration
+
+      - name: Verify proxy headers and capability log redaction
+        run: make phase2-proxy-test
+
+      - name: Run Phase 3 PostgreSQL and proxy integration
+        run: |
+          make phase3-integration
+          make phase3-proxy-test
+
+      - name: Run Phase 4 PostgreSQL and proxy integration
+        run: |
+          make phase4-integration
+          make phase4-proxy-test
+
+      - name: Run unit, static and build gates
+        run: |
+          make test
+          make test-backend-race
+          make typecheck
+          make post-task-quality
+          make build
+
+      - name: Build deterministic runtime images
+        run: make images
+
+      - name: Run ephemeral full-stack smokes
+        run: |
+          make phase2-full-stack
+          make phase4-benchmark
+
+      - name: Generate SBOMs
+        run: make sbom
+
+      - name: Run source, dependency and secret scanners
+        run: make scan
+
+      - name: Scan built runtime images
+        run: make image-scan
+
+      - name: Upload SBOM evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: sbom
+          path: |
+            artifacts/sbom/*.json
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,112 @@
+services:
+  api:
+    environment:
+      OTEL_EXPORTER: otlp
+      OTEL_ENDPOINT: http://otel-collector:4318/v1/traces
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+
+  worker:
+    environment:
+      OTEL_EXPORTER: otlp
+      OTEL_ENDPOINT: http://otel-collector:4318/v1/traces
+      WORKER_OPERATIONS_ADDRESS: 0.0.0.0:9091
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+
+  web:
+    depends_on:
+      api:
+        condition: service_started
+        restart: true
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.157.0@sha256:f2f01157055a9b2aab9df7118e1f1c9abf345e99b23bc7a2bc791db374a7d0f6
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "127.0.0.1:13133:13133"
+    healthcheck:
+      test:
+        - CMD
+        - /otelcol-contrib
+        - validate
+        - --config=/etc/otelcol-contrib/config.yaml
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks: [private]
+
+  prometheus:
+    image: prom/prometheus:v3.13.0@sha256:c6b27ea434f8389bfe233fbc7be381cf50587c286e871bc842008f5a1b1908a7
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=512MB
+    volumes:
+      - ./deploy/observability/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9092:9090"
+    depends_on:
+      - api
+      - worker
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks: [private]
+
+  tempo:
+    image: grafana/tempo:2.10.5@sha256:ee21727732c7a7199cb71c3eee9153bbf23f9b0b87619f0555a0cf21a67f1a33
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./deploy/observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "127.0.0.1:3200:3200"
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks: [private]
+
+  grafana:
+    image: grafana/grafana:13.1.0@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-cumuru-local-only}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+      - tempo
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/log/grafana
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks: [private]
+
+volumes:
+  grafana-data:
+  prometheus-data:
+  tempo-data:
