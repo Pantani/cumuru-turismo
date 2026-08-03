@@ -23,6 +23,20 @@ import (
 
 type accommodationRepositoryStub struct {
 	accommodation.Repository
+	createResult accommodation.Accommodation
+	createReplay bool
+	createErr    error
+	createInput  *accommodation.CreateCommand
+}
+
+func (s accommodationRepositoryStub) Create(
+	_ context.Context,
+	command accommodation.CreateCommand,
+) (accommodation.Accommodation, bool, error) {
+	if s.createInput != nil {
+		*s.createInput = command
+	}
+	return s.createResult, s.createReplay, s.createErr
 }
 
 func (accommodationRepositoryStub) CreateMembership(
@@ -112,6 +126,143 @@ func TestMembershipCreationResponseOmitsTargetIdentity(t *testing.T) {
 		strings.Contains(recorder.Body.String(), "target.invalid") {
 		t.Fatalf("response leaked target identity: %s", recorder.Body)
 	}
+}
+
+func assertAccommodationOnboardingResponse(
+	t *testing.T,
+	recorder *httptest.ResponseRecorder,
+	id uuid.UUID,
+) {
+	t.Helper()
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d; body=%s", recorder.Code, recorder.Body)
+	}
+	if recorder.Header().Get("Location") != "/api/v1/accommodations/"+id.String() {
+		t.Fatalf("Location = %q", recorder.Header().Get("Location"))
+	}
+	if recorder.Header().Get("ETag") != `"1"` ||
+		recorder.Header().Get("Idempotency-Replayed") != "false" {
+		t.Fatalf("mutation headers = %v", recorder.Header())
+	}
+}
+
+func TestAccommodationOnboardingReturnsContractHeaders(t *testing.T) {
+	t.Parallel()
+
+	var captured accommodation.CreateCommand
+	var logs bytes.Buffer
+	id := uuid.MustParse("019f0000-0000-7000-8000-000000000021")
+	organizationID := uuid.MustParse("019f0000-0000-7000-8000-000000000022")
+	handler := phase2HandlerWithOptions(t, phase2HandlerOptions{
+		onboardingEnabled: true,
+		logger:            slog.New(slog.NewJSONHandler(&logs, nil)),
+		accommodations: accommodationRepositoryStub{
+			createInput: &captured,
+			createResult: accommodation.Accommodation{
+				ID: id, OrganizationID: organizationID, Name: "Casa fictícia",
+				Category: accommodation.CategoryFamilyHosting,
+				Status:   accommodation.StatusActive, Version: 1,
+				CreatedAt: time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/accommodations",
+		strings.NewReader(`{"name":"accommodation-log-canary","category":"family_hosting","capacity":6,"client_submission_id":"019f0000-0000-7000-8000-000000000023"}`),
+	)
+	request.Header.Set("Authorization", "Bearer onboard")
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "aaaaaaaaaaaaaaaa")
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	assertAccommodationOnboardingResponse(t, recorder, id)
+	assertAccommodationOnboardingCommand(t, captured)
+	assertAccommodationOnboardingPrivacy(t, recorder, logs.String())
+}
+
+func assertAccommodationOnboardingCommand(
+	t *testing.T,
+	captured accommodation.CreateCommand,
+) {
+	t.Helper()
+	if captured.Actor.Subject != "onboard" ||
+		captured.Category != accommodation.CategoryFamilyHosting ||
+		captured.ClientSubmissionID.Version() != 7 {
+		t.Fatalf("captured command = %+v", captured)
+	}
+}
+
+func assertAccommodationOnboardingPrivacy(
+	t *testing.T,
+	recorder *httptest.ResponseRecorder,
+	logs string,
+) {
+	t.Helper()
+	for _, forbidden := range []string{"cnpj", "cpf", "cadastur", "fnrh", "oidc_issuer"} {
+		if strings.Contains(strings.ToLower(recorder.Body.String()), forbidden) {
+			t.Fatalf("response contains forbidden %q: %s", forbidden, recorder.Body)
+		}
+	}
+	if strings.Contains(logs, "accommodation-log-canary") ||
+		strings.Contains(logs, "aaaaaaaaaaaaaaaa") {
+		t.Fatalf("HTTP log leaked onboarding body or idempotency key: %s", logs)
+	}
+}
+
+type accommodationOnboardingHTTPCase struct {
+	name    string
+	enabled bool
+	token   string
+	body    string
+	want    int
+}
+
+func TestAccommodationOnboardingEnforcesFlagScopeAndClosedBody(t *testing.T) {
+	t.Parallel()
+
+	tests := []accommodationOnboardingHTTPCase{
+		{name: "flag disabled", token: "onboard", body: validAccommodationOnboardingBody(), want: http.StatusServiceUnavailable},
+		{name: "missing token", enabled: true, body: validAccommodationOnboardingBody(), want: http.StatusUnauthorized},
+		{name: "missing scope", enabled: true, token: "manager", body: validAccommodationOnboardingBody(), want: http.StatusForbidden},
+		{name: "unknown CNPJ", enabled: true, token: "onboard", body: `{"name":"Casa","category":"family_hosting","capacity":4,"client_submission_id":"019f0000-0000-7000-8000-000000000023","cnpj":"00.000.000/0001-00"}`, want: http.StatusBadRequest},
+		{name: "unclassified", enabled: true, token: "onboard", body: `{"name":"Casa","category":"unclassified","capacity":4,"client_submission_id":"019f0000-0000-7000-8000-000000000023"}`, want: http.StatusUnprocessableEntity},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assertAccommodationOnboardingHTTPCase(t, tt)
+		})
+	}
+}
+
+func assertAccommodationOnboardingHTTPCase(
+	t *testing.T,
+	tt accommodationOnboardingHTTPCase,
+) {
+	t.Helper()
+	handler := phase2HandlerWithOptions(t, phase2HandlerOptions{onboardingEnabled: tt.enabled})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/accommodations", strings.NewReader(tt.body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "aaaaaaaaaaaaaaaa")
+	if tt.token != "" {
+		request.Header.Set("Authorization", "Bearer "+tt.token)
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != tt.want {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, tt.want, recorder.Body)
+	}
+	if recorder.Code != http.StatusCreated && recorder.Header().Get("Content-Type") != "application/problem+json" {
+		t.Fatalf("Content-Type = %q", recorder.Header().Get("Content-Type"))
+	}
+}
+
+func validAccommodationOnboardingBody() string {
+	return `{"name":"Casa","category":"family_hosting","capacity":4,"client_submission_id":"019f0000-0000-7000-8000-000000000023"}`
 }
 
 func TestMutationWithoutIfMatchReturns428(t *testing.T) {
@@ -298,7 +449,7 @@ func TestMergePatchRejectsNullEvenWithAnotherValidField(t *testing.T) {
 		token string
 		body  string
 	}{
-		{"accommodation", "/api/v1/accommodations/019f0000-0000-7000-8000-000000000001", "manager", `{"name":null,"category":"pousada"}`},
+		{"accommodation", "/api/v1/accommodations/019f0000-0000-7000-8000-000000000001", "manager", `{"name":null,"category":"formal_lodging"}`},
 		{"membership", "/api/v1/accommodations/019f0000-0000-7000-8000-000000000001/memberships/019f0000-0000-7000-8000-000000000002", "manager", `{"role":null,"active":true}`},
 		{"stay", "/api/v1/stays/019f0000-0000-7000-8000-000000000001", "writer", `{"planned_arrival_on":null,"expected_guest_count":2}`},
 	}
@@ -399,9 +550,11 @@ func phase2HandlerWithStay(t *testing.T, stays stay.Repository) http.Handler {
 }
 
 type phase2HandlerOptions struct {
-	stays   stay.Repository
-	trusted []netip.Prefix
-	logger  *slog.Logger
+	stays             stay.Repository
+	accommodations    accommodation.Repository
+	onboardingEnabled bool
+	trusted           []netip.Prefix
+	logger            *slog.Logger
 }
 
 func phase2HandlerWithOptions(t *testing.T, options phase2HandlerOptions) http.Handler {
@@ -409,17 +562,23 @@ func phase2HandlerWithOptions(t *testing.T, options phase2HandlerOptions) http.H
 	verifier := verifierFunc(func(_ context.Context, token string) (access.Principal, error) {
 		scopes := map[string][]string{
 			"manager": {"accommodations:manage"},
+			"onboard": {"accommodations:onboard"},
 			"writer":  {"stays:write"},
 		}
 		return access.NewPrincipal("https://issuer.invalid", token, scopes[token]), nil
 	})
+	accommodations := options.accommodations
+	if accommodations == nil {
+		accommodations = accommodationRepositoryStub{}
+	}
 	handler, _ := httpapi.New(httpapi.Dependencies{
-		Readiness:          readinessFunc(func(context.Context) error { return nil }),
-		Verifier:           verifier,
-		Accommodations:     accommodation.NewService(accommodationRepositoryStub{}),
-		Stays:              stay.NewService(options.stays),
-		CORSAllowedOrigins: []string{"https://allowed.invalid"},
-		TrustedProxyCIDRs:  options.trusted,
+		Readiness:                      readinessFunc(func(context.Context) error { return nil }),
+		Verifier:                       verifier,
+		Accommodations:                 accommodation.NewService(accommodations),
+		AccommodationOnboardingEnabled: options.onboardingEnabled,
+		Stays:                          stay.NewService(options.stays),
+		CORSAllowedOrigins:             []string{"https://allowed.invalid"},
+		TrustedProxyCIDRs:              options.trusted,
 		CursorKeys: config.KeyringConfig{
 			CurrentVersion: "cursor-v1",
 			Keys: map[string][]byte{

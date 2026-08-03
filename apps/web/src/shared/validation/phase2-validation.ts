@@ -2,6 +2,11 @@ import type { components } from "../../generated/schema";
 import { uuidV7Pattern } from "../identity/uuid-v7";
 
 type CreateStayRequest = components["schemas"]["CreateStayRequest"];
+type CreateAccommodationRequest =
+  components["schemas"]["CreateAccommodationRequest"];
+type CreateAccommodationInput = Omit<CreateAccommodationRequest, "category"> & {
+  category: string;
+};
 type SubmitGroupRequest = components["schemas"]["SubmitGroupRequest"];
 type VisitorInput = components["schemas"]["VisitorInput"];
 
@@ -16,6 +21,14 @@ const countryPattern = /^[A-Z]{2}$/;
 const statePattern = /^[A-Z]{2}$/;
 const cityPattern = /^\d{7}$/;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+const accommodationInputCategories = new Set<string>([
+  "formal_lodging",
+  "seasonal_rental",
+  "family_hosting",
+  "camping",
+  "regularizing",
+  "other",
+]);
 
 function uuidIssue(field: string, value: string): ValidationIssue[] {
   return uuidPattern.test(value)
@@ -27,6 +40,35 @@ function uuidV7Issue(field: string, value: string): ValidationIssue[] {
   return uuidV7Pattern.test(value)
     ? []
     : [{ field, message: "Informe um identificador UUIDv7 válido." }];
+}
+
+export function validateCreateAccommodation(
+  value: CreateAccommodationInput,
+) {
+  const issues = uuidV7Issue(
+    "client_submission_id",
+    value.client_submission_id,
+  );
+  if (value.name.trim().length === 0 || value.name.length > 200) {
+    issues.push({ field: "name", message: "Informe o nome do local." });
+  }
+  if (!accommodationInputCategories.has(value.category)) {
+    issues.push({
+      field: "category",
+      message: "Escolha um tipo de hospedagem da lista.",
+    });
+  }
+  if (
+    !Number.isInteger(value.capacity) ||
+    value.capacity < 1 ||
+    value.capacity > 10_000
+  ) {
+    issues.push({
+      field: "capacity",
+      message: "Informe uma capacidade entre 1 e 10.000 pessoas.",
+    });
+  }
+  return issues;
 }
 
 function validateDateRange(value: CreateStayRequest) {

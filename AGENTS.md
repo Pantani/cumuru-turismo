@@ -146,4 +146,5 @@ tentativa atual com `make harness-snapshot PHASE=N`.
 
 | Data | Mudança | Alvo | Motivo |
 | --- | --- | --- | --- |
+| 2026-07-29 | Protocolo e build de remediação | bootstrap e Fase 4 | Resolver débitos locais em ondas reproduzíveis com PostgreSQL, full-stack e navegador real |
 | 2026-07-28 | Configuração inicial | `.agents`, `.codex` e compatibilidade `.claude` | Execução faseada com estudo paralelo e gates fail-closed |

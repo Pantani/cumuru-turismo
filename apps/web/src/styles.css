@@ -72,6 +72,30 @@ textarea:focus-visible,
   border-bottom: 1px solid #c9c1b1;
 }
 
+.local-session-banner {
+  width: min(100% - 2rem, 75rem);
+  margin: 0.75rem auto 0;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: #16312c;
+  background: #f1d7b9;
+  border: 1px solid #cf5b2c;
+  border-radius: 0.25rem;
+}
+
+.local-session-banner span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
+.local-session-banner button {
+  margin-left: auto;
+}
+
 .header-inner {
   width: min(100% - 2rem, 75rem);
   min-height: 5.5rem;
@@ -839,6 +863,52 @@ h2 {
   gap: 1rem;
   padding-block: 0.6rem;
   border-bottom: 1px solid #ded7c9;
+}
+
+.participation-tracks {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  color: #314a44;
+  background: #f1eee5;
+  border-left: 4px solid #2d6a4f;
+}
+
+.participation-tracks p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.accommodation-catalog {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.accommodation-catalog li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  background: #ffffff;
+  border: 1px solid #ded7c9;
+}
+
+.accommodation-catalog li div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.accommodation-catalog li span {
+  color: #536660;
+  font-size: 0.88rem;
+}
+
+.onboarding-trigger {
+  justify-self: start;
 }
 
 .workflow-panel,

@@ -14,6 +14,7 @@ import (
 
 var (
 	ErrInvalidInput       = errors.New("invalid input")
+	ErrForbidden          = errors.New("operation forbidden")
 	ErrNotFound           = errors.New("resource not found")
 	ErrConflict           = errors.New("resource conflict")
 	ErrPreconditionFailed = errors.New("precondition failed")
@@ -25,7 +26,7 @@ type Accommodation struct {
 	ID             uuid.UUID `json:"id"`
 	OrganizationID uuid.UUID `json:"organization_id"`
 	Name           string    `json:"name"`
-	Category       string    `json:"category"`
+	Category       Category  `json:"category"`
 	Status         Status    `json:"status"`
 	CadasturID     *string   `json:"cadastur_id,omitempty"`
 	Capacity       *int32    `json:"capacity,omitempty"`
@@ -82,13 +83,21 @@ type UpdatePatch struct {
 	SetName           bool
 	Name              string
 	SetCategory       bool
-	Category          string
-	SetCadasturID     bool
-	CadasturID        *string
+	Category          Category
 	SetCapacity       bool
 	Capacity          *int32
 	SetPublicAreaCode bool
 	PublicAreaCode    *string
+}
+
+type CreateCommand struct {
+	Actor              access.Principal
+	Name               string
+	Category           Category
+	Capacity           int32
+	ClientSubmissionID uuid.UUID
+	IdempotencyKey     string
+	RequestID          string
 }
 
 type UpdateCommand struct {
@@ -126,6 +135,7 @@ type UpdateMembershipCommand struct {
 }
 
 type Repository interface {
+	Create(context.Context, CreateCommand) (Accommodation, bool, error)
 	List(context.Context, access.Principal, PageRequest) (AccommodationPage, error)
 	Get(context.Context, access.Principal, uuid.UUID) (Accommodation, error)
 	Update(context.Context, UpdateCommand) (Accommodation, error)
@@ -140,6 +150,16 @@ type Service struct {
 
 func NewService(repository Repository) *Service {
 	return &Service{repository: repository}
+}
+
+func (s *Service) Create(
+	ctx context.Context,
+	command CreateCommand,
+) (Accommodation, bool, error) {
+	if !validActor(command.Actor) || !validCreate(command) {
+		return Accommodation{}, false, ErrInvalidInput
+	}
+	return s.repository.Create(ctx, command)
 }
 
 func (s *Service) List(ctx context.Context, actor access.Principal, page PageRequest) (AccommodationPage, error) {
@@ -217,7 +237,7 @@ func validUpdate(command UpdateCommand) bool {
 	if !validRequiredTextPatch(patch.SetName, patch.Name, 200) {
 		return false
 	}
-	if !validRequiredTextPatch(patch.SetCategory, patch.Category, 100) {
+	if patch.SetCategory && !patch.Category.ValidInput() {
 		return false
 	}
 	return validOptionalFields(patch)
@@ -230,7 +250,7 @@ func validUpdateIdentity(command UpdateCommand) bool {
 }
 
 func hasAccommodationPatch(patch UpdatePatch) bool {
-	return patch.SetName || patch.SetCategory || patch.SetCadasturID ||
+	return patch.SetName || patch.SetCategory ||
 		patch.SetCapacity || patch.SetPublicAreaCode
 }
 
@@ -239,13 +259,21 @@ func validRequiredTextPatch(set bool, value string, maximum int) bool {
 }
 
 func validOptionalFields(patch UpdatePatch) bool {
-	if !validNullableText(patch.SetCadasturID, patch.CadasturID, 100) {
-		return false
-	}
 	if !validNullableCapacity(patch.SetCapacity, patch.Capacity) {
 		return false
 	}
 	return validNullableText(patch.SetPublicAreaCode, patch.PublicAreaCode, 100)
+}
+
+func validCreate(command CreateCommand) bool {
+	return strings.TrimSpace(command.Name) != "" &&
+		len(command.Name) <= 200 &&
+		command.Category.ValidInput() &&
+		command.Capacity >= 1 && command.Capacity <= 10000 &&
+		command.ClientSubmissionID.Version() == 7 &&
+		command.ClientSubmissionID.Variant() == uuid.RFC4122 &&
+		idempotencyKeyPattern.MatchString(command.IdempotencyKey) &&
+		command.RequestID != ""
 }
 
 func validNullableText(set bool, value *string, maximum int) bool {

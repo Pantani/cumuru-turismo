@@ -27,6 +27,7 @@ func assertDevelopmentFakeAccepted(t *testing.T, environment string) {
 	}
 	for _, scope := range []string{
 		"platform:read",
+		"accommodations:onboard",
 		"accommodations:manage",
 		"stays:read:own",
 		"stays:write",

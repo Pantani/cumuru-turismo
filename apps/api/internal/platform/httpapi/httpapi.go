@@ -46,21 +46,22 @@ type BuildInfo struct {
 }
 
 type Dependencies struct {
-	Readiness          ReadinessChecker
-	Verifier           access.Verifier
-	Accommodations     *accommodation.Service
-	Stays              *stay.Service
-	Questionnaires     *questionnaire.Service
-	PublicAnalytics    analytics.PublicReader
-	AnalyticsQuality   analytics.QualityReader
-	CORSAllowedOrigins []string
-	TrustedProxyCIDRs  []netip.Prefix
-	CursorKeys         config.KeyringConfig
-	Logger             *slog.Logger
-	Registry           *prometheus.Registry
-	Tracer             trace.Tracer
-	Build              BuildInfo
-	cursor             cursorCodec
+	Readiness                      ReadinessChecker
+	Verifier                       access.Verifier
+	Accommodations                 *accommodation.Service
+	AccommodationOnboardingEnabled bool
+	Stays                          *stay.Service
+	Questionnaires                 *questionnaire.Service
+	PublicAnalytics                analytics.PublicReader
+	AnalyticsQuality               analytics.QualityReader
+	CORSAllowedOrigins             []string
+	TrustedProxyCIDRs              []netip.Prefix
+	CursorKeys                     config.KeyringConfig
+	Logger                         *slog.Logger
+	Registry                       *prometheus.Registry
+	Tracer                         trace.Tracer
+	Build                          BuildInfo
+	cursor                         cursorCodec
 }
 
 type problem struct {
@@ -427,6 +428,8 @@ func (d Dependencies) writeServiceError(
 ) {
 	var processing *idempotency.ProcessingError
 	switch {
+	case errors.Is(err, accommodation.ErrForbidden):
+		writeProblem(writer, request, http.StatusForbidden, "forbidden", "Operação não permitida")
 	case errors.Is(err, accommodation.ErrInvalidInput),
 		errors.Is(err, stay.ErrInvalidInput),
 		errors.Is(err, questionnaire.ErrInvalidInput):

@@ -8,6 +8,10 @@ deliberadamente locais e não podem ser reutilizadas em outro ambiente.
 - `scripts/test-migrations.sh`: usa um projeto Compose temporário e volume
   descartável, exige somente o par `000001_initial_schema` e testa
   `zero → 1 → zero → 1`, grants e tenancy;
+- `scripts/test-local-restore.sh`: usa PostgreSQL real em projeto descartável,
+  aplica a baseline, grava somente canários fictícios, executa dump/restore em
+  base isolada e compara schema, ownership, grants e integridade antes do
+  cleanup;
 - `scripts/test-phase2-integration.sh`: usa projeto, volume e porta efêmeros,
   aplica migrations e fixtures com `cumuru_migration` e executa o teste tagged
   com conexão runtime `cumuru_app`; cleanup falha se deixar recurso residual;
@@ -23,7 +27,19 @@ deliberadamente locais e não podem ser reutilizadas em outro ambiente.
   fechados e rejeitar chaves proibidas; prova headers `200`/`304`, cache, ETag
   forte e `no-store` nos erros;
 - `scripts/test-phase4-full-stack.sh`: valida o overlay Compose e a separação
-  entre o DSN transacional e o login PostgreSQL público;
+  entre o DSN transacional e o login PostgreSQL público, usando o bootstrap Go
+  como fonte canônica da fixture;
+- `scripts/test-local-demo-build.sh`: rejeita configuração parcial ou identidade
+  fake no build padrão e prova o marcador explícito na variante local;
+- `scripts/test-local-demo.sh`: prova banco fresh, repetição, preservação,
+  concorrência sob advisory lock de sessão, rollover de datas e colisão
+  fail-closed sem sobrescrever linhas existentes; usa
+  `compose.local-test.yaml` e subnet própria para não disputar o pool do
+  full-stack executado logo depois;
+- `scripts/test-local-demo-e2e.sh`: sobe stack efêmera em porta e allowlist CORS
+  exatas, executa `e2e/local-demo.spec.ts` no Chromium e confirma cleanup de
+  containers, rede e volume; o E2E exige Service Worker registrado e rejeita
+  API ou capability no Cache API;
 - `scripts/test-proxy-hardening.sh`: prova headers fail-closed e ausência de
   capability/dados de erro nos logs de Nginx e Vite;
 - `scripts/test-phase2-full-stack.sh`: constrói e testa API, worker, web e banco
@@ -58,13 +74,20 @@ também exige cleanup e TTL máximo de 24 horas.
 Na Fase 4, `PUBLIC_DATABASE_URL` é obrigatório e distinto de `DATABASE_URL`
 para o processo API. O login público lê exclusivamente as views
 `public_data.current_summary`, `current_presence`, `current_preferences` e
-`current_methodology`. Os targets da Fase 4 são provas de plataforma: não
-substituem os testes futuros do worker, handlers HTTP e dashboard.
+`current_methodology`. `make phase4-remediation` combina código gerado, guardas
+de build, seed fresh/persistente, full-stack e navegador real. Todos esses
+targets continuam sendo provas locais de protótipo, não autorização
+operacional.
 
 Staging e produção exigem secret manager, PostgreSQL gerenciado, TLS, backup,
 restore e provedor OIDC reais. Esses itens não são entregues pela Fase 1.
 CIDRs de proxy de staging/produção também precisam ser explícitos, mínimos e
 independentes da fixture local.
+
+O target `make local-restore-drill` é uma prova mecânica local. Ele não declara
+PITR, RPO de 15 minutos, RTO de 4 horas, política de retenção/custódia,
+reaplicação de exclusões nem exercício institucional. Esses requisitos
+continuam bloqueados até existirem provedor, responsáveis e evidências reais.
 
 ## Infraestrutura e deploy
 

@@ -27,10 +27,99 @@ func TestLoadPhase2RuntimeConfiguration(t *testing.T) {
 	assertEqual(t, "CursorKeys.Keys", len(got.Phase2.CursorKeys.Keys), 1)
 	assertEqual(
 		t,
+		"AccommodationOnboardingEnabled",
+		got.Phase2.AccommodationOnboardingEnabled,
+		false,
+	)
+	assertEqual(
+		t,
 		"InviteBaseURL",
 		got.Phase2.InviteBaseURL.String(),
 		"http://127.0.0.1:5173/convites",
 	)
+}
+
+func TestLoadAccommodationOnboardingFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		values  map[string]string
+		want    bool
+		wantErr string
+	}{
+		{
+			name: "local fake explicitly enabled",
+			values: merge(validLocal(), map[string]string{
+				"ACCOMMODATION_ONBOARDING_ENABLED": "true",
+			}),
+			want: true,
+		},
+		{
+			name: "test fake explicitly enabled",
+			values: merge(validLocal(), map[string]string{
+				"APP_ENV":                          "test",
+				"ACCOMMODATION_ONBOARDING_ENABLED": "true",
+			}),
+			want: true,
+		},
+		{
+			name: "local real rejected",
+			values: merge(validLocal(), map[string]string{
+				"OIDC_MODE":                        "real",
+				"ACCOMMODATION_ONBOARDING_ENABLED": "true",
+			}),
+			wantErr: "ACCOMMODATION_ONBOARDING_ENABLED",
+		},
+		{
+			name: "production real rejected",
+			values: merge(validProduction(), map[string]string{
+				"ACCOMMODATION_ONBOARDING_ENABLED": "true",
+			}),
+			wantErr: "ACCOMMODATION_ONBOARDING_ENABLED",
+		},
+		{
+			name: "invalid boolean rejected",
+			values: merge(validLocal(), map[string]string{
+				"ACCOMMODATION_ONBOARDING_ENABLED": "sometimes",
+			}),
+			wantErr: "ACCOMMODATION_ONBOARDING_ENABLED",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assertAccommodationOnboardingResult(t, tt.values, tt.want, tt.wantErr)
+		})
+	}
+}
+
+func assertAccommodationOnboardingResult(
+	t *testing.T,
+	values map[string]string,
+	want bool,
+	wantErr string,
+) {
+	t.Helper()
+	got, err := config.Load(config.ProcessAPI, lookup(values))
+	if wantErr != "" {
+		if err == nil || !strings.Contains(err.Error(), wantErr) {
+			t.Fatalf("Load() error = %v, want field %s", err, wantErr)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Phase2.AccommodationOnboardingEnabled != want {
+		t.Fatalf(
+			"AccommodationOnboardingEnabled = %t, want %t",
+			got.Phase2.AccommodationOnboardingEnabled,
+			want,
+		)
+	}
 }
 
 func assertEqual[T comparable](t *testing.T, name string, got, want T) {

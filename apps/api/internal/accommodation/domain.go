@@ -16,6 +16,32 @@ const (
 	StatusClosed        Status = "closed"
 )
 
+type Category string
+
+const (
+	CategoryFormalLodging  Category = "formal_lodging"
+	CategorySeasonalRental Category = "seasonal_rental"
+	CategoryFamilyHosting  Category = "family_hosting"
+	CategoryCamping        Category = "camping"
+	CategoryRegularizing   Category = "regularizing"
+	CategoryOther          Category = "other"
+	CategoryUnclassified   Category = "unclassified"
+)
+
+func (c Category) ValidInput() bool {
+	switch c {
+	case CategoryFormalLodging,
+		CategorySeasonalRental,
+		CategoryFamilyHosting,
+		CategoryCamping,
+		CategoryRegularizing,
+		CategoryOther:
+		return true
+	default:
+		return false
+	}
+}
+
 type Operation string
 
 const (

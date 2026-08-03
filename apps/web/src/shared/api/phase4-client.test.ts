@@ -116,7 +116,7 @@ const quality: Schemas["QualitySnapshot"] = {
     reason_code: "phase_not_implemented",
   },
   coverage_by_category: [
-    { category_code: "pousada", status: "available", ratio: 0.75 },
+    { category_code: "formal_lodging", status: "available", ratio: 0.75 },
   ],
 };
 
@@ -322,7 +322,7 @@ const invalidPayloads: InvalidPayloadCase[] = [
     payload: {
       ...quality,
       coverage_by_category: [
-        { category_code: "pousada", status: "available" },
+        { category_code: "formal_lodging", status: "available" },
       ],
     },
     invoke: (client) => client.getQuality(),
@@ -333,7 +333,7 @@ const invalidPayloads: InvalidPayloadCase[] = [
     payload: {
       ...quality,
       coverage_by_category: [
-        { category_code: "pousada", status: "not_available", ratio: 0.5 },
+        { category_code: "formal_lodging", status: "not_available", ratio: 0.5 },
       ],
     },
     invoke: (client) => client.getQuality(),

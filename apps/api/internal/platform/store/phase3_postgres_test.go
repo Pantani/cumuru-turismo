@@ -261,7 +261,7 @@ func seedPhase3Tenant(
 	_, err = admin.Exec(ctx,
 		`INSERT INTO core.accommodations
 		   (id, organization_id, name, category, status)
-		 VALUES ($1, $2, 'Hospedagem F3 repository', 'prototype', 'active')`,
+		 VALUES ($1, $2, 'Hospedagem F3 repository', 'other', 'active')`,
 		fixture.accommodationID,
 		fixture.organizationID,
 	)

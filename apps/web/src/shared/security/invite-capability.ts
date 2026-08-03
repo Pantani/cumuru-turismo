@@ -5,6 +5,12 @@ const queryKeys = new Set(["convite", "invite", "invite_token", "token"]);
 
 let inviteCapability: string | null = null;
 
+function notifyCapabilityChange() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("cumuru:capability-change"));
+  }
+}
+
 function capabilityFromPath(pathname: string) {
   const candidate = invitePathPattern.exec(pathname)?.[1];
   if (candidate === undefined) {
@@ -62,6 +68,7 @@ export function captureInviteCapability(
   const capability = fromPath ?? capabilityFromQuery(url.searchParams);
   inviteCapability = capability;
   replace(scrubbedPath(url, cameFromInvitePath, sensitiveKeys));
+  notifyCapabilityChange();
   return true;
 }
 
@@ -71,4 +78,5 @@ export function peekInviteCapability() {
 
 export function clearInviteCapability() {
   inviteCapability = null;
+  notifyCapabilityChange();
 }

@@ -22,6 +22,7 @@ const (
 type EventType string
 
 const (
+	EventAccommodationCreated               EventType = "accommodation.created"
 	EventAccommodationUpdated               EventType = "accommodation.updated"
 	EventMembershipCreated                  EventType = "membership.created"
 	EventMembershipUpdated                  EventType = "membership.updated"
@@ -46,6 +47,7 @@ const (
 )
 
 var eventAggregates = map[EventType]AggregateType{
+	EventAccommodationCreated:               AggregateAccommodation,
 	EventAccommodationUpdated:               AggregateAccommodation,
 	EventMembershipCreated:                  AggregateMembership,
 	EventMembershipUpdated:                  AggregateMembership,

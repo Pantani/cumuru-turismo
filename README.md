@@ -6,10 +6,10 @@ indicadores anônimos.
 
 ## Situação do projeto
 
-As Fases 1, 2 e 3 estão concluídas com gate técnico `PASS`. A Fase 4 está
-implementada com domínio, handlers, worker, dashboards público e interno e
-gates integrados. Todas permanecem exclusivamente como protótipo
-`PROTOTYPE_ONLY`.
+As Fases 1, 2, 3 e 4 estão implementadas com gate técnico local `PASS`. A Fase
+4 inclui domínio, handlers, worker, dashboards público e interno e jornada
+real em Chromium. Todas permanecem exclusivamente como protótipo
+`PROTOTYPE_ONLY`; os gates externos continuam bloqueando as fases seguintes.
 
 Essa conclusão técnica não autoriza operação real: os gates externos permanecem
 obrigatórios. Antes de tornar qualquer cadastro municipal obrigatório, cumpra o
@@ -33,6 +33,26 @@ O sistema deverá:
 - publicar somente métricas pré-agregadas, arredondadas e protegidas;
 - manter trilha de auditoria, retenção configurável e direitos do titular;
 - ser simples de operar e evoluir.
+
+## Participação local com ou sem CNPJ
+
+O Observatório local foi desenhado para os dois casos: uma pousada formal e
+uma pessoa física que aluga uma casa podem cadastrar o local, registrar
+estadias e participar dos indicadores sem informar CPF, CNPJ, Cadastur ou
+chave FNRH. No protótipo, o cadastro pede somente nome do local, tipo de
+hospedagem e capacidade aproximada. Esses dados não comprovam regularidade,
+licenciamento ou enquadramento jurídico.
+
+A integração FNRH é uma trilha separada e opcional. Quando a Fase 5 e seus
+gates externos forem autorizados, cada meio de hospedagem elegível deverá usar
+sua própria chave oficial; o Observatório não emite nem compartilha essa
+credencial. Consulte a decisão completa em
+[`ADR-035`](docs/decisoes/ADR-035-participacao-local-sem-cnpj-e-onboarding-prototipo.md).
+
+Materiais simples para apresentação e treinamento:
+
+- [`Guia do Observatório para a Prefeitura (PDF)`](guia-simples-observatorio-fnrh-prefeitura.pdf);
+- [`Guia para gerar a chave FNRH (PDF)`](guia-gerar-chave-fnrh-hospedagens.pdf).
 
 ## Stack de referência
 
@@ -82,6 +102,8 @@ controlada. Não use Create React App.
 13. [`contracts/openapi.yaml`](contracts/openapi.yaml)
 14. [`database/schema.sql`](database/schema.sql)
 15. [`prompts/BOOTSTRAP-CODEX.md`](prompts/BOOTSTRAP-CODEX.md)
+16. [`Guia do Observatório para a Prefeitura`](guia-simples-observatorio-fnrh-prefeitura.pdf)
+17. [`Guia para gerar a chave FNRH`](guia-gerar-chave-fnrh-hospedagens.pdf)
 
 ## Como começar com o Codex
 
@@ -151,7 +173,11 @@ make install
 make tools
 make generate
 make generated-check
+make local-demo-build-test
 make migration-test
+make local-restore-drill
+make local-demo-test
+make local-demo-e2e
 make phase2-integration
 make phase2-proxy-test
 make phase2-full-stack
@@ -160,8 +186,36 @@ make up
 make smoke
 ```
 
-`make up` constrói e inicia PostgreSQL, migrations, API, worker e web. Para
-parar sem apagar o volume:
+`make up` constrói e inicia PostgreSQL, migrations, API, worker e web. O target
+usa `compose.local.yaml` para executar o comando Go `/app/local-demo`, que
+aplica fixtures fictícias idempotentes pelos serviços de domínio, ativa o fake
+OIDC somente no browser local e espera a primeira publicação anônima. Nenhum
+arquivo SQL de fixtures é montado ou executado.
+
+O build local mostra permanentemente “Sessão fictícia local” e
+`PROTOTYPE_ONLY`, só aceita a identidade fake em loopback e mantém sessão e
+capabilities em memória. Recarregar recria a sessão fictícia por conveniência;
+isso não cria credencial institucional. O build padrão rejeita qualquer
+identidade da demo.
+Abra:
+
+- `http://127.0.0.1:4173/` para o dashboard fictício;
+- `http://127.0.0.1:4173/acesso` para a jornada do operador.
+
+Na área autenticada, use **Listar acomodações**, crie uma estadia e então crie
+o convite. O botão **Abrir registro neste navegador** mantém a capability
+somente em memória, remove-a da URL e conduz ao registro e à pesquisa. As rotas
+`/registro` e `/pesquisa` abertas diretamente continuam bloqueadas por design.
+
+`make smoke` exige publicação, séries públicas, preferências e ao menos uma
+acomodação do operador; lista vazia ou endpoint público `4xx/5xx` falha.
+`make phase4-remediation` reúne o check de código gerado, as guardas dos builds
+web, PostgreSQL fresh/persistente, rollover, colisão fail-closed, full-stack e
+a jornada completa em Chromium, inclusive Service Worker e Cache API sem
+authority material. Antes do primeiro E2E local, instale o browser fixado pelo
+Playwright com `npx playwright install chromium`.
+
+Para parar sem apagar o volume:
 
 ```bash
 make down
@@ -180,6 +234,7 @@ Os gates completos são:
 make openapi-lint
 make generated-check
 make migration-test
+make local-restore-drill
 make phase2-integration
 make phase2-proxy-test
 make phase2-full-stack
@@ -192,6 +247,13 @@ make image-scan
 make sbom
 make scan
 ```
+
+`make local-restore-drill` cria uma base PostgreSQL descartável, aplica a
+migration consolidada, grava apenas canários fictícios, executa `pg_dump` e
+`pg_restore` em outra base isolada e compara schema, ownership, grants e dados.
+O cleanup remove dump, base restaurada, containers, rede e volume temporários.
+Essa prova é estritamente local: não comprova backup contínuo, PITR, RPO, RTO,
+custódia, retenção, reaplicação de exclusões ou restore institucional.
 
 ## Plataforma da Fase 2 — contrato congelado
 
@@ -319,12 +381,21 @@ make phase4-integration
 make phase4-proxy-test
 make phase4-full-stack
 make phase4-benchmark
+make local-demo-build-test
+make local-demo-test
+make local-demo-e2e
+make phase4-remediation
 ```
 
-Os quatro targets da Fase 4 são gates locais `PROTOTYPE_ONLY`. O benchmark
+Esses targets da Fase 4 são gates locais `PROTOTYPE_ONLY`. O benchmark
 registra duas recomposições determinísticas de três anos, tempo, heap e
 hardware, depois que o full-stack prova a preservação do último snapshot
-válido. Eles não autorizam deploy, release ou uso com dados reais.
+válido. A remediação adicional prova build padrão sem identidade fake, seed
+fresh e persistente sem sobrescrever colisões, duas execuções concorrentes
+serializadas, rollover das fixtures, dashboard com presença/cobertura e o fluxo
+operador → convite → grupo → pesquisa em Chromium, sem persistir authorities
+no navegador ou no cache do Service Worker. Eles não autorizam deploy, release
+ou uso com dados reais.
 
 ## Princípios não negociáveis
 

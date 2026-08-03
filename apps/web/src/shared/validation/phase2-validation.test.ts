@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  validateCreateAccommodation,
   validateCreateStay,
   validateSubmitGroup,
 } from "./phase2-validation";
@@ -9,6 +10,37 @@ const uuid = "018f4e59-7a2a-7b12-8fd7-5d2e8dc99b80";
 const secondUuid = "018f4e59-7a2a-7c12-8fd7-5d2e8dc99b80";
 
 describe("validação compartilhável da Fase 2", () => {
+  it("aceita o cadastro local formal ou familiar sem documento", () => {
+    expect(validateCreateAccommodation({
+      name: "Pousada Fictícia",
+      category: "formal_lodging",
+      capacity: 20,
+      client_submission_id: uuid,
+    })).toEqual([]);
+    expect(validateCreateAccommodation({
+      name: "Casa de família fictícia",
+      category: "family_hosting",
+      capacity: 4,
+      client_submission_id: uuid,
+    })).toEqual([]);
+  });
+
+  it("rejeita unclassified, nome vazio, capacidade inválida e UUID não v7", () => {
+    const result = validateCreateAccommodation({
+      name: "   ",
+      category: "unclassified" as never,
+      capacity: 0,
+      client_submission_id: "018f4e59-7a2a-4b12-8fd7-5d2e8dc99b80",
+    });
+
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "name" }),
+      expect.objectContaining({ field: "category" }),
+      expect.objectContaining({ field: "capacity" }),
+      expect.objectContaining({ field: "client_submission_id" }),
+    ]));
+  });
+
   it("rejeita datas invertidas e quantidade fora do contrato", () => {
     const result = validateCreateStay({
       accommodation_id: uuid,

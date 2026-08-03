@@ -5,11 +5,14 @@ package store_test
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -24,6 +27,489 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestAccommodationOnboardingPostgreSQLAtomicReplayAndTenantRules(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	adminPool := openIntegrationPool(t, ctx, "CUMURU_TEST_ADMIN_DATABASE_URL")
+	runtimePool := openIntegrationPool(t, ctx, "CUMURU_TEST_DATABASE_URL")
+	requireRuntimeRole(t, ctx, runtimePool)
+	requirePhase2Schema(t, ctx, runtimePool)
+
+	subject := store.NewPhase2(runtimePool, 5*time.Second, integrationPhase2Config(t))
+	service := accommodation.NewService(store.NewAccommodationRepository(subject))
+	marker := "onboarding-" + mustV7(t).String()
+	cleanup := onboardingCleanup{marker: marker}
+	t.Cleanup(func() { cleanup.run(t, adminPool) })
+
+	assertFirstAccommodationOnboarding(t, ctx, adminPool, service, marker, &cleanup)
+	assertAccommodationOnboardingTenantRules(t, ctx, adminPool, service, marker, &cleanup)
+	assertConcurrentAccommodationOnboarding(t, ctx, service, marker, &cleanup)
+	assertAccommodationOnboardingRollback(t, ctx, adminPool, service, marker)
+}
+
+type onboardingCleanup struct {
+	marker           string
+	subjects         []string
+	organizationIDs  []uuid.UUID
+	accommodationIDs []uuid.UUID
+}
+
+func (c *onboardingCleanup) track(
+	subject string,
+	created accommodation.Accommodation,
+) {
+	c.subjects = append(c.subjects, subject)
+	c.organizationIDs = append(c.organizationIDs, created.OrganizationID)
+	c.accommodationIDs = append(c.accommodationIDs, created.ID)
+}
+
+func assertFirstAccommodationOnboarding(
+	t *testing.T,
+	ctx context.Context,
+	adminPool *pgxpool.Pool,
+	service *accommodation.Service,
+	marker string,
+	cleanup *onboardingCleanup,
+) {
+	t.Helper()
+	subject := marker + "-first"
+	command := accommodationOnboardingCommand(
+		t,
+		subject,
+		"Casa familiar "+marker,
+		"onboarding-first-1234",
+	)
+	first, replayed, err := service.Create(ctx, command)
+	if err != nil || replayed {
+		t.Fatalf("first onboarding = %#v, replay=%v, err=%v", first, replayed, err)
+	}
+	cleanup.track(subject, first)
+	assertCreatedAccommodation(t, first, accommodation.CategoryFamilyHosting, 6)
+	assertOnboardingPersistence(t, ctx, adminPool, first, command)
+	assertAccommodationOnboardingReplayConflict(t, ctx, service, command, first.ID)
+	assertSecondAccommodationOnboarding(t, ctx, adminPool, service, subject, marker, first, cleanup)
+}
+
+func assertAccommodationOnboardingReplayConflict(
+	t *testing.T,
+	ctx context.Context,
+	service *accommodation.Service,
+	command accommodation.CreateCommand,
+	createdID uuid.UUID,
+) {
+	t.Helper()
+	replayedResult, replayed, err := service.Create(ctx, command)
+	if err != nil || !replayed || replayedResult.ID != createdID {
+		t.Fatalf("onboarding replay = %#v, replay=%v, err=%v", replayedResult, replayed, err)
+	}
+	conflict := command
+	conflict.Name = "Payload diferente"
+	_, _, err = service.Create(ctx, conflict)
+	assertErrorIs(t, err, accommodation.ErrConflict, "onboarding payload conflict")
+}
+
+func assertSecondAccommodationOnboarding(
+	t *testing.T,
+	ctx context.Context,
+	adminPool *pgxpool.Pool,
+	service *accommodation.Service,
+	subject string,
+	marker string,
+	first accommodation.Accommodation,
+	cleanup *onboardingCleanup,
+) {
+	t.Helper()
+	secondCommand := accommodationOnboardingCommand(
+		t,
+		subject,
+		"Segunda acomodação "+marker,
+		"onboarding-second-1234",
+	)
+	second, replayed, err := service.Create(ctx, secondCommand)
+	if err != nil || replayed {
+		t.Fatalf("second onboarding = %#v, replay=%v, err=%v", second, replayed, err)
+	}
+	cleanup.track(subject, second)
+	if second.OrganizationID != first.OrganizationID || second.ID == first.ID {
+		t.Fatalf("second onboarding tenant = %#v, first = %#v", second, first)
+	}
+	assertOnboardingPersistence(t, ctx, adminPool, second, secondCommand)
+}
+
+func accommodationOnboardingCommand(
+	t *testing.T,
+	subject string,
+	name string,
+	key string,
+) accommodation.CreateCommand {
+	t.Helper()
+	return accommodation.CreateCommand{
+		Actor:              principal(subject),
+		Name:               name,
+		Category:           accommodation.CategoryFamilyHosting,
+		Capacity:           6,
+		ClientSubmissionID: mustV7(t),
+		IdempotencyKey:     key,
+		RequestID:          "request-onboarding-test",
+	}
+}
+
+func assertCreatedAccommodation(
+	t *testing.T,
+	created accommodation.Accommodation,
+	category accommodation.Category,
+	capacity int32,
+) {
+	t.Helper()
+	if created.ID.Version() != 7 || created.OrganizationID.Version() != 7 {
+		t.Fatalf("onboarding IDs are not UUIDv7: %#v", created)
+	}
+	if created.Category != category || created.Status != accommodation.StatusActive ||
+		created.Capacity == nil || *created.Capacity != capacity || created.CadasturID != nil {
+		t.Fatalf("onboarding result = %#v", created)
+	}
+}
+
+func assertOnboardingPersistence(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	created accommodation.Accommodation,
+	command accommodation.CreateCommand,
+) {
+	t.Helper()
+	var organizationJSON, accommodationJSON []byte
+	err := pool.QueryRow(
+		ctx,
+		`SELECT to_jsonb(organization), to_jsonb(accommodation)
+		 FROM core.organizations AS organization
+		 JOIN core.accommodations AS accommodation
+		   ON accommodation.organization_id=organization.id
+		 WHERE accommodation.id=$1`,
+		created.ID,
+	).Scan(&organizationJSON, &accommodationJSON)
+	if err != nil {
+		t.Fatalf("read onboarded accommodation: %v", err)
+	}
+	persisted := strings.ToLower(string(organizationJSON) + string(accommodationJSON))
+	for _, forbidden := range []string{"cnpj", "cpf", "cadastur-ficticio", "fnrh"} {
+		if strings.Contains(persisted, forbidden) {
+			t.Fatalf("onboarding persistence contains %q: %s", forbidden, persisted)
+		}
+	}
+	var managerCount int
+	err = pool.QueryRow(
+		ctx,
+		`SELECT count(*) FROM core.memberships
+		 WHERE accommodation_id=$1 AND oidc_issuer=$2 AND oidc_subject=$3
+		   AND role='manager' AND active=true`,
+		created.ID,
+		command.Actor.Issuer,
+		command.Actor.Subject,
+	).Scan(&managerCount)
+	if err != nil || managerCount != 1 {
+		t.Fatalf("onboarding manager count = %d, err=%v", managerCount, err)
+	}
+	assertOnboardingAuditOutboxPrivacy(t, ctx, pool, created, command)
+}
+
+func assertOnboardingAuditOutboxPrivacy(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	created accommodation.Accommodation,
+	command accommodation.CreateCommand,
+) {
+	t.Helper()
+	var auditJSON, outboxJSON []byte
+	err := pool.QueryRow(
+		ctx,
+		`SELECT to_jsonb(event) FROM platform.audit_events AS event
+		 WHERE organization_id=$1 AND entity_id=$2
+		   AND action='accommodation.created'`,
+		created.OrganizationID,
+		created.ID,
+	).Scan(&auditJSON)
+	if err != nil {
+		t.Fatalf("read onboarding audit event: %v", err)
+	}
+	err = pool.QueryRow(
+		ctx,
+		`SELECT to_jsonb(event) FROM platform.outbox_events AS event
+		 WHERE aggregate_id=$1 AND event_type='accommodation.created'`,
+		created.ID,
+	).Scan(&outboxJSON)
+	if err != nil {
+		t.Fatalf("read onboarding outbox event: %v", err)
+	}
+	serialized := strings.ToLower(string(auditJSON) + string(outboxJSON))
+	for _, forbidden := range []string{
+		strings.ToLower(command.Actor.Subject),
+		strings.ToLower(command.Name),
+		strings.ToLower(command.IdempotencyKey),
+		"cnpj",
+		"cpf",
+		"cadastur",
+		"fnrh",
+	} {
+		if strings.Contains(serialized, forbidden) {
+			t.Fatalf("audit/outbox contains forbidden %q: %s", forbidden, serialized)
+		}
+	}
+}
+
+func assertAccommodationOnboardingTenantRules(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	service *accommodation.Service,
+	marker string,
+	cleanup *onboardingCleanup,
+) {
+	t.Helper()
+	operatorSubject := marker + "-operator"
+	operatorOrganization, operatorAccommodation := seedOnboardingMembership(
+		t,
+		ctx,
+		pool,
+		operatorSubject,
+		"operator",
+	)
+	cleanup.subjects = append(cleanup.subjects, operatorSubject)
+	cleanup.organizationIDs = append(cleanup.organizationIDs, operatorOrganization)
+	cleanup.accommodationIDs = append(cleanup.accommodationIDs, operatorAccommodation)
+	_, _, err := service.Create(ctx, accommodationOnboardingCommand(
+		t,
+		operatorSubject,
+		"Operator forbidden",
+		"onboarding-operator-1234",
+	))
+	assertErrorIs(t, err, accommodation.ErrForbidden, "operator onboarding")
+
+	multiSubject := marker + "-multi"
+	for range 2 {
+		organizationID, accommodationID := seedOnboardingMembership(
+			t,
+			ctx,
+			pool,
+			multiSubject,
+			"manager",
+		)
+		cleanup.organizationIDs = append(cleanup.organizationIDs, organizationID)
+		cleanup.accommodationIDs = append(cleanup.accommodationIDs, accommodationID)
+	}
+	cleanup.subjects = append(cleanup.subjects, multiSubject)
+	_, _, err = service.Create(ctx, accommodationOnboardingCommand(
+		t,
+		multiSubject,
+		"Ambiguous tenant",
+		"onboarding-multi-1234",
+	))
+	assertErrorIs(t, err, accommodation.ErrConflict, "multiple tenant onboarding")
+}
+
+func seedOnboardingMembership(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	subject string,
+	role string,
+) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	organizationID := mustV7(t)
+	accommodationID := mustV7(t)
+	_, err := pool.Exec(
+		ctx,
+		`WITH organization AS (
+		   INSERT INTO core.organizations (id, name) VALUES ($1, 'Onboarding tenant fixture')
+		 ), accommodation AS (
+		   INSERT INTO core.accommodations
+		     (id, organization_id, name, category, status)
+		   VALUES ($2, $1, 'Onboarding accommodation fixture', 'family_hosting', 'active')
+		 )
+		 INSERT INTO core.memberships
+		   (id, accommodation_id, oidc_issuer, oidc_subject, role)
+		 VALUES ($3, $2, 'https://issuer.invalid', $4, $5)`,
+		organizationID,
+		accommodationID,
+		mustV7(t),
+		subject,
+		role,
+	)
+	if err != nil {
+		t.Fatalf("seed onboarding membership: %v", err)
+	}
+	return organizationID, accommodationID
+}
+
+func assertConcurrentAccommodationOnboarding(
+	t *testing.T,
+	ctx context.Context,
+	service *accommodation.Service,
+	marker string,
+	cleanup *onboardingCleanup,
+) {
+	t.Helper()
+	subject := marker + "-concurrent"
+	command := accommodationOnboardingCommand(
+		t,
+		subject,
+		"Concurrent onboarding "+marker,
+		"onboarding-concurrent-1234",
+	)
+	results := runConcurrentAccommodationOnboarding(ctx, service, command)
+	created := assertConcurrentAccommodationOnboardingResults(t, results)
+	cleanup.track(subject, created)
+}
+
+type concurrentAccommodationOnboardingResult struct {
+	created  accommodation.Accommodation
+	replayed bool
+	err      error
+}
+
+func runConcurrentAccommodationOnboarding(
+	ctx context.Context,
+	service *accommodation.Service,
+	command accommodation.CreateCommand,
+) <-chan concurrentAccommodationOnboardingResult {
+	start := make(chan struct{})
+	results := make(chan concurrentAccommodationOnboardingResult, 2)
+	var group sync.WaitGroup
+	for range 2 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			<-start
+			created, replayed, err := service.Create(ctx, command)
+			results <- concurrentAccommodationOnboardingResult{
+				created: created, replayed: replayed, err: err,
+			}
+		}()
+	}
+	close(start)
+	group.Wait()
+	close(results)
+	return results
+}
+
+func assertConcurrentAccommodationOnboardingResults(
+	t *testing.T,
+	results <-chan concurrentAccommodationOnboardingResult,
+) accommodation.Accommodation {
+	t.Helper()
+	var created accommodation.Accommodation
+	replayCount := 0
+	for current := range results {
+		if current.err != nil {
+			t.Fatalf("concurrent onboarding: %v", current.err)
+		}
+		if created.ID != uuid.Nil && current.created.ID != created.ID {
+			t.Fatalf("concurrent onboarding IDs differ: %s and %s", created.ID, current.created.ID)
+		}
+		created = current.created
+		if current.replayed {
+			replayCount++
+		}
+	}
+	if replayCount != 1 {
+		t.Fatalf("concurrent replay count = %d, want 1", replayCount)
+	}
+	return created
+}
+
+func assertAccommodationOnboardingRollback(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	service *accommodation.Service,
+	marker string,
+) {
+	t.Helper()
+	subject := marker + "-rollback"
+	command := accommodationOnboardingCommand(
+		t,
+		subject,
+		"Rollback "+marker,
+		"onboarding-rollback-1234",
+	)
+	command.RequestID = "bad"
+	_, _, err := service.Create(ctx, command)
+	if err == nil {
+		t.Fatal("onboarding failure injection succeeded")
+	}
+	var organizationCount, idempotencyCount int
+	if err := pool.QueryRow(
+		ctx,
+		`SELECT count(*) FROM core.organizations WHERE name=$1`,
+		command.Name,
+	).Scan(&organizationCount); err != nil {
+		t.Fatalf("read rollback organization count: %v", err)
+	}
+	actorDigest := integrationActorDigest(subject)
+	if err := pool.QueryRow(
+		ctx,
+		`SELECT count(*) FROM platform.idempotency_records WHERE actor_key_hmac=$1`,
+		actorDigest,
+	).Scan(&idempotencyCount); err != nil {
+		t.Fatalf("read rollback idempotency count: %v", err)
+	}
+	if organizationCount != 0 || idempotencyCount != 0 {
+		t.Fatalf("rollback counts: organization=%d idempotency=%d", organizationCount, idempotencyCount)
+	}
+}
+
+func integrationActorDigest(subject string) []byte {
+	mac := hmac.New(sha256.New, bytesRepeat('a', 32))
+	_, _ = mac.Write([]byte("actor"))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte("https://issuer.invalid\x00" + subject))
+	return mac.Sum(nil)
+}
+
+func (c onboardingCleanup) run(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	deleteOnboardingRows(t, ctx, pool, `DELETE FROM platform.audit_events WHERE organization_id=ANY($1)`, c.organizationIDs, "audit")
+	deleteOnboardingRows(t, ctx, pool, `DELETE FROM platform.outbox_events WHERE aggregate_id=ANY($1)`, c.accommodationIDs, "outbox")
+	deleteOnboardingIdempotency(t, ctx, pool, c.subjects)
+	deleteOnboardingRows(t, ctx, pool, `DELETE FROM core.memberships WHERE accommodation_id=ANY($1)`, c.accommodationIDs, "memberships")
+	deleteOnboardingRows(t, ctx, pool, `DELETE FROM core.accommodations WHERE id=ANY($1)`, c.accommodationIDs, "accommodations")
+	deleteOnboardingRows(t, ctx, pool, `DELETE FROM core.organizations WHERE id=ANY($1)`, c.organizationIDs, "organizations")
+}
+
+func deleteOnboardingRows(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	statement string,
+	ids []uuid.UUID,
+	label string,
+) {
+	t.Helper()
+	if len(ids) == 0 {
+		return
+	}
+	if _, err := pool.Exec(ctx, statement, ids); err != nil {
+		t.Errorf("cleanup onboarding %s: %v", label, err)
+	}
+}
+
+func deleteOnboardingIdempotency(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	subjects []string,
+) {
+	t.Helper()
+	for _, subject := range subjects {
+		if _, err := pool.Exec(ctx, `DELETE FROM platform.idempotency_records WHERE actor_key_hmac=$1`, integrationActorDigest(subject)); err != nil {
+			t.Errorf("cleanup onboarding idempotency: %v", err)
+		}
+	}
+}
 
 func TestPhase2PostgreSQLTenantReplayRollbackAndLastManager(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -159,7 +645,7 @@ func seedPhase2Fixture(
 	for _, property := range properties {
 		_, err := pool.Exec(ctx,
 			`INSERT INTO core.accommodations (id, organization_id, name, category, status)
-			 VALUES ($1, $2, $3, 'pousada', $4)`,
+			 VALUES ($1, $2, $3, 'formal_lodging', $4)`,
 			property.id, property.organizationID, property.name, property.status,
 		)
 		if err != nil {
@@ -431,7 +917,7 @@ func assertStatusPolicies(
 	_, err := accommodations.Update(ctx, accommodation.UpdateCommand{
 		Actor: principal("manager-b"), AccommodationID: fixture.accommodationB,
 		ExpectedVersion: 1, Patch: accommodation.UpdatePatch{
-			SetCategory: true, Category: "hotel",
+			SetCategory: true, Category: accommodation.CategoryOther,
 		},
 		RequestID: "request-suspended-update",
 	})

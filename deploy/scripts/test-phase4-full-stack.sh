@@ -30,6 +30,7 @@ export CUMURU_BUILD_TIME="${build_metadata[2]}"
 COMPOSE=(
   docker compose
   --file "${ROOT_DIR}/compose.yaml"
+  --file "${ROOT_DIR}/compose.local.yaml"
   --file "${ROOT_DIR}/deploy/compose.phase4-full-stack.yaml"
   --project-name "${PROJECT_NAME}"
 )
@@ -177,110 +178,7 @@ NODE
 
 "${COMPOSE[@]}" up --detach --wait postgres
 "${COMPOSE[@]}" run --rm --no-deps migrate
-
-psql_migration <<'SQL'
-BEGIN;
-
-INSERT INTO survey.questionnaires (id, stable_key, name)
-VALUES (
-  '0197f4cf-2a69-7000-8000-000000000301',
-  'phase4_full_stack_preferences',
-  'Phase 4 full-stack preference fixture'
-);
-
-INSERT INTO survey.questionnaire_versions (
-  id,
-  questionnaire_id,
-  version_number,
-  title,
-  privacy_notice_version,
-  last_editor_hmac,
-  last_editor_key_version
-)
-VALUES (
-  '0197f4cf-2a69-7000-8000-000000000302',
-  '0197f4cf-2a69-7000-8000-000000000301',
-  1,
-  'Phase 4 full-stack preference fixture',
-  'prototype-v1',
-  decode(repeat('3', 64), 'hex'),
-  'local-v1'
-);
-
-INSERT INTO survey.questions (
-  id,
-  questionnaire_version_id,
-  stable_key,
-  prompt,
-  answer_type,
-  data_classification,
-  purpose_code,
-  retention_policy_code,
-  analytics_key,
-  public_aggregation_allowed,
-  minimum_public_cell,
-  display_order
-)
-VALUES
-  (
-    '0197f4cf-2a69-7000-8000-000000000303',
-    '0197f4cf-2a69-7000-8000-000000000302',
-    'visit_profile_first',
-    'Perfil de primeira visita',
-    'single_choice',
-    'operational',
-    'tourism_analytics',
-    'prototype-aggregate-only',
-    'first_visit_share',
-    true,
-    10,
-    1
-  ),
-  (
-    '0197f4cf-2a69-7000-8000-000000000304',
-    '0197f4cf-2a69-7000-8000-000000000302',
-    'visit_profile_returning',
-    'Perfil de retorno',
-    'single_choice',
-    'operational',
-    'tourism_analytics',
-    'prototype-aggregate-only',
-    'first_visit_share',
-    true,
-    10,
-    2
-  );
-
-INSERT INTO analytics.metric_mappings (
-  privacy_policy_version,
-  metric_code,
-  questionnaire_version_id,
-  question_id,
-  source_value,
-  category_code
-)
-VALUES
-  (
-    'prototype-v1',
-    'first_visit_share',
-    '0197f4cf-2a69-7000-8000-000000000302',
-    '0197f4cf-2a69-7000-8000-000000000303',
-    'first_visit',
-    'first_visit'
-  ),
-  (
-    'prototype-v1',
-    'first_visit_share',
-    '0197f4cf-2a69-7000-8000-000000000302',
-    '0197f4cf-2a69-7000-8000-000000000304',
-    'returning',
-    'returning'
-  );
-
-COMMIT;
-SQL
-
-"${COMPOSE[@]}" up --build --detach --wait api worker web
+"${COMPOSE[@]}" up --build --detach --wait local-demo api worker web
 for service in postgres api worker web; do
   require_running "${service}"
 done

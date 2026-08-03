@@ -150,7 +150,11 @@ export interface paths {
         /** Listar acomodações acessíveis */
         get: operations["listAccommodations"];
         put?: never;
-        post?: never;
+        /**
+         * Iniciar participação local de uma acomodação
+         * @description Onboarding voluntário restrito ao protótipo local/teste com OIDC fake. Cria organização mínima, acomodação ativa e primeira membership manager atomicamente. Não recebe documento, Cadastur, identidade de tenant ou qualquer configuração FNRH.
+         */
+        post: operations["createAccommodation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -625,15 +629,36 @@ export interface components {
         };
         /** @enum {string} */
         AccommodationStatus: "pending_review" | "active" | "suspended" | "closed";
+        /**
+         * @description Classificação operacional ampla. Não constitui parecer jurídico, regularidade, Cadastur verificado ou autorização FNRH.
+         * @enum {string}
+         */
+        AccommodationCategory: "formal_lodging" | "seasonal_rental" | "family_hosting" | "camping" | "regularizing" | "other" | "unclassified";
+        /**
+         * @description Categoria operacional aceita em novas entradas. Unclassified é reservado a leituras e processos internos, nunca a input do participante.
+         * @enum {string}
+         */
+        AccommodationInputCategory: "formal_lodging" | "seasonal_rental" | "family_hosting" | "camping" | "regularizing" | "other";
+        CreateAccommodationRequest: {
+            name: string;
+            category: components["schemas"]["AccommodationInputCategory"];
+            capacity: number;
+            /**
+             * Format: uuid
+             * @description UUIDv7 canônico gerado pelo cliente para repetição segura.
+             */
+            client_submission_id: string;
+        };
         Accommodation: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             organization_id: string;
             name: string;
-            category: string;
+            category: components["schemas"]["AccommodationCategory"];
             status: components["schemas"]["AccommodationStatus"];
-            cadastur_id?: string | null;
+            /** @description Metadado opcional provisionado por fonte confiável. Sua presença não comprova elegibilidade, autorização, credencial ou integração FNRH. */
+            readonly cadastur_id?: string | null;
             capacity?: number | null;
             public_area_code?: string | null;
             /** Format: int64 */
@@ -649,8 +674,7 @@ export interface components {
         };
         UpdateAccommodationRequest: {
             name?: string;
-            category?: string;
-            cadastur_id?: string | null;
+            category?: components["schemas"]["AccommodationInputCategory"];
             capacity?: number | null;
             public_area_code?: string | null;
         };
@@ -1707,6 +1731,44 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createAccommodation: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAccommodationRequest"];
+            };
+        };
+        responses: {
+            /** @description Participação local criada ou reproduzida por replay exato. */
+            201: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    Location: components["headers"]["Location"];
+                    ETag: components["headers"]["EntityTag"];
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Accommodation"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            422: components["responses"]["Problem"];
             500: components["responses"]["InternalServerProblem"];
             503: components["responses"]["Problem"];
         };

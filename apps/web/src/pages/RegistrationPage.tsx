@@ -1,8 +1,13 @@
-import { InviteRegistration } from "../features/invite/InviteRegistration";
+import {
+  InviteRegistration,
+  RegistrationCompletion,
+} from "../features/invite/InviteRegistration";
 import { peekInviteCapability } from "../shared/security/invite-capability";
+import { peekSurveyCapability } from "../shared/security/survey-capability";
 
 export default function RegistrationPage() {
   const hasCapability = peekInviteCapability() !== null;
+  const hasSurveyCapability = peekSurveyCapability() !== null;
 
   return (
     <article className="page registration-page">
@@ -12,6 +17,8 @@ export default function RegistrationPage() {
       </h1>
       {hasCapability ? (
         <InviteRegistration />
+      ) : hasSurveyCapability ? (
+        <RegistrationCompletion />
       ) : (
         <section className="boundary-note" aria-labelledby="invite-required">
           <h2 id="invite-required">Convite necessário</h2>

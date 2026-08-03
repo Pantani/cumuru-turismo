@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireAccommodationOnboardingLock = `-- name: AcquireAccommodationOnboardingLock :exec
+SELECT pg_catalog.pg_advisory_xact_lock(
+  pg_catalog.hashtextextended($1::text, 485202)
+)
+`
+
+func (q *Queries) AcquireAccommodationOnboardingLock(ctx context.Context, actorLockKey string) error {
+	_, err := q.db.Exec(ctx, acquireAccommodationOnboardingLock, actorLockKey)
+	return err
+}
+
 const createAccommodationMembership = `-- name: CreateAccommodationMembership :one
 INSERT INTO core.memberships (
   id,
@@ -90,6 +101,74 @@ func (q *Queries) CreateAccommodationMembership(ctx context.Context, arg CreateA
 	return i, err
 }
 
+const findOnboardedAccommodation = `-- name: FindOnboardedAccommodation :one
+SELECT
+  accommodation.id,
+  accommodation.organization_id,
+  accommodation.name,
+  accommodation.category,
+  accommodation.status,
+  accommodation.cadastur_id,
+  accommodation.capacity,
+  accommodation.public_area_code,
+  accommodation.version,
+  accommodation.created_at,
+  accommodation.updated_at
+FROM core.accommodations AS accommodation
+JOIN core.memberships AS membership
+  ON membership.accommodation_id = accommodation.id
+WHERE accommodation.organization_id = $1
+  AND accommodation.onboarding_submission_id = $2
+  AND membership.oidc_issuer = $3
+  AND membership.oidc_subject = $4
+  AND membership.active = true
+`
+
+type FindOnboardedAccommodationParams struct {
+	OrganizationID         pgtype.UUID `json:"organization_id"`
+	OnboardingSubmissionID pgtype.UUID `json:"onboarding_submission_id"`
+	OidcIssuer             string      `json:"oidc_issuer"`
+	OidcSubject            string      `json:"oidc_subject"`
+}
+
+type FindOnboardedAccommodationRow struct {
+	ID             pgtype.UUID             `json:"id"`
+	OrganizationID pgtype.UUID             `json:"organization_id"`
+	Name           string                  `json:"name"`
+	Category       string                  `json:"category"`
+	Status         CoreAccommodationStatus `json:"status"`
+	CadasturID     *string                 `json:"cadastur_id"`
+	Capacity       *int32                  `json:"capacity"`
+	PublicAreaCode *string                 `json:"public_area_code"`
+	Version        int64                   `json:"version"`
+	CreatedAt      pgtype.Timestamptz      `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz      `json:"updated_at"`
+}
+
+func (q *Queries) FindOnboardedAccommodation(ctx context.Context, arg FindOnboardedAccommodationParams) (FindOnboardedAccommodationRow, error) {
+	row := q.db.QueryRow(ctx, findOnboardedAccommodation,
+		arg.OrganizationID,
+		arg.OnboardingSubmissionID,
+		arg.OidcIssuer,
+		arg.OidcSubject,
+	)
+	var i FindOnboardedAccommodationRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Category,
+		&i.Status,
+		&i.CadasturID,
+		&i.Capacity,
+		&i.PublicAreaCode,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAccessibleAccommodation = `-- name: GetAccessibleAccommodation :one
 SELECT
   a.id,
@@ -155,6 +234,174 @@ func (q *Queries) GetAccessibleAccommodation(ctx context.Context, arg GetAccessi
 		&i.ActorRole,
 	)
 	return i, err
+}
+
+const insertOnboardingAccommodation = `-- name: InsertOnboardingAccommodation :one
+INSERT INTO core.accommodations (
+  id,
+  organization_id,
+  name,
+  category,
+  status,
+  capacity,
+  onboarding_submission_id
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  'active',
+  $5,
+  $6
+)
+RETURNING
+  id,
+  organization_id,
+  name,
+  category,
+  status,
+  cadastur_id,
+  capacity,
+  public_area_code,
+  version,
+  created_at,
+  updated_at
+`
+
+type InsertOnboardingAccommodationParams struct {
+	AccommodationID        pgtype.UUID `json:"accommodation_id"`
+	OrganizationID         pgtype.UUID `json:"organization_id"`
+	Name                   string      `json:"name"`
+	Category               string      `json:"category"`
+	Capacity               *int32      `json:"capacity"`
+	OnboardingSubmissionID pgtype.UUID `json:"onboarding_submission_id"`
+}
+
+type InsertOnboardingAccommodationRow struct {
+	ID             pgtype.UUID             `json:"id"`
+	OrganizationID pgtype.UUID             `json:"organization_id"`
+	Name           string                  `json:"name"`
+	Category       string                  `json:"category"`
+	Status         CoreAccommodationStatus `json:"status"`
+	CadasturID     *string                 `json:"cadastur_id"`
+	Capacity       *int32                  `json:"capacity"`
+	PublicAreaCode *string                 `json:"public_area_code"`
+	Version        int64                   `json:"version"`
+	CreatedAt      pgtype.Timestamptz      `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz      `json:"updated_at"`
+}
+
+func (q *Queries) InsertOnboardingAccommodation(ctx context.Context, arg InsertOnboardingAccommodationParams) (InsertOnboardingAccommodationRow, error) {
+	row := q.db.QueryRow(ctx, insertOnboardingAccommodation,
+		arg.AccommodationID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Category,
+		arg.Capacity,
+		arg.OnboardingSubmissionID,
+	)
+	var i InsertOnboardingAccommodationRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Category,
+		&i.Status,
+		&i.CadasturID,
+		&i.Capacity,
+		&i.PublicAreaCode,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertOnboardingManagerMembership = `-- name: InsertOnboardingManagerMembership :one
+INSERT INTO core.memberships (
+  id,
+  accommodation_id,
+  oidc_issuer,
+  oidc_subject,
+  role
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  'manager'
+)
+RETURNING
+  id,
+  accommodation_id,
+  role,
+  active,
+  version,
+  created_at,
+  updated_at
+`
+
+type InsertOnboardingManagerMembershipParams struct {
+	MembershipID    pgtype.UUID `json:"membership_id"`
+	AccommodationID pgtype.UUID `json:"accommodation_id"`
+	OidcIssuer      string      `json:"oidc_issuer"`
+	OidcSubject     string      `json:"oidc_subject"`
+}
+
+type InsertOnboardingManagerMembershipRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	AccommodationID pgtype.UUID        `json:"accommodation_id"`
+	Role            string             `json:"role"`
+	Active          bool               `json:"active"`
+	Version         int64              `json:"version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) InsertOnboardingManagerMembership(ctx context.Context, arg InsertOnboardingManagerMembershipParams) (InsertOnboardingManagerMembershipRow, error) {
+	row := q.db.QueryRow(ctx, insertOnboardingManagerMembership,
+		arg.MembershipID,
+		arg.AccommodationID,
+		arg.OidcIssuer,
+		arg.OidcSubject,
+	)
+	var i InsertOnboardingManagerMembershipRow
+	err := row.Scan(
+		&i.ID,
+		&i.AccommodationID,
+		&i.Role,
+		&i.Active,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertOnboardingOrganization = `-- name: InsertOnboardingOrganization :one
+INSERT INTO core.organizations (
+  id,
+  name
+)
+VALUES (
+  $1,
+  $2
+)
+RETURNING id
+`
+
+type InsertOnboardingOrganizationParams struct {
+	OrganizationID pgtype.UUID `json:"organization_id"`
+	Name           string      `json:"name"`
+}
+
+func (q *Queries) InsertOnboardingOrganization(ctx context.Context, arg InsertOnboardingOrganizationParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, insertOnboardingOrganization, arg.OrganizationID, arg.Name)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listAccessibleAccommodations = `-- name: ListAccessibleAccommodations :many
@@ -338,6 +585,50 @@ func (q *Queries) ListAccommodationMemberships(ctx context.Context, arg ListAcco
 	return items, nil
 }
 
+const listAccommodationOnboardingOrganizations = `-- name: ListAccommodationOnboardingOrganizations :many
+SELECT
+  accommodation.organization_id,
+  pg_catalog.bool_or(membership.role = 'manager') AS has_manager_membership
+FROM core.memberships AS membership
+JOIN core.accommodations AS accommodation
+  ON accommodation.id = membership.accommodation_id
+WHERE membership.oidc_issuer = $1
+  AND membership.oidc_subject = $2
+  AND membership.active = true
+GROUP BY accommodation.organization_id
+ORDER BY accommodation.organization_id
+`
+
+type ListAccommodationOnboardingOrganizationsParams struct {
+	OidcIssuer  string `json:"oidc_issuer"`
+	OidcSubject string `json:"oidc_subject"`
+}
+
+type ListAccommodationOnboardingOrganizationsRow struct {
+	OrganizationID       pgtype.UUID `json:"organization_id"`
+	HasManagerMembership bool        `json:"has_manager_membership"`
+}
+
+func (q *Queries) ListAccommodationOnboardingOrganizations(ctx context.Context, arg ListAccommodationOnboardingOrganizationsParams) ([]ListAccommodationOnboardingOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, listAccommodationOnboardingOrganizations, arg.OidcIssuer, arg.OidcSubject)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAccommodationOnboardingOrganizationsRow{}
+	for rows.Next() {
+		var i ListAccommodationOnboardingOrganizationsRow
+		if err := rows.Scan(&i.OrganizationID, &i.HasManagerMembership); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMembershipSetForManager = `-- name: LockMembershipSetForManager :many
 SELECT
   target.id,
@@ -411,29 +702,25 @@ SET
     WHEN $3::boolean THEN $4::text
     ELSE a.category
   END,
-  cadastur_id = CASE
-    WHEN $5::boolean THEN $6::text
-    ELSE a.cadastur_id
-  END,
   capacity = CASE
-    WHEN $7::boolean THEN $8::integer
+    WHEN $5::boolean THEN $6::integer
     ELSE a.capacity
   END,
   public_area_code = CASE
-    WHEN $9::boolean THEN $10::text
+    WHEN $7::boolean THEN $8::text
     ELSE a.public_area_code
   END,
-  updated_at = $11,
+  updated_at = $9,
   version = a.version + 1
-WHERE a.id = $12
-  AND a.version = $13
+WHERE a.id = $10
+  AND a.version = $11
   AND a.status <> 'closed'
   AND EXISTS (
     SELECT 1
     FROM core.memberships AS m
     WHERE m.accommodation_id = a.id
-      AND m.oidc_issuer = $14
-      AND m.oidc_subject = $15
+      AND m.oidc_issuer = $12
+      AND m.oidc_subject = $13
       AND m.active = true
       AND m.role = 'manager'
   )
@@ -456,8 +743,6 @@ type UpdateAccommodationParams struct {
 	Name              string             `json:"name"`
 	SetCategory       bool               `json:"set_category"`
 	Category          string             `json:"category"`
-	SetCadasturID     bool               `json:"set_cadastur_id"`
-	CadasturID        *string            `json:"cadastur_id"`
 	SetCapacity       bool               `json:"set_capacity"`
 	Capacity          *int32             `json:"capacity"`
 	SetPublicAreaCode bool               `json:"set_public_area_code"`
@@ -489,8 +774,6 @@ func (q *Queries) UpdateAccommodation(ctx context.Context, arg UpdateAccommodati
 		arg.Name,
 		arg.SetCategory,
 		arg.Category,
-		arg.SetCadasturID,
-		arg.CadasturID,
 		arg.SetCapacity,
 		arg.Capacity,
 		arg.SetPublicAreaCode,

@@ -4,6 +4,7 @@ type Schemas = components["schemas"];
 
 export const phase2OperationNames = [
   "listAccommodations",
+  "createAccommodation",
   "getAccommodation",
   "updateAccommodation",
   "listAccommodationMemberships",
@@ -61,6 +62,12 @@ interface SuccessContract {
 
 const successContracts = {
   listAccommodations: { status: 200 },
+  createAccommodation: {
+    status: 201,
+    etag: true,
+    location: true,
+    replay: true,
+  },
   getAccommodation: { status: 200, etag: true },
   updateAccommodation: { status: 200, etag: true },
   listAccommodationMemberships: { status: 200 },
@@ -433,6 +440,16 @@ export function createPhase2Client(options: ClientOptions) {
         "listAccommodations",
         `/api/v1/accommodations${queryString({ cursor, limit })}`,
       ),
+    createAccommodation: (
+      body: JsonRequest<"createAccommodation">,
+      idempotencyKey: string,
+    ) =>
+      request("createAccommodation", {
+        method: "POST",
+        path: "/api/v1/accommodations",
+        body,
+        headers: { "Idempotency-Key": idempotencyKey },
+      }),
     getAccommodation: (id: string) =>
       authenticatedGet(
         "getAccommodation",

@@ -16,5 +16,6 @@ comando, resultado ou marcador.
 
 | Data | Mudança | Alvo | Motivo |
 | --- | --- | --- | --- |
+| 2026-07-29 | Protocolo e build de remediação | bootstrap e Fase 4 | Transformar débitos/runtime divergente em ondas reproduzíveis com PostgreSQL, full-stack e navegador real |
 | 2026-07-28 | Gate global pós-tarefa | harness, agents e CI | Impedir handoff com complexidade/lint ausentes ou mascarados |
 | 2026-07-28 | Configuração inicial | harness completo | Execução faseada no Codex com compatibilidade Claude |

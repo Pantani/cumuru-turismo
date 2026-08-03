@@ -1,0 +1,89 @@
+services:
+  local-demo:
+    image: "cumuru-api:${CUMURU_IMAGE_TAG:-0.2.0}"
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        BUILD_VERSION: "${CUMURU_BUILD_VERSION:?build metadata wrapper is required}"
+        BUILD_REVISION: "${CUMURU_BUILD_REVISION:?build metadata wrapper is required}"
+        BUILD_TIME: "${CUMURU_BUILD_TIME:?build metadata wrapper is required}"
+    command: ["/app/local-demo"]
+    environment:
+      APP_ENV: local
+      OIDC_MODE: fake
+      OIDC_ISSUER: https://oidc.invalid/local
+      OIDC_AUDIENCE: cumuru-local
+      OTEL_EXPORTER: none
+      LOCAL_DEMO_ENABLED: "true"
+      DATABASE_URL: postgres://cumuru_app:cumuru-local-app-only@postgres:5432/cumuru?sslmode=disable
+      WORKER_DATABASE_URL: postgres://cumuru_worker:cumuru-local-worker-only@postgres:5432/cumuru?sslmode=disable
+      PROVISIONING_DATABASE_URL: postgres://cumuru_migration:cumuru-local-migration-only@postgres:5432/cumuru?sslmode=disable
+      INVITE_BASE_URL: http://127.0.0.1:4173/convites
+      INVITE_TTL: 72h
+      IDEMPOTENCY_TTL: 87600h
+      RATE_LIMIT_WINDOW: 1m
+      INVITE_CONTEXT_RATE_LIMIT: "30"
+      INVITE_SUBMIT_RATE_LIMIT: "10"
+      CORS_ALLOWED_ORIGINS: http://127.0.0.1:4173,http://127.0.0.1:5173
+      INVITE_HMAC_CURRENT_VERSION: local-v1
+      INVITE_HMAC_KEYS: local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtaW52aXRlLWtleS12MS0wMDA=
+      ACTOR_HMAC_CURRENT_VERSION: local-v1
+      ACTOR_HMAC_KEYS: local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtYWN0b3Ita2V5LXYxLTAwMDA=
+      IDEMPOTENCY_HMAC_CURRENT_VERSION: local-v1
+      IDEMPOTENCY_HMAC_KEYS: local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtaWRlbXBvdGVuY3ktdjEtMDA=
+      RATE_LIMIT_HMAC_CURRENT_VERSION: local-v1
+      RATE_LIMIT_HMAC_KEYS: local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtcmF0ZS1saW1pdC12MS0wMDA=
+      CURSOR_HMAC_CURRENT_VERSION: local-v1
+      CURSOR_HMAC_KEYS: local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtY3Vyc29yLWtleS12MS0wMDA=
+      PHASE3_ENABLED: "true"
+      SURVEY_CAPABILITY_TTL: 24h
+      SURVEY_FREE_TEXT_TTL: 24h
+      SURVEY_SUBMIT_RATE_LIMIT: "10"
+      SURVEY_FREE_TEXT_CLEANUP_ENABLED: "true"
+      SURVEY_HMAC_CURRENT_VERSION: local-v1
+      SURVEY_HMAC_KEYS: local-v1=Y3VtdXJ1LWxvY2FsLXRlc3Qtc3VydmV5LWhtYWMtdjEtMDAw
+      SURVEY_FREE_TEXT_CURRENT_VERSION: local-v1
+      SURVEY_FREE_TEXT_KEYS: local-v1=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      PHASE4_ENABLED: "true"
+      PUBLIC_DATABASE_TIMEOUT: 3s
+      PHASE4_PRIMARY_CELL_THRESHOLD: "10"
+      PHASE4_MINIMUM_REPORTING_ACCOMMODATIONS: "3"
+      PHASE4_ROUNDING_BASE: "10"
+      PHASE4_PRE_REGISTERED_WEIGHT: "0.80"
+      PHASE4_INCREMENTAL_INTERVAL: 15m
+      PHASE4_FULL_RECONCILIATION_INTERVAL: 24h
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs: [/tmp]
+    restart: "no"
+    networks: [private]
+
+  api:
+    environment:
+      ACCOMMODATION_ONBOARDING_ENABLED: "true"
+    depends_on:
+      local-demo:
+        condition: service_completed_successfully
+
+  worker:
+    depends_on:
+      local-demo:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      args:
+        VITE_LOCAL_DEMO_IDENTITY: cumuru-local-platform-read
+        VITE_LOCAL_DEMO_MODE: "true"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl --fail --silent --show-error
+          http://127.0.0.1:8080/api/v1/public/summary >/dev/null
+      interval: 2s
+      timeout: 3s
+      retries: 60

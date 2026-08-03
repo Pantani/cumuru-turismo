@@ -101,6 +101,19 @@ func TestPhase3OperationsAreExplicitlyAllowed(t *testing.T) {
 	}
 }
 
+func TestAccommodationOnboardingOperationIsExplicitlyAllowed(t *testing.T) {
+	t.Parallel()
+	identity := idempotency.Identity{
+		Actor:      idempotency.Digest{Version: "actor-v1", Sum: bytes.Repeat([]byte{1}, 32)},
+		Key:        idempotency.Digest{Version: "idem-v1", Sum: bytes.Repeat([]byte{2}, 32)},
+		Operation:  idempotency.OperationCreateAccommodation,
+		ResourceID: uuid.MustParse("019f0000-0000-7000-8000-000000000021"),
+	}
+	if err := identity.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
 func TestStoredResponseAllowsOnlyReplayHeadersAndCopiesBody(t *testing.T) {
 	t.Parallel()
 

@@ -34,6 +34,16 @@ type Store struct {
 	now              func() time.Time
 }
 
+type Option func(*Store)
+
+func WithCurrentTime(now func() time.Time) Option {
+	return func(store *Store) {
+		if now != nil {
+			store.now = now
+		}
+	}
+}
+
 func New(queries generated.Querier, timeout time.Duration) *Store {
 	return &Store{
 		queries: queries, timeout: timeout,
@@ -58,8 +68,12 @@ func NewPhase3(
 	timeout time.Duration,
 	phase2 config.Phase2Config,
 	phase3 config.Phase3Config,
+	options ...Option,
 ) (*Store, error) {
 	store := NewPhase2(pool, timeout, phase2)
+	for _, option := range options {
+		option(store)
+	}
 	store.phase3 = phase3
 	if !phase3.Enabled {
 		return store, nil
