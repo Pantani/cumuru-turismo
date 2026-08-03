@@ -4,5 +4,12 @@ title = "Cumuru secret scanning"
 useDefault = true
 
 [[allowlists]]
-description = "Generated SBOM evidence is scanned separately from source files"
-paths = ['''^artifacts/sbom/''']
+description = "Generated API image SHA references are not credentials"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = [
+  '''^artifacts/sbom/api-image\.cdx\.json$''',
+  '''^artifacts/sbom/image-manifest\.json$''',
+]
+regexTarget = "match"
+regexes = ['''cumuru-api:[0-9a-f]{40}''']
