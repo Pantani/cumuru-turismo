@@ -110,12 +110,20 @@ func TestRateSubjectAcceptsRealIPOnlyFromTrustedProxy(t *testing.T) {
 		},
 		{
 			name: "trusted matching headers", remote: "10.20.30.40:4321",
-			forwarded: "198.51.100.44", realIP: "198.51.100.44",
+			forwarded: []string{"198.51.100.44"}, realIP: "198.51.100.44",
 			want: "198.51.100.0/24",
 		},
 		{
 			name: "trusted mismatched headers", remote: "10.20.30.40:4321",
-			forwarded: "198.51.100.44", realIP: "203.0.113.9", wantErr: true,
+			forwarded: []string{"198.51.100.44"}, realIP: "203.0.113.9", wantErr: true,
+		},
+		{
+			name: "trusted comma-separated forwarded header", remote: "10.20.30.40:4321",
+			forwarded: []string{"203.0.113.9, 198.51.100.44"}, wantErr: true,
+		},
+		{
+			name: "trusted repeated forwarded header", remote: "10.20.30.40:4321",
+			forwarded: []string{"203.0.113.9", "198.51.100.44"}, wantErr: true,
 		},
 		{
 			name: "untrusted ignores spoofed real IP", remote: "203.0.113.123:4321",
@@ -123,7 +131,6 @@ func TestRateSubjectAcceptsRealIPOnlyFromTrustedProxy(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			assertProxyHeaderExpectation(t, trusted, tt)
@@ -134,7 +141,7 @@ func TestRateSubjectAcceptsRealIPOnlyFromTrustedProxy(t *testing.T) {
 type proxyHeaderExpectation struct {
 	name      string
 	remote    string
-	forwarded string
+	forwarded []string
 	realIP    string
 	want      string
 	wantErr   bool
@@ -148,8 +155,8 @@ func assertProxyHeaderExpectation(
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.RemoteAddr = want.remote
-	if want.forwarded != "" {
-		request.Header.Set("X-Forwarded-For", want.forwarded)
+	for _, forwarded := range want.forwarded {
+		request.Header.Add("X-Forwarded-For", forwarded)
 	}
 	if want.realIP != "" {
 		request.Header.Set("X-Real-IP", want.realIP)

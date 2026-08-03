@@ -59,6 +59,10 @@ na location `/api/v1/invites/**`, remove `Referer` e `Forwarded`, e sobrescreve
 `X-Forwarded-For`/`X-Real-IP` com `$remote_addr`. O IP estático do web é
 `172.30.0.10`, exatamente o único CIDR confiável local (`/32`). Web e
 PostgreSQL publicam somente em `127.0.0.1`.
+Quando `LOCAL_DEMO_PROXY_LOOPBACK=true`, esse bind é uma restrição de segurança:
+a porta web deve permanecer em `127.0.0.1` e não pode ser publicada em
+`0.0.0.0` nem em outra interface acessível pelo host, pois o proxy renderizado
+confia a identidade fixture exclusivamente ao caminho loopback.
 
 No modo nativo, API e Vite usam somente os loopbacks
 `127.0.0.1/32,::1/128`. `COMPOSE_TRUSTED_PROXY_CIDRS` é separado de
