@@ -185,7 +185,14 @@ func TestGroupValidationRejectsInvalidResidenceShapes(t *testing.T) {
 		{name: "Brazil without state", mutate: func(value *stay.Visitor) { value.ResidenceState = "" }},
 		{name: "Brazil without city", mutate: func(value *stay.Visitor) { value.ResidenceCityCode = "" }},
 		{name: "Brazil non numeric city", mutate: func(value *stay.Visitor) { value.ResidenceCityCode = "abcdefg" }},
-		{name: "foreign country with state", mutate: func(value *stay.Visitor) { value.ResidenceCountry = "AR" }},
+		{name: "foreign country with state", mutate: func(value *stay.Visitor) {
+			value.ResidenceCountry = "AR"
+			value.ResidenceCityCode = ""
+		}},
+		{name: "foreign country with city", mutate: func(value *stay.Visitor) {
+			value.ResidenceCountry = "AR"
+			value.ResidenceState = ""
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

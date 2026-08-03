@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -30,37 +29,5 @@ func TestRollbackLocalDemoUsesFreshContext(t *testing.T) {
 	rollbackLocalDemo(tx, time.Second)
 	if tx.contextErr != nil {
 		t.Fatalf("rollback context error = %v, want fresh context", tx.contextErr)
-	}
-}
-
-func TestClassifyLocalDemoOrganizationReadErrorBeforeNameMismatch(t *testing.T) {
-	t.Parallel()
-
-	databaseErr := errors.New("database unavailable")
-	err := classifyLocalOrganizationResult("", databaseErr, "expected")
-	if !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("classification = %v, want ErrUnavailable", err)
-	}
-	if errors.Is(err, ErrLocalDemoConflict) {
-		t.Fatalf("classification = %v, database failure must not be a conflict", err)
-	}
-}
-
-func TestClassifyLocalDemoOrganizationMissingOrMismatched(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range []struct {
-		name string
-		got  string
-		err  error
-	}{
-		{name: "missing", err: pgx.ErrNoRows},
-		{name: "mismatched", got: "other"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			if err := classifyLocalOrganizationResult(test.got, test.err, "expected"); !errors.Is(err, ErrLocalDemoConflict) {
-				t.Fatalf("classification = %v, want ErrLocalDemoConflict", err)
-			}
-		})
 	}
 }

@@ -21,6 +21,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const onboardingTokenCanary = "onboard-token-canary"
+
 type accommodationRepositoryStub struct {
 	accommodation.Repository
 	createResult accommodation.Accommodation
@@ -172,7 +174,7 @@ func TestAccommodationOnboardingReturnsContractHeaders(t *testing.T) {
 		"/api/v1/accommodations",
 		strings.NewReader(`{"name":"accommodation-log-canary","category":"family_hosting","capacity":6,"client_submission_id":"019f0000-0000-7000-8000-000000000023"}`),
 	)
-	request.Header.Set("Authorization", "Bearer onboard")
+	request.Header.Set("Authorization", "Bearer "+onboardingTokenCanary)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "aaaaaaaaaaaaaaaa")
 	recorder := httptest.NewRecorder()
@@ -189,7 +191,7 @@ func assertAccommodationOnboardingCommand(
 	captured accommodation.CreateCommand,
 ) {
 	t.Helper()
-	if captured.Actor.Subject != "onboard" ||
+	if captured.Actor.Subject != onboardingTokenCanary ||
 		captured.Category != accommodation.CategoryFamilyHosting ||
 		captured.ClientSubmissionID.Version() != 7 {
 		t.Fatalf("captured command = %+v", captured)
@@ -209,7 +211,7 @@ func assertAccommodationOnboardingPrivacy(
 	}
 	if strings.Contains(logs, "accommodation-log-canary") ||
 		strings.Contains(logs, "aaaaaaaaaaaaaaaa") ||
-		strings.Contains(logs, "onboard") {
+		strings.Contains(logs, onboardingTokenCanary) {
 		t.Fatalf("HTTP log leaked onboarding body, token, or idempotency key: %s", logs)
 	}
 }
@@ -562,9 +564,10 @@ func phase2HandlerWithOptions(t *testing.T, options phase2HandlerOptions) http.H
 	t.Helper()
 	verifier := verifierFunc(func(_ context.Context, token string) (access.Principal, error) {
 		scopes := map[string][]string{
-			"manager": {"accommodations:manage"},
-			"onboard": {"accommodations:onboard"},
-			"writer":  {"stays:write"},
+			"manager":             {"accommodations:manage"},
+			"onboard":             {"accommodations:onboard"},
+			onboardingTokenCanary: {"accommodations:onboard"},
+			"writer":              {"stays:write"},
 		}
 		return access.NewPrincipal("https://issuer.invalid", token, scopes[token]), nil
 	})

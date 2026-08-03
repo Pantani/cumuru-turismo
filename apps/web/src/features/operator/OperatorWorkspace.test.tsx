@@ -421,29 +421,32 @@ describe("workspace operacional", () => {
     );
     const popstate = vi.fn();
     window.addEventListener("popstate", popstate);
-    renderWorkspace(true);
-    const lifecycle = screen.getByRole("region", {
-      name: "Grupo, convite e ciclo da estadia",
-    });
-    await user.type(within(lifecycle).getByLabelText("ID da estadia"), uuid);
-    await user.type(within(lifecycle).getByLabelText("ETag da estadia"), '"1"');
-    await user.click(
-      within(lifecycle).getByRole("button", { name: "Criar QR de convite" }),
-    );
-    await user.click(await within(lifecycle).findByRole("button", {
-      name: "Abrir registro neste navegador",
-    }));
+    try {
+      renderWorkspace(true);
+      const lifecycle = screen.getByRole("region", {
+        name: "Grupo, convite e ciclo da estadia",
+      });
+      await user.type(within(lifecycle).getByLabelText("ID da estadia"), uuid);
+      await user.type(within(lifecycle).getByLabelText("ETag da estadia"), '"1"');
+      await user.click(
+        within(lifecycle).getByRole("button", { name: "Criar QR de convite" }),
+      );
+      await user.click(await within(lifecycle).findByRole("button", {
+        name: "Abrir registro neste navegador",
+      }));
 
-    expect(peekInviteCapability()).toBeNull();
-    expect(popstate).not.toHaveBeenCalled();
-    expect(within(lifecycle).getByRole("heading", {
-      name: "Convite pronto para leitura local",
-    })).toBeInTheDocument();
-    expect(within(lifecycle).getByText(/QR permanece disponível/i))
-      .toBeInTheDocument();
-    expect(window.location.pathname).toBe(expectedPath);
-    window.removeEventListener("popstate", popstate);
-    window.history.replaceState(null, "", "/");
+      expect(peekInviteCapability()).toBeNull();
+      expect(popstate).not.toHaveBeenCalled();
+      expect(within(lifecycle).getByRole("heading", {
+        name: "Convite pronto para leitura local",
+      })).toBeInTheDocument();
+      expect(within(lifecycle).getByText(/QR permanece disponível/i))
+        .toBeInTheDocument();
+      expect(window.location.pathname).toBe(expectedPath);
+    } finally {
+      window.removeEventListener("popstate", popstate);
+      window.history.replaceState(null, "", "/");
+    }
   });
 
   it("propaga a estadia criada e seu ETag para o passo de convite", async () => {
