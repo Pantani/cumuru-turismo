@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	AcquireAccommodationOnboardingLock(ctx context.Context, actorLockKey string) error
+	AcquireLocalDemoRunLock(ctx context.Context) error
 	ApplyStayTransition(ctx context.Context, arg ApplyStayTransitionParams) (ApplyStayTransitionRow, error)
 	ApproveQuestionnaireVersion(ctx context.Context, arg ApproveQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	AssumePublicRuntimeRole(ctx context.Context) error
@@ -36,11 +38,17 @@ type Querier interface {
 	DeleteStagedMetricCellsForRun(ctx context.Context, publicationRunID pgtype.UUID) (int64, error)
 	EraseExpiredSurveyFreeText(ctx context.Context, cutoff pgtype.Timestamptz) (int32, error)
 	FinalizeInviteSubmission(ctx context.Context, arg FinalizeInviteSubmissionParams) (FinalizeInviteSubmissionRow, error)
+	FindLocalDemoStay(ctx context.Context, arg FindLocalDemoStayParams) (pgtype.UUID, error)
+	FindOnboardedAccommodation(ctx context.Context, arg FindOnboardedAccommodationParams) (FindOnboardedAccommodationRow, error)
 	GetAccessibleAccommodation(ctx context.Context, arg GetAccessibleAccommodationParams) (GetAccessibleAccommodationRow, error)
 	GetAccessibleStay(ctx context.Context, arg GetAccessibleStayParams) (GetAccessibleStayRow, error)
 	GetCurrentMethodology(ctx context.Context) (GetCurrentMethodologyRow, error)
 	GetCurrentPublicationVersion(ctx context.Context) (int64, error)
 	GetInviteForCapability(ctx context.Context, inviteID pgtype.UUID) (GetInviteForCapabilityRow, error)
+	GetLocalDemoAccommodation(ctx context.Context, id pgtype.UUID) (GetLocalDemoAccommodationRow, error)
+	GetLocalDemoMembership(ctx context.Context, id pgtype.UUID) (GetLocalDemoMembershipRow, error)
+	GetLocalDemoMetricMapping(ctx context.Context, arg GetLocalDemoMetricMappingParams) (string, error)
+	GetLocalDemoOrganization(ctx context.Context, id pgtype.UUID) (string, error)
 	GetNextQuestionnaireVersionNumber(ctx context.Context, questionnaireID pgtype.UUID) (int32, error)
 	GetOutboxBacklog(ctx context.Context) (GetOutboxBacklogRow, error)
 	GetPublicationByFingerprint(ctx context.Context, buildFingerprint string) (PublicDataPublication, error)
@@ -52,13 +60,22 @@ type Querier interface {
 	GetReconciliationRunByFingerprint(ctx context.Context, sourceFingerprint string) (AnalyticsReconciliationRun, error)
 	GetStayGroupSubmission(ctx context.Context, arg GetStayGroupSubmissionParams) (GetStayGroupSubmissionRow, error)
 	GetSurveyCapabilityByStayVersion(ctx context.Context, arg GetSurveyCapabilityByStayVersionParams) (SurveyCapability, error)
+	HasLocalDemoGroupSubmission(ctx context.Context, stayID pgtype.UUID) (bool, error)
+	HasLocalDemoSurveyResponse(ctx context.Context, arg HasLocalDemoSurveyResponseParams) (bool, error)
 	IncrementRateLimit(ctx context.Context, arg IncrementRateLimitParams) (IncrementRateLimitRow, error)
 	InsertAssistedVisitor(ctx context.Context, arg InsertAssistedVisitorParams) (InsertAssistedVisitorRow, error)
 	InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) error
 	InsertConsentDecision(ctx context.Context, arg InsertConsentDecisionParams) error
 	InsertConsentRequirement(ctx context.Context, arg InsertConsentRequirementParams) error
 	InsertInviteVisitor(ctx context.Context, arg InsertInviteVisitorParams) (InsertInviteVisitorRow, error)
+	InsertLocalDemoAccommodation(ctx context.Context, arg InsertLocalDemoAccommodationParams) error
+	InsertLocalDemoMembership(ctx context.Context, arg InsertLocalDemoMembershipParams) error
+	InsertLocalDemoMetricMapping(ctx context.Context, arg InsertLocalDemoMetricMappingParams) error
+	InsertLocalDemoOrganization(ctx context.Context, arg InsertLocalDemoOrganizationParams) error
 	InsertNextPublication(ctx context.Context, arg InsertNextPublicationParams) (int64, error)
+	InsertOnboardingAccommodation(ctx context.Context, arg InsertOnboardingAccommodationParams) (InsertOnboardingAccommodationRow, error)
+	InsertOnboardingManagerMembership(ctx context.Context, arg InsertOnboardingManagerMembershipParams) (InsertOnboardingManagerMembershipRow, error)
+	InsertOnboardingOrganization(ctx context.Context, arg InsertOnboardingOrganizationParams) (pgtype.UUID, error)
 	InsertOutboxEvent(ctx context.Context, arg InsertOutboxEventParams) error
 	InsertPublicationRun(ctx context.Context, arg InsertPublicationRunParams) error
 	InsertPublishedMetricCell(ctx context.Context, arg InsertPublishedMetricCellParams) error
@@ -73,6 +90,7 @@ type Querier interface {
 	ListAccessibleAccommodations(ctx context.Context, arg ListAccessibleAccommodationsParams) ([]ListAccessibleAccommodationsRow, error)
 	ListAccessibleStays(ctx context.Context, arg ListAccessibleStaysParams) ([]ListAccessibleStaysRow, error)
 	ListAccommodationMemberships(ctx context.Context, arg ListAccommodationMembershipsParams) ([]ListAccommodationMembershipsRow, error)
+	ListAccommodationOnboardingOrganizations(ctx context.Context, arg ListAccommodationOnboardingOrganizationsParams) ([]ListAccommodationOnboardingOrganizationsRow, error)
 	ListActiveAccommodationCoverage(ctx context.Context, arg ListActiveAccommodationCoverageParams) ([]ListActiveAccommodationCoverageRow, error)
 	ListActiveMetricCatalog(ctx context.Context, privacyPolicyVersion string) ([]AnalyticsMetricCatalog, error)
 	ListActiveTenantMemberships(ctx context.Context, arg ListActiveTenantMembershipsParams) ([]ListActiveTenantMembershipsRow, error)
@@ -104,6 +122,7 @@ type Querier interface {
 	PromoteCurrentPublication(ctx context.Context, publicationVersion int64) (int64, error)
 	PublishQuestionnaireVersion(ctx context.Context, arg PublishQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	RecordAggregationFailureQualitySnapshot(ctx context.Context, arg RecordAggregationFailureQualitySnapshotParams) (RecordAggregationFailureQualitySnapshotRow, error)
+	ReleaseLocalDemoRunLock(ctx context.Context) (bool, error)
 	RequestQuestionnaireVersionChanges(ctx context.Context, arg RequestQuestionnaireVersionChangesParams) (SurveyQuestionnaireVersion, error)
 	RetireCurrentPublishedVersion(ctx context.Context, arg RetireCurrentPublishedVersionParams) error
 	RetireQuestionnaireVersion(ctx context.Context, arg RetireQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -17,6 +18,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var accommodationOnboardingResourceID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
 type AccommodationRepository struct {
 	store *Store
 }
@@ -26,6 +29,199 @@ func NewAccommodationRepository(store *Store) *AccommodationRepository {
 }
 
 var _ accommodation.Repository = (*AccommodationRepository)(nil)
+
+func (r *AccommodationRepository) Create(
+	ctx context.Context,
+	command accommodation.CreateCommand,
+) (result accommodation.Accommodation, replayed bool, err error) {
+	now := r.store.currentTime()
+	err = r.store.inTransaction(ctx, func(q generated.Querier) error {
+		lockKey, lockErr := r.store.accommodationOnboardingLockKey(command.Actor)
+		if lockErr != nil {
+			return accommodation.ErrUnavailable
+		}
+		if lockErr = q.AcquireAccommodationOnboardingLock(ctx, lockKey); lockErr != nil {
+			return accommodation.ErrUnavailable
+		}
+		idempotent, runErr := r.store.runIdempotent(
+			ctx,
+			q,
+			accommodationIdempotencySpec(command, now),
+			func() (storedMutation, error) {
+				return r.createAccommodation(ctx, q, command)
+			},
+		)
+		if runErr != nil {
+			return accommodationMutationError(runErr)
+		}
+		if decodeErr := json.Unmarshal(idempotent.response.body, &result); decodeErr != nil {
+			return accommodation.ErrUnavailable
+		}
+		replayed = idempotent.replayed
+		return nil
+	})
+	return result, replayed, err
+}
+
+func (r *AccommodationRepository) createAccommodation(
+	ctx context.Context,
+	q generated.Querier,
+	command accommodation.CreateCommand,
+) (storedMutation, error) {
+	scope, err := resolveAccommodationOnboardingScope(ctx, q, command.Actor)
+	if err != nil {
+		return storedMutation{}, err
+	}
+	if err := ensureOnboardingSubmissionUnused(ctx, q, scope.organizationID, command); err != nil {
+		return storedMutation{}, err
+	}
+	ids, err := newAccommodationOnboardingIDs(scope)
+	if err != nil {
+		return storedMutation{}, accommodation.ErrUnavailable
+	}
+	if err := insertOnboardingOrganization(ctx, q, scope, ids, command.Name); err != nil {
+		return storedMutation{}, accommodationMutationError(err)
+	}
+	row, err := q.InsertOnboardingAccommodation(ctx, generated.InsertOnboardingAccommodationParams{
+		AccommodationID: pgUUID(ids.accommodationID), OrganizationID: pgUUID(ids.organizationID),
+		Name: command.Name, Category: string(command.Category), Capacity: &command.Capacity,
+		OnboardingSubmissionID: pgUUID(command.ClientSubmissionID),
+	})
+	if err != nil {
+		return storedMutation{}, accommodationMutationError(err)
+	}
+	if _, err = q.InsertOnboardingManagerMembership(ctx, generated.InsertOnboardingManagerMembershipParams{
+		MembershipID: pgUUID(ids.membershipID), AccommodationID: pgUUID(ids.accommodationID),
+		OidcIssuer: command.Actor.Issuer, OidcSubject: command.Actor.Subject,
+	}); err != nil {
+		return storedMutation{}, accommodationMutationError(err)
+	}
+	created := accommodationFromOnboarding(row)
+	if err := r.store.recordAccommodationCreate(ctx, q, command, created); err != nil {
+		return storedMutation{}, err
+	}
+	return onboardingStoredMutation(created)
+}
+
+type accommodationOnboardingScope struct {
+	organizationID     uuid.UUID
+	createOrganization bool
+}
+
+type accommodationOnboardingIDs struct {
+	organizationID  uuid.UUID
+	accommodationID uuid.UUID
+	membershipID    uuid.UUID
+}
+
+func resolveAccommodationOnboardingScope(
+	ctx context.Context,
+	q generated.Querier,
+	actor access.Principal,
+) (accommodationOnboardingScope, error) {
+	rows, err := q.ListAccommodationOnboardingOrganizations(
+		ctx,
+		generated.ListAccommodationOnboardingOrganizationsParams{
+			OidcIssuer: actor.Issuer, OidcSubject: actor.Subject,
+		},
+	)
+	if err != nil {
+		return accommodationOnboardingScope{}, accommodation.ErrUnavailable
+	}
+	if len(rows) > 1 {
+		return accommodationOnboardingScope{}, accommodation.ErrConflict
+	}
+	if len(rows) == 1 {
+		return existingAccommodationOnboardingScope(rows[0])
+	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return accommodationOnboardingScope{}, accommodation.ErrUnavailable
+	}
+	return accommodationOnboardingScope{organizationID: id, createOrganization: true}, nil
+}
+
+func existingAccommodationOnboardingScope(
+	row generated.ListAccommodationOnboardingOrganizationsRow,
+) (accommodationOnboardingScope, error) {
+	if !row.OrganizationID.Valid {
+		return accommodationOnboardingScope{}, accommodation.ErrUnavailable
+	}
+	if !row.HasManagerMembership {
+		return accommodationOnboardingScope{}, accommodation.ErrForbidden
+	}
+	return accommodationOnboardingScope{organizationID: uuid.UUID(row.OrganizationID.Bytes)}, nil
+}
+
+func ensureOnboardingSubmissionUnused(
+	ctx context.Context,
+	q generated.Querier,
+	organizationID uuid.UUID,
+	command accommodation.CreateCommand,
+) error {
+	_, err := q.FindOnboardedAccommodation(ctx, generated.FindOnboardedAccommodationParams{
+		OrganizationID:         pgUUID(organizationID),
+		OnboardingSubmissionID: pgUUID(command.ClientSubmissionID),
+		OidcIssuer:             command.Actor.Issuer, OidcSubject: command.Actor.Subject,
+	})
+	if err == nil {
+		return accommodation.ErrConflict
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	return accommodation.ErrUnavailable
+}
+
+func newAccommodationOnboardingIDs(
+	scope accommodationOnboardingScope,
+) (accommodationOnboardingIDs, error) {
+	accommodationID, err := uuid.NewV7()
+	if err != nil {
+		return accommodationOnboardingIDs{}, err
+	}
+	membershipID, err := uuid.NewV7()
+	if err != nil {
+		return accommodationOnboardingIDs{}, err
+	}
+	return accommodationOnboardingIDs{
+		organizationID:  scope.organizationID,
+		accommodationID: accommodationID,
+		membershipID:    membershipID,
+	}, nil
+}
+
+func insertOnboardingOrganization(
+	ctx context.Context,
+	q generated.Querier,
+	scope accommodationOnboardingScope,
+	ids accommodationOnboardingIDs,
+	name string,
+) error {
+	if !scope.createOrganization {
+		return nil
+	}
+	_, err := q.InsertOnboardingOrganization(ctx, generated.InsertOnboardingOrganizationParams{
+		OrganizationID: pgUUID(ids.organizationID), Name: name,
+	})
+	return err
+}
+
+func onboardingStoredMutation(
+	created accommodation.Accommodation,
+) (storedMutation, error) {
+	body, err := json.Marshal(created)
+	if err != nil {
+		return storedMutation{}, accommodation.ErrUnavailable
+	}
+	return storedMutation{
+		status: 201, resourceID: created.ID, body: body,
+		headers: map[string]string{
+			"Location": "/api/v1/accommodations/" + created.ID.String(),
+			"ETag":     entityTag(created.Version),
+		},
+	}, nil
+}
 
 func (r *AccommodationRepository) List(
 	ctx context.Context,
@@ -321,14 +517,46 @@ func updateAccommodationParams(
 	patch := command.Patch
 	return generated.UpdateAccommodationParams{
 		SetName: patch.SetName, Name: patch.Name,
-		SetCategory: patch.SetCategory, Category: patch.Category,
-		SetCadasturID: patch.SetCadasturID, CadasturID: patch.CadasturID,
+		SetCategory: patch.SetCategory, Category: string(patch.Category),
 		SetCapacity: patch.SetCapacity, Capacity: patch.Capacity,
 		SetPublicAreaCode: patch.SetPublicAreaCode, PublicAreaCode: patch.PublicAreaCode,
 		UpdatedAt: pgTime(now), AccommodationID: pgUUID(command.AccommodationID),
 		ExpectedVersion: command.ExpectedVersion,
 		OidcIssuer:      command.Actor.Issuer, OidcSubject: command.Actor.Subject,
 	}
+}
+
+func accommodationIdempotencySpec(
+	command accommodation.CreateCommand,
+	now time.Time,
+) idempotencySpec {
+	request := struct {
+		Name               string                 `json:"name"`
+		Category           accommodation.Category `json:"category"`
+		Capacity           int32                  `json:"capacity"`
+		ClientSubmissionID uuid.UUID              `json:"client_submission_id"`
+	}{command.Name, command.Category, command.Capacity, command.ClientSubmissionID}
+	return idempotencySpec{
+		actorValue: actorValue(command.Actor.Issuer, command.Actor.Subject),
+		operation:  idempotency.OperationCreateAccommodation,
+		resourceID: accommodationOnboardingResourceID,
+		key:        command.IdempotencyKey,
+		request:    request,
+		now:        now,
+	}
+}
+
+func (s *Store) accommodationOnboardingLockKey(actor access.Principal) (string, error) {
+	key, ok := s.phase2.ActorKeys.Key(s.phase2.ActorKeys.CurrentVersion)
+	if !ok {
+		return "", accommodation.ErrUnavailable
+	}
+	digest := keyedDigest(
+		key,
+		"accommodation-onboarding-lock",
+		actorValue(actor.Issuer, actor.Subject),
+	)
+	return hex.EncodeToString(digest), nil
 }
 
 func membershipTarget(
@@ -443,6 +671,7 @@ func accommodationMutationError(err error) error {
 		return accommodation.ErrConflict
 	}
 	if errors.Is(err, accommodation.ErrNotFound) ||
+		errors.Is(err, accommodation.ErrForbidden) ||
 		errors.Is(err, accommodation.ErrPreconditionFailed) ||
 		errors.Is(err, accommodation.ErrConflict) {
 		return err
@@ -457,7 +686,7 @@ func optionalTime(value time.Time) pgtype.Timestamptz {
 func accommodationFromGet(row generated.GetAccessibleAccommodationRow) accommodation.Accommodation {
 	return accommodation.Accommodation{
 		ID: uuid.UUID(row.ID.Bytes), OrganizationID: uuid.UUID(row.OrganizationID.Bytes),
-		Name: row.Name, Category: row.Category, Status: accommodation.Status(row.Status),
+		Name: row.Name, Category: accommodation.Category(row.Category), Status: accommodation.Status(row.Status),
 		CadasturID: row.CadasturID, Capacity: row.Capacity, PublicAreaCode: row.PublicAreaCode,
 		Version: row.Version, CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
 	}
@@ -466,7 +695,7 @@ func accommodationFromGet(row generated.GetAccessibleAccommodationRow) accommoda
 func accommodationFromList(row generated.ListAccessibleAccommodationsRow) accommodation.Accommodation {
 	return accommodation.Accommodation{
 		ID: uuid.UUID(row.ID.Bytes), OrganizationID: uuid.UUID(row.OrganizationID.Bytes),
-		Name: row.Name, Category: row.Category, Status: accommodation.Status(row.Status),
+		Name: row.Name, Category: accommodation.Category(row.Category), Status: accommodation.Status(row.Status),
 		CadasturID: row.CadasturID, Capacity: row.Capacity, PublicAreaCode: row.PublicAreaCode,
 		Version: row.Version, CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
 	}
@@ -475,8 +704,20 @@ func accommodationFromList(row generated.ListAccessibleAccommodationsRow) accomm
 func accommodationFromUpdate(row generated.UpdateAccommodationRow) accommodation.Accommodation {
 	return accommodation.Accommodation{
 		ID: uuid.UUID(row.ID.Bytes), OrganizationID: uuid.UUID(row.OrganizationID.Bytes),
-		Name: row.Name, Category: row.Category, Status: accommodation.Status(row.Status),
+		Name: row.Name, Category: accommodation.Category(row.Category), Status: accommodation.Status(row.Status),
 		CadasturID: row.CadasturID, Capacity: row.Capacity, PublicAreaCode: row.PublicAreaCode,
+		Version: row.Version, CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
+	}
+}
+
+func accommodationFromOnboarding(
+	row generated.InsertOnboardingAccommodationRow,
+) accommodation.Accommodation {
+	return accommodation.Accommodation{
+		ID: uuid.UUID(row.ID.Bytes), OrganizationID: uuid.UUID(row.OrganizationID.Bytes),
+		Name: row.Name, Category: accommodation.Category(row.Category),
+		Status: accommodation.Status(row.Status), CadasturID: row.CadasturID,
+		Capacity: row.Capacity, PublicAreaCode: row.PublicAreaCode,
 		Version: row.Version, CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
 	}
 }
@@ -525,6 +766,28 @@ func (s *Store) recordAccommodationMutation(
 	})
 }
 
+func (s *Store) recordAccommodationCreate(
+	ctx context.Context,
+	q generated.Querier,
+	command accommodation.CreateCommand,
+	result accommodation.Accommodation,
+) error {
+	return s.recordEvents(ctx, q, eventSpec{
+		actorType: audit.ActorUser, actorIssuer: command.Actor.Issuer,
+		actorSubject: command.Actor.Subject, organization: result.OrganizationID,
+		action: audit.ActionAccommodationCreated, entityType: audit.EntityAccommodation,
+		entityID: result.ID, requestID: command.RequestID,
+		changedFields: []audit.ChangedField{
+			audit.FieldName,
+			audit.FieldCategory,
+			audit.FieldCapacity,
+			audit.FieldStatus,
+		},
+		version: result.Version, aggregateType: outbox.AggregateAccommodation,
+		eventType: outbox.EventAccommodationCreated, now: result.CreatedAt,
+	})
+}
+
 func (s *Store) recordMembershipCreate(
 	ctx context.Context,
 	q generated.Querier,
@@ -564,15 +827,12 @@ func (s *Store) recordMembershipUpdate(
 }
 
 func accommodationChangedFields(patch accommodation.UpdatePatch) []audit.ChangedField {
-	fields := make([]audit.ChangedField, 0, 5)
+	fields := make([]audit.ChangedField, 0, 4)
 	if patch.SetName {
 		fields = append(fields, audit.FieldName)
 	}
 	if patch.SetCategory {
 		fields = append(fields, audit.FieldCategory)
-	}
-	if patch.SetCadasturID {
-		fields = append(fields, audit.FieldCadasturID)
 	}
 	if patch.SetCapacity {
 		fields = append(fields, audit.FieldCapacity)

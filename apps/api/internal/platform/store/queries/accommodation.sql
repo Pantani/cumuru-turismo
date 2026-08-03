@@ -50,6 +50,113 @@ WHERE a.id = sqlc.arg(accommodation_id)
   AND m.oidc_subject = sqlc.arg(oidc_subject)
   AND m.active = true;
 
+-- name: AcquireAccommodationOnboardingLock :exec
+SELECT pg_catalog.pg_advisory_xact_lock(
+  pg_catalog.hashtextextended(sqlc.arg(actor_lock_key)::text, 485202)
+);
+
+-- name: ListAccommodationOnboardingOrganizations :many
+SELECT
+  accommodation.organization_id,
+  pg_catalog.bool_or(membership.role = 'manager') AS has_manager_membership
+FROM core.memberships AS membership
+JOIN core.accommodations AS accommodation
+  ON accommodation.id = membership.accommodation_id
+WHERE membership.oidc_issuer = sqlc.arg(oidc_issuer)
+  AND membership.oidc_subject = sqlc.arg(oidc_subject)
+  AND membership.active = true
+GROUP BY accommodation.organization_id
+ORDER BY accommodation.organization_id;
+
+-- name: FindOnboardedAccommodation :one
+SELECT
+  accommodation.id,
+  accommodation.organization_id,
+  accommodation.name,
+  accommodation.category,
+  accommodation.status,
+  accommodation.cadastur_id,
+  accommodation.capacity,
+  accommodation.public_area_code,
+  accommodation.version,
+  accommodation.created_at,
+  accommodation.updated_at
+FROM core.accommodations AS accommodation
+JOIN core.memberships AS membership
+  ON membership.accommodation_id = accommodation.id
+WHERE accommodation.organization_id = sqlc.arg(organization_id)
+  AND accommodation.onboarding_submission_id = sqlc.arg(onboarding_submission_id)
+  AND membership.oidc_issuer = sqlc.arg(oidc_issuer)
+  AND membership.oidc_subject = sqlc.arg(oidc_subject)
+  AND membership.active = true;
+
+-- name: InsertOnboardingOrganization :one
+INSERT INTO core.organizations (
+  id,
+  name
+)
+VALUES (
+  sqlc.arg(organization_id),
+  sqlc.arg(name)
+)
+RETURNING id;
+
+-- name: InsertOnboardingAccommodation :one
+INSERT INTO core.accommodations (
+  id,
+  organization_id,
+  name,
+  category,
+  status,
+  capacity,
+  onboarding_submission_id
+)
+VALUES (
+  sqlc.arg(accommodation_id),
+  sqlc.arg(organization_id),
+  sqlc.arg(name),
+  sqlc.arg(category),
+  'active',
+  sqlc.arg(capacity),
+  sqlc.arg(onboarding_submission_id)
+)
+RETURNING
+  id,
+  organization_id,
+  name,
+  category,
+  status,
+  cadastur_id,
+  capacity,
+  public_area_code,
+  version,
+  created_at,
+  updated_at;
+
+-- name: InsertOnboardingManagerMembership :one
+INSERT INTO core.memberships (
+  id,
+  accommodation_id,
+  oidc_issuer,
+  oidc_subject,
+  role
+)
+VALUES (
+  sqlc.arg(membership_id),
+  sqlc.arg(accommodation_id),
+  sqlc.arg(oidc_issuer),
+  sqlc.arg(oidc_subject),
+  'manager'
+)
+RETURNING
+  id,
+  accommodation_id,
+  role,
+  active,
+  version,
+  created_at,
+  updated_at;
+
 -- name: UpdateAccommodation :one
 UPDATE core.accommodations AS a
 SET
@@ -60,10 +167,6 @@ SET
   category = CASE
     WHEN sqlc.arg(set_category)::boolean THEN sqlc.arg(category)::text
     ELSE a.category
-  END,
-  cadastur_id = CASE
-    WHEN sqlc.arg(set_cadastur_id)::boolean THEN sqlc.narg(cadastur_id)::text
-    ELSE a.cadastur_id
   END,
   capacity = CASE
     WHEN sqlc.arg(set_capacity)::boolean THEN sqlc.narg(capacity)::integer

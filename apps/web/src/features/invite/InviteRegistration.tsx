@@ -27,7 +27,10 @@ import {
   clearInviteCapability,
   peekInviteCapability,
 } from "../../shared/security/invite-capability";
-import { setSurveyCapability } from "../../shared/security/survey-capability";
+import {
+  peekSurveyCapability,
+  setSurveyCapability,
+} from "../../shared/security/survey-capability";
 import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import {
   type ValidationIssue,
@@ -145,6 +148,44 @@ interface FailureActions {
   setMessage: (message: string) => void;
 }
 
+function SurveyContinuation() {
+  if (peekSurveyCapability() === null) {
+    return (
+      <p>
+        A pesquisa voluntária não foi disponibilizada para esta conclusão.
+      </p>
+    );
+  }
+  return (
+    <button
+      className="primary-action"
+      type="button"
+      onClick={() => {
+        window.history.pushState(null, "", "/pesquisa");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }}
+    >
+      Responder pesquisa voluntária
+    </button>
+  );
+}
+
+export function RegistrationCompletion({
+  message = "Grupo enviado com sucesso.",
+}: {
+  message?: string;
+}) {
+  return (
+    <section className="form-card" aria-labelledby="invite-state-title">
+      <h2 id="invite-state-title">Registro concluído</h2>
+      <p role="status" aria-live="polite">
+        {message}
+      </p>
+      <SurveyContinuation />
+    </section>
+  );
+}
+
 async function recoverSubmission(
   error: unknown,
   draftId: string | null,
@@ -183,6 +224,7 @@ export function InviteRegistration() {
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [draftId, setDraftId] = useState<string | null>(draftIdFromHash);
   const [message, setMessage] = useState("Validando convite…");
+  const [completed, setCompleted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [clientSubmissionId, setClientSubmissionId] = useState<string>(() =>
     createUuidV7(),
@@ -295,6 +337,7 @@ export function InviteRegistration() {
       setDraftId(null);
       clearInviteCapability();
       setMessage("Grupo enviado com sucesso.");
+      setCompleted(true);
       setContext(null);
     } catch (error) {
       await recoverSubmission(
@@ -339,6 +382,9 @@ export function InviteRegistration() {
   }
 
   if (context === null) {
+    if (completed) {
+      return <RegistrationCompletion message={message} />;
+    }
     return (
       <section className="form-card" aria-labelledby="invite-state-title">
         <h2 id="invite-state-title">Convite em validação</h2>

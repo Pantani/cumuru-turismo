@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       CUMURU_IMAGE_TAG: ${{ github.sha }}
       CUMURU_BUILD_REVISION: ${{ github.sha }}
@@ -60,57 +60,15 @@ jobs:
       - name: Install pinned Go quality tools
         run: make tools
 
-      - name: Validate contract and generated artifacts
+      - name: Install Chromium for the canonical browser gate
+        run: npm exec -- playwright install --with-deps chromium
+
+      - name: Run explicit post-task quality gate
         run: |
-          make openapi-lint
-          make generated-check
-
-      - name: Validate immutable infrastructure inputs
-        run: make infra-validation
-
-      - name: Verify migrations and database boundaries
-        run: make migration-test
-
-      - name: Run Phase 2 PostgreSQL integration as runtime role
-        run: make phase2-integration
-
-      - name: Verify proxy headers and capability log redaction
-        run: make phase2-proxy-test
-
-      - name: Run Phase 3 PostgreSQL and proxy integration
-        run: |
-          make phase3-integration
-          make phase3-proxy-test
-
-      - name: Run Phase 4 PostgreSQL and proxy integration
-        run: |
-          make phase4-integration
-          make phase4-proxy-test
-
-      - name: Run unit, static and build gates
-        run: |
-          make test
-          make test-backend-race
-          make typecheck
           make post-task-quality
-          make build
 
-      - name: Build deterministic runtime images
-        run: make images
-
-      - name: Run ephemeral full-stack smokes
-        run: |
-          make phase2-full-stack
-          make phase4-benchmark
-
-      - name: Generate SBOMs
-        run: make sbom
-
-      - name: Run source, dependency and secret scanners
-        run: make scan
-
-      - name: Scan built runtime images
-        run: make image-scan
+      - name: Run canonical CI gate
+        run: make ci
 
       - name: Upload SBOM evidence
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

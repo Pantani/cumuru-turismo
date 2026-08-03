@@ -62,6 +62,7 @@ const (
 type Action string
 
 const (
+	ActionAccommodationCreated   Action = "accommodation.created"
 	ActionAccommodationUpdated   Action = "accommodation.updated"
 	ActionMembershipCreated      Action = "membership.created"
 	ActionMembershipUpdated      Action = "membership.updated"
@@ -96,6 +97,7 @@ const (
 )
 
 var actionEntities = map[Action]EntityType{
+	ActionAccommodationCreated:   EntityAccommodation,
 	ActionAccommodationUpdated:   EntityAccommodation,
 	ActionMembershipCreated:      EntityMembership,
 	ActionMembershipUpdated:      EntityMembership,

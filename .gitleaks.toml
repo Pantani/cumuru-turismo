@@ -1,0 +1,15 @@
+title = "Cumuru secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated API image SHA references are not credentials"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = [
+  '''^artifacts/sbom/api-image\.cdx\.json$''',
+  '''^artifacts/sbom/image-manifest\.json$''',
+]
+regexTarget = "match"
+regexes = ['''cumuru-api:[0-9a-f]{40}''']

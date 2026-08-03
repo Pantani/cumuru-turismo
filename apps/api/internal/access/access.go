@@ -65,6 +65,7 @@ func (f *developmentFake) Verify(_ context.Context, token string) (Principal, er
 	case DevelopmentPlatformToken:
 		return NewPrincipal(f.issuer, "fixture-operator", []string{
 			"platform:read",
+			"accommodations:onboard",
 			"accommodations:manage",
 			"stays:read:own",
 			"stays:write",

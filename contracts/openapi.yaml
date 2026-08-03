@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: API do Observatório Turístico de Cumuruxatiba
-  version: 0.5.2
+  version: 0.6.0
   license:
     name: Licença a definir pelo Município de Prado
     identifier: LicenseRef-Proprietary
@@ -21,7 +21,9 @@ tags:
   - name: analytics
     description: Qualidade agregada interna, sem microdados.
   - name: accommodations
-    description: Acomodações já provisionadas e seus vínculos operacionais.
+    description: >
+      Acomodações do Observatório local e seus vínculos operacionais. Categoria,
+      Cadastur e estado ativo não comprovam regularidade ou elegibilidade FNRH.
   - name: stays
     description: Gestão autenticada de estadias.
   - name: invites
@@ -289,6 +291,58 @@ paths:
         "401":
           $ref: "#/components/responses/Problem"
         "403":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+    post:
+      summary: Iniciar participação local de uma acomodação
+      description: >
+        Onboarding voluntário restrito ao protótipo local/teste com OIDC fake.
+        Cria organização mínima, acomodação ativa e primeira membership manager
+        atomicamente. Não recebe documento, Cadastur, identidade de tenant ou
+        qualquer configuração FNRH.
+      tags: [accommodations]
+      operationId: createAccommodation
+      x-cumuru-implementation-phase: 2
+      security:
+        - oidc: ["accommodations:onboard"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccommodationRequest"
+      responses:
+        "201":
+          description: Participação local criada ou reproduzida por replay exato.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/EntityTag"
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Accommodation"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "422":
           $ref: "#/components/responses/Problem"
         "503":
           $ref: "#/components/responses/Problem"
@@ -2042,6 +2096,51 @@ components:
     AccommodationStatus:
       type: string
       enum: [pending_review, active, suspended, closed]
+    AccommodationCategory:
+      type: string
+      description: >
+        Classificação operacional ampla. Não constitui parecer jurídico,
+        regularidade, Cadastur verificado ou autorização FNRH.
+      enum:
+        - formal_lodging
+        - seasonal_rental
+        - family_hosting
+        - camping
+        - regularizing
+        - other
+        - unclassified
+    AccommodationInputCategory:
+      type: string
+      description: >
+        Categoria operacional aceita em novas entradas. Unclassified é reservado
+        a leituras e processos internos, nunca a input do participante.
+      enum:
+        - formal_lodging
+        - seasonal_rental
+        - family_hosting
+        - camping
+        - regularizing
+        - other
+    CreateAccommodationRequest:
+      type: object
+      required: [name, category, capacity, client_submission_id]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        category:
+          $ref: "#/components/schemas/AccommodationInputCategory"
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        client_submission_id:
+          type: string
+          format: uuid
+          pattern: "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-7[0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$"
+          description: UUIDv7 canônico gerado pelo cliente para repetição segura.
     Accommodation:
       type: object
       required:
@@ -2066,14 +2165,16 @@ components:
           minLength: 1
           maxLength: 200
         category:
-          type: string
-          minLength: 1
-          maxLength: 100
+          $ref: "#/components/schemas/AccommodationCategory"
         status:
           $ref: "#/components/schemas/AccommodationStatus"
         cadastur_id:
           type: [string, "null"]
           maxLength: 100
+          readOnly: true
+          description: >
+            Metadado opcional provisionado por fonte confiável. Sua presença não
+            comprova elegibilidade, autorização, credencial ou integração FNRH.
         capacity:
           type: [integer, "null"]
           minimum: 1
@@ -2112,12 +2213,7 @@ components:
           minLength: 1
           maxLength: 200
         category:
-          type: string
-          minLength: 1
-          maxLength: 100
-        cadastur_id:
-          type: [string, "null"]
-          maxLength: 100
+          $ref: "#/components/schemas/AccommodationInputCategory"
         capacity:
           type: [integer, "null"]
           minimum: 1
@@ -2516,16 +2612,33 @@ components:
             - "60_plus"
         residence_country:
           type: string
-          minLength: 2
-          maxLength: 2
+          pattern: "^[A-Z]{2}$"
         residence_state:
           type: [string, "null"]
-          minLength: 2
-          maxLength: 2
+          pattern: "^[A-Z]{2}$"
         residence_city_code:
           type: [string, "null"]
           pattern: "^[0-9]{7}$"
-          maxLength: 12
+      if:
+        required: [residence_country]
+        properties:
+          residence_country:
+            const: BR
+      then:
+        required: [residence_state, residence_city_code]
+        properties:
+          residence_state:
+            type: string
+            pattern: "^[A-Z]{2}$"
+          residence_city_code:
+            type: string
+            pattern: "^[0-9]{7}$"
+      else:
+        properties:
+          residence_state:
+            type: "null"
+          residence_city_code:
+            type: "null"
     Visitor:
       type: object
       required:

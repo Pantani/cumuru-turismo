@@ -31,21 +31,30 @@ func (k KeyringConfig) Key(version string) ([]byte, bool) {
 }
 
 type Phase2Config struct {
-	InviteBaseURL          *url.URL
-	InviteTTL              time.Duration
-	IdempotencyTTL         time.Duration
-	RateLimitWindow        time.Duration
-	InviteContextRateLimit int
-	InviteSubmitRateLimit  int
-	CORSAllowedOrigins     []string
-	InviteKeys             KeyringConfig
-	ActorKeys              KeyringConfig
-	IdempotencyKeys        KeyringConfig
-	RateLimitKeys          KeyringConfig
-	CursorKeys             KeyringConfig
+	InviteBaseURL                  *url.URL
+	InviteTTL                      time.Duration
+	IdempotencyTTL                 time.Duration
+	RateLimitWindow                time.Duration
+	InviteContextRateLimit         int
+	InviteSubmitRateLimit          int
+	AccommodationOnboardingEnabled bool
+	CORSAllowedOrigins             []string
+	InviteKeys                     KeyringConfig
+	ActorKeys                      KeyringConfig
+	IdempotencyKeys                KeyringConfig
+	RateLimitKeys                  KeyringConfig
+	CursorKeys                     KeyringConfig
 }
 
 func loadPhase2(lookup LookupEnv) (Phase2Config, error) {
+	onboardingEnabled, err := parseBoolean(
+		lookup,
+		"ACCOMMODATION_ONBOARDING_ENABLED",
+		false,
+	)
+	if err != nil {
+		return Phase2Config{}, err
+	}
 	baseURL, err := parseAbsoluteURL("INVITE_BASE_URL", required(lookup, "INVITE_BASE_URL"))
 	if err != nil {
 		return Phase2Config{}, err
@@ -55,18 +64,19 @@ func loadPhase2(lookup LookupEnv) (Phase2Config, error) {
 		return Phase2Config{}, err
 	}
 	return Phase2Config{
-		InviteBaseURL:          baseURL,
-		InviteTTL:              duration(lookup, "INVITE_TTL", 72*time.Hour),
-		IdempotencyTTL:         duration(lookup, "IDEMPOTENCY_TTL", minimumReplayTTL),
-		RateLimitWindow:        duration(lookup, "RATE_LIMIT_WINDOW", time.Minute),
-		InviteContextRateLimit: positiveInteger(lookup, "INVITE_CONTEXT_RATE_LIMIT", 30),
-		InviteSubmitRateLimit:  positiveInteger(lookup, "INVITE_SUBMIT_RATE_LIMIT", 10),
-		CORSAllowedOrigins:     splitList(required(lookup, "CORS_ALLOWED_ORIGINS")),
-		InviteKeys:             keyrings[0],
-		ActorKeys:              keyrings[1],
-		IdempotencyKeys:        keyrings[2],
-		RateLimitKeys:          keyrings[3],
-		CursorKeys:             keyrings[4],
+		InviteBaseURL:                  baseURL,
+		InviteTTL:                      duration(lookup, "INVITE_TTL", 72*time.Hour),
+		IdempotencyTTL:                 duration(lookup, "IDEMPOTENCY_TTL", minimumReplayTTL),
+		RateLimitWindow:                duration(lookup, "RATE_LIMIT_WINDOW", time.Minute),
+		InviteContextRateLimit:         positiveInteger(lookup, "INVITE_CONTEXT_RATE_LIMIT", 30),
+		InviteSubmitRateLimit:          positiveInteger(lookup, "INVITE_SUBMIT_RATE_LIMIT", 10),
+		AccommodationOnboardingEnabled: onboardingEnabled,
+		CORSAllowedOrigins:             splitList(required(lookup, "CORS_ALLOWED_ORIGINS")),
+		InviteKeys:                     keyrings[0],
+		ActorKeys:                      keyrings[1],
+		IdempotencyKeys:                keyrings[2],
+		RateLimitKeys:                  keyrings[3],
+		CursorKeys:                     keyrings[4],
 	}, nil
 }
 
@@ -155,17 +165,38 @@ func containsKey(keys [][]byte, candidate []byte) bool {
 	return false
 }
 
-func (c Phase2Config) validate(requireHTTPS bool) error {
+func (c Phase2Config) validate(
+	requireHTTPS bool,
+	environment Environment,
+	oidcMode OIDCMode,
+) error {
 	validators := []func() error{
 		func() error { return validateInviteURL(c.InviteBaseURL, requireHTTPS) },
 		func() error { return validateOrigins(c.CORSAllowedOrigins, requireHTTPS) },
 		c.validateDurations,
 		c.validateRateLimits,
+		func() error { return c.validateAccommodationOnboarding(environment, oidcMode) },
 	}
 	for _, validate := range validators {
 		if err := validate(); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (c Phase2Config) validateAccommodationOnboarding(
+	environment Environment,
+	oidcMode OIDCMode,
+) error {
+	if !c.AccommodationOnboardingEnabled {
+		return nil
+	}
+	if environment != EnvironmentLocal && environment != EnvironmentTest {
+		return invalid("ACCOMMODATION_ONBOARDING_ENABLED")
+	}
+	if oidcMode != OIDCModeFake {
+		return invalid("ACCOMMODATION_ONBOARDING_ENABLED")
 	}
 	return nil
 }

@@ -30,7 +30,7 @@ const snapshot: QualitySnapshot = {
     reason_code: "phase_not_implemented",
   },
   coverage_by_category: [
-    { category_code: "pousada", status: "available", ratio: 0.75 },
+    { category_code: "formal_lodging", status: "available", ratio: 0.75 },
     { category_code: "camping", status: "not_available" },
   ],
 };

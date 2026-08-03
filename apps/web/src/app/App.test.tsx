@@ -6,6 +6,14 @@ import { lazy, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthSessionProvider } from "../shared/auth/AuthSession";
+import {
+  clearInviteCapability,
+  captureInviteCapability,
+} from "../shared/security/invite-capability";
+import {
+  clearSurveyCapability,
+  setSurveyCapability,
+} from "../shared/security/survey-capability";
 import { App } from "./App";
 
 function renderApp(app: ReactElement = <App />) {
@@ -26,6 +34,8 @@ function renderApp(app: ReactElement = <App />) {
 
 describe("App", () => {
   beforeEach(() => {
+    clearInviteCapability();
+    clearSurveyCapability();
     window.history.replaceState(null, "", "/");
     vi.stubGlobal(
       "fetch",
@@ -57,6 +67,10 @@ describe("App", () => {
 
   it("permite navegar e chegar ao conteúdo apenas com o teclado", async () => {
     const user = userEvent.setup();
+    captureInviteCapability(
+      new URL(`https://registro.invalid/convites/${"a".repeat(64)}`),
+      vi.fn(),
+    );
     renderApp();
 
     const skipLink = screen.getByRole("link", { name: "Ir para o conteúdo" });
@@ -91,6 +105,10 @@ describe("App", () => {
     });
     const DelayedRegistrationPage = lazy(() => registrationModule);
     const user = userEvent.setup();
+    captureInviteCapability(
+      new URL(`https://registro.invalid/convites/${"a".repeat(64)}`),
+      vi.fn(),
+    );
 
     renderApp(
       <App
@@ -168,5 +186,62 @@ describe("App", () => {
       screen.getByRole("link", { name: "Qualidade" }),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("opaque-test-token");
+  });
+
+  it("mostra registro e pesquisa somente com a capability correspondente", () => {
+    const first = renderApp();
+
+    expect(screen.queryByRole("link", { name: "Registro" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Pesquisa" })).toBeNull();
+    first.unmount();
+
+    captureInviteCapability(
+      new URL(`https://registro.invalid/convites/${"a".repeat(64)}`),
+      vi.fn(),
+    );
+    const second = renderApp();
+    expect(screen.getByRole("link", { name: "Registro" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pesquisa" })).toBeNull();
+    second.unmount();
+
+    clearInviteCapability();
+    setSurveyCapability("payload.signature");
+    renderApp();
+    expect(screen.queryByRole("link", { name: "Registro" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Pesquisa" })).toBeInTheDocument();
+  });
+
+  it("oculta superfícies institucionais sem sessão", () => {
+    renderApp();
+
+    expect(screen.queryByRole("link", { name: "Área autenticada" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Questionários" })).toBeNull();
+  });
+
+  it("mantém a demo do operador somente em superfícies autorizadas", () => {
+    renderApp(
+      <AuthSessionProvider
+        accessToken="cumuru-local-platform-read"
+        localDemo
+      >
+        <App />
+      </AuthSessionProvider>,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Área autenticada" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Questionários" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Qualidade" })).toBeNull();
+  });
+
+  it("remove a navegação contextual quando a capability é consumida", () => {
+    setSurveyCapability("payload.signature");
+    renderApp();
+    expect(screen.getByRole("link", { name: "Pesquisa" })).toBeInTheDocument();
+
+    act(() => clearSurveyCapability());
+
+    expect(screen.queryByRole("link", { name: "Pesquisa" })).toBeNull();
   });
 });

@@ -57,3 +57,17 @@ func TestPhase3EventsContainNoPayload(t *testing.T) {
 		}
 	}
 }
+
+func TestAccommodationCreatedEventContainsNoPayload(t *testing.T) {
+	t.Parallel()
+	event := outbox.Event{
+		ID:               uuid.MustParse("019f0000-0000-7000-8000-000000000091"),
+		AggregateType:    outbox.AggregateAccommodation,
+		AggregateID:      uuid.MustParse("019f0000-0000-7000-8000-000000000092"),
+		AggregateVersion: 1,
+		Type:             outbox.EventAccommodationCreated,
+	}
+	if err := event.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+}

@@ -12,6 +12,7 @@ CUMURU_WEB_IMAGE := cumuru-web:$(CUMURU_IMAGE_TAG)
 TRIVY_IMAGE := aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
 GITLEAKS_IMAGE := zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
 WITH_BUILD_METADATA := deploy/scripts/with-build-metadata.sh
+LOCAL_COMPOSE := docker compose -f compose.yaml -f compose.local.yaml
 IMAGE_ARTIFACTS := deploy/scripts/image-artifacts.sh
 MATERIALIZE_PINNED_IMAGE := deploy/scripts/materialize-pinned-image.sh
 RTK ?= rtk
@@ -40,9 +41,11 @@ export DOCKER_SERVICES DOCKER_LOG_TAIL
 	harness-validate harness-test harness-status harness-phase harness-prompt \
 	harness-dry-run harness-snapshot install tools openapi-lint generate \
 	generate-web generate-sqlc generated-check migration-test build test \
+	local-restore-drill \
 	phase2-integration phase2-proxy-test phase2-full-stack typecheck complexity \
 	phase3-integration phase3-proxy-test \
 	phase4-integration phase4-proxy-test phase4-full-stack phase4-benchmark \
+	local-demo-build-test local-demo-test local-demo-e2e phase4-remediation \
 	post-task-quality lint-shell lint lint-fix images sbom image-sbom scanner-images scan image-scan compose-config up down migrate-up \
 	migrate-down-local smoke ci
 
@@ -107,6 +110,9 @@ generated-check: ## Verifica reprodutibilidade dos arquivos gerados
 migration-test: ## Testa migrations e grants em PostgreSQL real via Docker
 	@bash deploy/scripts/test-migrations.sh
 
+local-restore-drill: ## Prova dump/restore sintético em PostgreSQL isolado
+	@bash deploy/scripts/test-local-restore.sh
+
 phase2-integration: ## Executa a integração PostgreSQL da Fase 2 via Docker
 	@bash deploy/scripts/test-phase2-integration.sh
 
@@ -134,8 +140,24 @@ phase4-full-stack: ## Testa a stack completa da Fase 4 via Docker
 phase4-benchmark: phase4-full-stack ## Executa o benchmark protegido da Fase 4 via Docker
 	@bash deploy/scripts/benchmark-phase4-recompute.sh
 
+local-demo-test: ## Valida seed local em banco novo, repetição e preservação
+	@bash deploy/scripts/test-local-demo.sh
+
+local-demo-build-test: ## Prova guardas e ausência de authority no build padrão
+	@bash deploy/scripts/test-local-demo-build.sh
+
+local-demo-e2e: ## Executa a jornada local completa em Chromium e stack efêmera
+	@bash deploy/scripts/test-local-demo-e2e.sh
+
+phase4-remediation: ## Executa o build reproduzível de remediação do runtime local
+	@$(MAKE) --no-print-directory generated-check
+	@$(MAKE) --no-print-directory local-demo-build-test
+	@$(MAKE) --no-print-directory local-demo-test
+	@$(MAKE) --no-print-directory phase4-full-stack
+	@$(MAKE) --no-print-directory local-demo-e2e
+
 build: ## Compila API, worker e web
-	go -C apps/api build ./cmd/api ./cmd/worker
+	go -C apps/api build ./cmd/api ./cmd/worker ./cmd/localdemo
 	npm --workspace @cumuru/web run build
 
 test: ## Executa as suítes canônicas de Go e web
@@ -417,19 +439,27 @@ image-scan: ## Escaneia imagens já construídas sem montar o Docker socket
 	@"$(WITH_BUILD_METADATA)" "$(IMAGE_ARTIFACTS)" scan \
 		"$(TRIVY_IMAGE)" "$(CUMURU_API_IMAGE)" "$(CUMURU_WEB_IMAGE)"
 
-compose-config: ## Valida o Compose com metadata reprodutível
+compose-config: ## Valida o Compose base e o overlay local com metadata reprodutível
 	@"$(WITH_BUILD_METADATA)" docker compose config --quiet
+	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) config --quiet
+	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
+		-f deploy/compose.local-test.yaml config --quiet
+	@LOCAL_E2E_PORT=4174 "$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
+		-f deploy/compose.phase4-full-stack.yaml \
+		-f deploy/compose.local-e2e.yaml config --quiet
 
-up: ## Constrói e sobe a stack Compose local; preserva o volume existente
-	@"$(WITH_BUILD_METADATA)" docker compose up --build --detach --wait
+up: ## Sobe a demo local, aplica fixtures idempotentes e espera a publicação
+	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) up --build --detach --wait
 
 down: ## Para a stack Compose sem remover volumes
-	@"$(WITH_BUILD_METADATA)" docker compose down --remove-orphans
+	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) down --remove-orphans
 
 dev: ## Alias de up para a stack Compose comprovada; não é hot reload
 	@$(MAKE) --no-print-directory up
 
-dev-web: ## Inicia somente o Vite; pressupõe API local disponível
+dev-web: ## Inicia o Vite em modo demo; pressupõe API local disponível
+	VITE_LOCAL_DEMO_MODE=true \
+	VITE_LOCAL_DEMO_IDENTITY=cumuru-local-platform-read \
 	npm --workspace @cumuru/web run dev
 
 docker-up: ## Alias não destrutivo de up
@@ -443,12 +473,12 @@ docker-status: ## Mostra status dos DOCKER_SERVICES validados ou de toda a stack
 	set --; \
 	for service in $$DOCKER_SERVICES; do \
 		case "$$service" in \
-			postgres|migrate|api|worker|web) ;; \
+			postgres|migrate|local-demo|api|worker|web) ;; \
 			*) echo "invalid DOCKER_SERVICES entry: $$service" >&2; exit 2 ;; \
 		esac; \
 		set -- "$$@" "$$service"; \
 	done; \
-	"$(WITH_BUILD_METADATA)" docker compose ps --all "$$@"
+	"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) ps --all "$$@"
 
 docker-logs: ## Segue logs com DOCKER_LOG_TAIL e DOCKER_SERVICES validados
 	@set -eu; \
@@ -460,24 +490,24 @@ docker-logs: ## Segue logs com DOCKER_LOG_TAIL e DOCKER_SERVICES validados
 	set --; \
 	for service in $$DOCKER_SERVICES; do \
 		case "$$service" in \
-			postgres|migrate|api|worker|web) ;; \
+			postgres|migrate|local-demo|api|worker|web) ;; \
 			*) echo "invalid DOCKER_SERVICES entry: $$service" >&2; exit 2 ;; \
 		esac; \
 		set -- "$$@" "$$service"; \
 	done; \
-	"$(WITH_BUILD_METADATA)" docker compose logs --tail "$$DOCKER_LOG_TAIL" --follow "$$@"
+	"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) logs --tail "$$DOCKER_LOG_TAIL" --follow "$$@"
 
 docker-restart: ## Reinicia containers existentes dos DOCKER_SERVICES validados
 	@set -eu; \
 	set --; \
 	for service in $$DOCKER_SERVICES; do \
 		case "$$service" in \
-			postgres|migrate|api|worker|web) ;; \
+			postgres|migrate|local-demo|api|worker|web) ;; \
 			*) echo "invalid DOCKER_SERVICES entry: $$service" >&2; exit 2 ;; \
 		esac; \
 		set -- "$$@" "$$service"; \
 	done; \
-	"$(WITH_BUILD_METADATA)" docker compose restart "$$@"
+	"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) restart "$$@"
 
 migrate-up: ## Aplica migrations na stack Compose local
 	@"$(WITH_BUILD_METADATA)" docker compose run --rm migrate
@@ -491,12 +521,15 @@ migrate-down-local: ## Reverte uma migration local descartável; exige confirma�
 		down 1
 
 smoke: ## Executa o smoke da stack Compose local
-	@bash deploy/scripts/smoke.sh
+	@SMOKE_PROFILE=local-demo bash deploy/scripts/smoke.sh
 
 ci: ## Executa o gate completo sequencial; pesado, usa Docker e rede
 	@$(MAKE) --no-print-directory openapi-lint
 	@$(MAKE) --no-print-directory generated-check
 	@$(MAKE) --no-print-directory migration-test
+	@$(MAKE) --no-print-directory local-restore-drill
+	@$(MAKE) --no-print-directory local-demo-build-test
+	@$(MAKE) --no-print-directory local-demo-test
 	@$(MAKE) --no-print-directory phase2-integration
 	@$(MAKE) --no-print-directory phase2-proxy-test
 	@$(MAKE) --no-print-directory phase3-integration
@@ -512,6 +545,7 @@ ci: ## Executa o gate completo sequencial; pesado, usa Docker e rede
 	@$(MAKE) --no-print-directory images
 	@$(MAKE) --no-print-directory phase2-full-stack
 	@$(MAKE) --no-print-directory phase4-benchmark
+	@$(MAKE) --no-print-directory local-demo-e2e
 	@$(MAKE) --no-print-directory sbom
 	@$(MAKE) --no-print-directory scan
 	@$(MAKE) --no-print-directory image-scan

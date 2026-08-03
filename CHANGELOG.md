@@ -3,10 +3,75 @@
 Todas as mudanças relevantes do contrato e da plataforma são registradas neste
 arquivo.
 
+## 0.6.0 — em desenvolvimento
+
+### Adicionado
+
+- onboarding local de acomodações para pousadas formais, casas de temporada,
+  hospedagens familiares, campings e locais em regularização, sem exigir CPF,
+  CNPJ, Cadastur ou chave FNRH;
+- `POST /accommodations` com escopo OIDC específico, `Idempotency-Key`,
+  `client_submission_id`, categorias fechadas e criação atômica da organização,
+  acomodação e vínculo gestor quando necessário;
+- feature flag fail-closed para limitar o onboarding ao protótipo local com
+  provedor OIDC fictício;
+- guias na raiz para apresentar o Observatório à Prefeitura e orientar a
+  obtenção da chave oficial FNRH pelas hospedagens elegíveis.
+
+### Alterado
+
+- cadastro e edição local deixam de tratar Cadastur como pré-requisito ou campo
+  editável; quando previamente provisionado, ele continua apenas informativo;
+- `PATCH /accommodations/{accommodation_id}` agora restringe `category` aos
+  códigos de `AccommodationInputCategory` e remove `cadastur_id` do request;
+  clientes existentes devem migrar categorias livres para o enum publicado e
+  deixar de enviar Cadastur em alterações genéricas;
+- o fluxo e a interface passam a separar explicitamente participação local de
+  integração FNRH, que permanece bloqueada pelos gates externos da Fase 5 e
+  exige credencial oficial própria de cada estabelecimento.
+
+### Corrigido
+
+- o contrato de residência exige país e UF em maiúsculas, UF e município IBGE
+  para o Brasil e ausência desses campos para outros países, em paridade com o
+  domínio Go e a validação React;
+- o rollback do onboarding falha fechado diante de fixtures reservadas
+  parciais ou divergentes, sem remover a coluna antes de restaurar os dados;
+- a CI executa o gate canônico `make ci`, instala Chromium explicitamente e o
+  Trivy grava artefatos com a identidade numérica do runner; a suíte de
+  migrations serializa o uso da subnet Docker fixa e recupera lock órfão;
+- o protótipo local distingue falha de banco de conflito de fixture, não inclui
+  conteúdo persistido em mensagens de teste e preserva o QR diante de URL
+  malformada.
+
+### Segurança
+
+- o onboarding rejeita identificadores de organização, CPF, CNPJ, Cadastur,
+  contato, senha gov.br, chave FNRH e qualquer texto livre fora do contrato;
+- criação, replay idempotente, auditoria e outbox são persistidos na mesma
+  transação, sem registrar credenciais ou dados pessoais em logs.
+
 ## 0.5.2 — em desenvolvimento
 
 ### Corrigido
 
+- o runtime local agora aplica fixtures fictícias idempotentes pelo comando Go
+  `/app/local-demo` e pelos serviços de domínio, sem carga SQL direta; espera a
+  primeira publicação e deixa de aprovar dashboard `503` ou lista vazia no
+  smoke;
+- um gate PostgreSQL descartável prova seed em banco novo, repetição sem
+  duplicação, UUIDv7 e preservação de linhas fora do namespace da fixture;
+- o frontend local inicia o principal do fake OIDC apenas na variante explícita
+  servida em loopback, mantém o estado da sessão em memória, exibe
+  `PROTOTYPE_ONLY`, limpa cache e authorities no logout e conecta acomodação,
+  estadia, convite, registro e pesquisa sem copiar UUID/ETag entre formulários;
+- o seed local reconcilia presença antes de publicar analytics, mantém cohorts
+  históricas estáveis dentro do mês, reconcilia as estadias correntes e falha
+  fechado em qualquer colisão de ID reservado, sem atualizar dados existentes;
+  um advisory lock de sessão serializa toda a execução concorrente;
+- o consumo do convite preserva a confirmação da submissão enquanto a
+  capability de pesquisa existe somente em memória, evitando desmontagem
+  prematura da jornada pela atualização da navegação contextual;
 - a cadeia pré-lançamento `000001`–`000019` foi consolidada no único par
   `000001_initial_schema`, preservando a ordem efetiva de `up`, a ordem reversa
   de `down`, o schema final, owners, ACLs, comentários e seeds técnicos;
@@ -37,6 +102,10 @@ arquivo.
 
 ### Adicionado
 
+- build reproduzível `phase4-remediation`, com guardas da variante web,
+  PostgreSQL fresh/persistente, rollover, colisão fail-closed, full-stack e
+  jornada Playwright em Chromium com Service Worker/Cache API e cleanup
+  verificáveis;
 - gate `phase4-benchmark` com duas recomposições determinísticas da janela
   fictícia de três anos, digest SHA-256, orçamento de tempo/heap e registro do
   hardware;

@@ -1,3 +1,5 @@
+import { notifyCapabilityChange } from "./capability-events";
+
 const capabilityPattern = /^[A-Za-z0-9_-]{64,128}$/;
 const invitePathPattern = /^\/convites\/([^/]+)\/?$/i;
 const sensitiveInvitePathPattern = /^\/convites(?:\/|$)/i;
@@ -62,7 +64,8 @@ export function captureInviteCapability(
   const capability = fromPath ?? capabilityFromQuery(url.searchParams);
   inviteCapability = capability;
   replace(scrubbedPath(url, cameFromInvitePath, sensitiveKeys));
-  return true;
+  notifyCapabilityChange();
+  return capability !== null;
 }
 
 export function peekInviteCapability() {
@@ -71,4 +74,5 @@ export function peekInviteCapability() {
 
 export function clearInviteCapability() {
   inviteCapability = null;
+  notifyCapabilityChange();
 }

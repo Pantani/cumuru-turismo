@@ -19,12 +19,18 @@ type membershipPageResponse struct {
 	NextCursor *string                    `json:"next_cursor"`
 }
 
+type createAccommodationRequest struct {
+	Name               string                 `json:"name"`
+	Category           accommodation.Category `json:"category"`
+	Capacity           int32                  `json:"capacity"`
+	ClientSubmissionID uuid.UUID              `json:"client_submission_id"`
+}
+
 type updateAccommodationRequest struct {
-	Name           requiredPatch[string] `json:"name"`
-	Category       requiredPatch[string] `json:"category"`
-	CadasturID     nullableString        `json:"cadastur_id"`
-	Capacity       nullableInt32         `json:"capacity"`
-	PublicAreaCode nullableString        `json:"public_area_code"`
+	Name           requiredPatch[string]                 `json:"name"`
+	Category       requiredPatch[accommodation.Category] `json:"category"`
+	Capacity       nullableInt32                         `json:"capacity"`
+	PublicAreaCode nullableString                        `json:"public_area_code"`
 }
 
 type createMembershipRequest struct {
@@ -81,11 +87,41 @@ func (n *nullableInt32) UnmarshalJSON(content []byte) error {
 
 func (d Dependencies) registerAccommodationRoutes(mux *http.ServeMux, metrics *httpMetrics) {
 	d.handleRoute(mux, metrics, "GET /api/v1/accommodations", "stays:read:own", d.listAccommodations)
+	d.handleRoute(mux, metrics, "POST /api/v1/accommodations", "accommodations:onboard", d.createAccommodation)
 	d.handleRoute(mux, metrics, "GET /api/v1/accommodations/{accommodation_id}", "stays:read:own", d.getAccommodation)
 	d.handleRoute(mux, metrics, "PATCH /api/v1/accommodations/{accommodation_id}", "accommodations:manage", d.updateAccommodation)
 	d.handleRoute(mux, metrics, "GET /api/v1/accommodations/{accommodation_id}/memberships", "accommodations:manage", d.listMemberships)
 	d.handleRoute(mux, metrics, "POST /api/v1/accommodations/{accommodation_id}/memberships", "accommodations:manage", d.createMembership)
 	d.handleRoute(mux, metrics, "PATCH /api/v1/accommodations/{accommodation_id}/memberships/{membership_id}", "accommodations:manage", d.updateMembership)
+}
+
+func (d Dependencies) createAccommodation(writer http.ResponseWriter, request *http.Request) {
+	if !d.AccommodationOnboardingEnabled {
+		writeProblem(
+			writer,
+			request,
+			http.StatusServiceUnavailable,
+			"dependency-unavailable",
+			"Serviço temporariamente indisponível",
+		)
+		return
+	}
+	var body createAccommodationRequest
+	if err := decodeStrict(request, "application/json", &body); err != nil {
+		writeProblem(writer, request, http.StatusBadRequest, "invalid-request", "Requisição inválida")
+		return
+	}
+	result, replayed, err := d.Accommodations.Create(request.Context(), accommodation.CreateCommand{
+		Actor: requestPrincipal(request), Name: body.Name, Category: body.Category,
+		Capacity: body.Capacity, ClientSubmissionID: body.ClientSubmissionID,
+		IdempotencyKey: request.Header.Get("Idempotency-Key"), RequestID: requestID(request),
+	})
+	if err != nil {
+		d.writeServiceError(writer, request, err)
+		return
+	}
+	writer.Header().Set("Location", "/api/v1/accommodations/"+result.ID.String())
+	writeMutationSuccess(writer, http.StatusCreated, result.Version, replayed, result)
 }
 
 func (d Dependencies) listAccommodations(writer http.ResponseWriter, request *http.Request) {
@@ -227,7 +263,6 @@ func accommodationPatch(body updateAccommodationRequest) accommodation.UpdatePat
 	return accommodation.UpdatePatch{
 		SetName: body.Name.Set, Name: body.Name.Value,
 		SetCategory: body.Category.Set, Category: body.Category.Value,
-		SetCadasturID: body.CadasturID.Set, CadasturID: body.CadasturID.Value,
 		SetCapacity: body.Capacity.Set, Capacity: body.Capacity.Value,
 		SetPublicAreaCode: body.PublicAreaCode.Set, PublicAreaCode: body.PublicAreaCode.Value,
 	}

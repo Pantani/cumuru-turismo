@@ -78,6 +78,7 @@ func RequestHash(value any) ([sha256.Size]byte, error) {
 type Operation string
 
 const (
+	OperationCreateAccommodation         Operation = "createAccommodation"
 	OperationCreateMembership            Operation = "createAccommodationMembership"
 	OperationCreateStay                  Operation = "createStay"
 	OperationSubmitAssistedGroup         Operation = "submitAssistedStayGroup"
@@ -98,6 +99,7 @@ const (
 )
 
 var validOperations = map[Operation]bool{
+	OperationCreateAccommodation:         true,
 	OperationCreateMembership:            true,
 	OperationCreateStay:                  true,
 	OperationSubmitAssistedGroup:         true,

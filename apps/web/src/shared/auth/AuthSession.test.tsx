@@ -1,9 +1,15 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { AuthSessionProvider, useAuthSession } from "./AuthSession";
+import {
+  AuthSessionProvider,
+  localDemoAccessToken,
+  useAuthSession,
+} from "./AuthSession";
 import AuthenticatedPage from "../../pages/AuthenticatedPage";
 import {
   inspectDraftPresence,
@@ -47,9 +53,32 @@ function AnalyticsProbe({ completed }: { completed: (status: number) => void }) 
   );
 }
 
+function renderSession(children: ReactNode) {
+  const queryClient = new QueryClient();
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>,
+    ),
+    queryClient,
+  };
+}
+
 describe("fronteira de autenticação institucional", () => {
+  it("habilita o principal fictício somente com o sinal local explícito", () => {
+    expect(localDemoAccessToken(false, "fixture-token", "localhost")).toBeNull();
+    expect(localDemoAccessToken(true, undefined, "localhost")).toBeNull();
+    expect(localDemoAccessToken(true, "fixture-token", "example.org")).toBeNull();
+    for (const hostname of ["localhost", "127.0.0.1", "::1", "[::1]"]) {
+      expect(localDemoAccessToken(true, "fixture-token", hostname)).toBe(
+        "fixture-token",
+      );
+    }
+  });
+
   it("falha fechada sem token entregue pelo provedor OIDC", () => {
-    render(
+    renderSession(
       <AuthSessionProvider>
         <AuthenticatedPage />
       </AuthSessionProvider>,
@@ -62,7 +91,7 @@ describe("fronteira de autenticação institucional", () => {
   });
 
   it("libera o workspace com token mantido somente em memória", () => {
-    render(
+    renderSession(
       <AuthSessionProvider accessToken="opaque-test-token">
         <AuthenticatedPage />
       </AuthSessionProvider>,
@@ -75,7 +104,7 @@ describe("fronteira de autenticação institucional", () => {
   });
 
   it("não apresenta violações axe na fronteira fail-closed", async () => {
-    const { container } = render(
+    const { container } = renderSession(
       <AuthSessionProvider>
         <AuthenticatedPage />
       </AuthSessionProvider>,
@@ -92,11 +121,12 @@ describe("fronteira de autenticação institucional", () => {
     const user = userEvent.setup();
     const completed = vi.fn();
     const saved = await saveDraft({ privacy_notice_version: "2026-07" });
-    render(
+    const { queryClient } = renderSession(
       <AuthSessionProvider accessToken="opaque-test-token">
         <LogoutProbe completed={completed} />
       </AuthSessionProvider>,
     );
+    queryClient.setQueryData(["authenticated"], { sensitive: true });
 
     await user.click(screen.getByRole("button", { name: "Encerrar" }));
     await waitFor(() => expect(completed).toHaveBeenCalledOnce());
@@ -105,13 +135,14 @@ describe("fronteira de autenticação institucional", () => {
       draft: false,
       key: false,
     });
+    expect(queryClient.getQueryData(["authenticated"])).toBeUndefined();
   });
 
   it("mantém o cliente de analytics fail-closed sem token", async () => {
     const user = userEvent.setup();
     const completed = vi.fn();
     const fetcher = vi.spyOn(globalThis, "fetch");
-    render(
+    renderSession(
       <AuthSessionProvider>
         <AnalyticsProbe completed={completed} />
       </AuthSessionProvider>,

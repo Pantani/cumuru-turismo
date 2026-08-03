@@ -41,6 +41,7 @@ source_revision() {
       "${ROOT_DIR}/apps/api" \
       "${ROOT_DIR}/apps/web" \
       "${ROOT_DIR}/deploy/nginx" \
+      "${ROOT_DIR}/deploy/postgres" \
       -type f \
       ! -path '*/node_modules/*' \
       ! -path '*/dist/*' \
@@ -52,6 +53,7 @@ source_revision() {
       "${ROOT_DIR}/Makefile" \
       "${ROOT_DIR}/.dockerignore" \
       "${ROOT_DIR}/compose.yaml" \
+      "${ROOT_DIR}/compose.local.yaml" \
       "${ROOT_DIR}/deploy/build-metadata.env" \
       "${ROOT_DIR}/deploy/scripts/with-build-metadata.sh"
   } | LC_ALL=C sort | while IFS= read -r path; do

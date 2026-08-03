@@ -181,7 +181,7 @@ if (
 ) {
   throw new Error("forecast methodology bounds drifted");
 }
-if (document.info.version !== "0.5.2") {
+if (document.info.version !== "0.6.0") {
   throw new Error("phase 4 contract version drifted");
 }
 requireRef(
@@ -563,7 +563,7 @@ INSERT INTO analytics.quality_coverage (
 )
 VALUES (
   '0197f4cf-2a69-7000-8000-000000000202',
-  'pousada',
+  'formal_lodging',
   'available',
   0.65
 );

@@ -2,9 +2,11 @@ import {
   type FormEvent,
   type RefObject,
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
+import { useMutation } from "@tanstack/react-query";
 
 import type { components } from "../../generated/schema";
 import { InviteQr } from "../invite/InviteQr";
@@ -15,8 +17,10 @@ import {
 import { useAuthSession } from "../../shared/auth/AuthSession";
 import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import { setSurveyCapability } from "../../shared/security/survey-capability";
+import { captureInviteCapability } from "../../shared/security/invite-capability";
 import {
   type ValidationIssue,
+  validateCreateAccommodation,
   validateCreateStay,
   validateSubmitGroup,
 } from "../../shared/validation/phase2-validation";
@@ -27,8 +31,36 @@ import {
 } from "../visitors/VisitorEditor";
 
 type MembershipRole = components["schemas"]["MembershipRole"];
+type Accommodation = components["schemas"]["Accommodation"];
+type AccommodationCategory = components["schemas"]["AccommodationCategory"];
+type AccommodationInputCategory =
+  components["schemas"]["AccommodationInputCategory"];
+type CreateAccommodationRequest =
+  components["schemas"]["CreateAccommodationRequest"];
 type StayStatus = components["schemas"]["StayStatus"];
 type SubmitGroupRequest = components["schemas"]["SubmitGroupRequest"];
+
+export function localDemoStayDates(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/Bahia",
+    year: "numeric",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? "0");
+  const base = new Date(Date.UTC(
+    value("year"),
+    value("month") - 1,
+    value("day"),
+  ));
+  const civilDateAt = (offset: number) => {
+    const date = new Date(base);
+    date.setUTCDate(date.getUTCDate() + offset);
+    return date.toISOString().slice(0, 10);
+  };
+  return { arrival: civilDateAt(0), departure: civilDateAt(2) };
+}
 
 function operationError(error: unknown) {
   if (error instanceof Phase2ApiError) {
@@ -112,7 +144,339 @@ function focusIssue(
   targets[field]?.current?.focus();
 }
 
-function AccommodationOperations() {
+const accommodationCategoryLabels: Record<AccommodationCategory, string> = {
+  formal_lodging: "Pousada, hotel ou meio de hospedagem",
+  seasonal_rental: "Casa ou imóvel de temporada",
+  family_hosting: "Hospedagem familiar",
+  camping: "Camping",
+  regularizing: "Em regularização",
+  other: "Outro",
+  unclassified: "Ainda não classificado",
+};
+
+const accommodationCategoryOptions = [
+  "formal_lodging",
+  "seasonal_rental",
+  "family_hosting",
+  "camping",
+  "regularizing",
+  "other",
+] as const satisfies readonly AccommodationInputCategory[];
+
+function newAccommodationAttempt() {
+  return {
+    idempotencyKey: crypto.randomUUID(),
+    clientSubmissionId: createUuidV7(),
+  };
+}
+
+interface AccommodationCatalogProps {
+  accommodations: Accommodation[];
+  onSelect: (accommodation: Accommodation) => void;
+}
+
+function AccommodationCatalog({
+  accommodations,
+  onSelect,
+}: AccommodationCatalogProps) {
+  if (accommodations.length === 0) {
+    return null;
+  }
+
+  return (
+    <ul className="accommodation-catalog" aria-label="Locais cadastrados">
+      {accommodations.map((accommodation) => (
+        <li key={accommodation.id}>
+          <div>
+            <strong>{accommodation.name}</strong>
+            <span>{accommodationCategoryLabels[accommodation.category]}</span>
+            <span>
+              {accommodation.cadastur_id === null ||
+              accommodation.cadastur_id === undefined
+                ? "Cadastur: Não informado"
+                : `Cadastur informado no cadastro existente: ${accommodation.cadastur_id}`}
+            </span>
+            <span>
+              Situação local: {accommodation.status === "active" ? "Ativo" : "Inativo"}
+            </span>
+          </div>
+          <button type="button" onClick={() => onSelect(accommodation)}>
+            Selecionar
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function withoutValidationIssue(
+  issues: ValidationIssue[],
+  field: string,
+) {
+  return issues.filter((issue) => issue.field !== field);
+}
+
+function describedBy(warningId: string, issueId: string, hasIssue: boolean) {
+  return hasIssue ? `${warningId} ${issueId}` : warningId;
+}
+
+interface AccommodationOnboardingFormProps {
+  onCancel: () => void;
+  onCreated: (accommodation: Accommodation, etag: string | null) => void;
+}
+
+function AccommodationOnboardingForm({
+  onCancel,
+  onCreated,
+}: AccommodationOnboardingFormProps) {
+  const { client } = useAuthSession();
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+  const [capacity, setCapacity] = useState<number | "">(1);
+  const [issues, setIssues] = useState<ValidationIssue[]>([]);
+  const [status, setStatus] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
+  const attempt = useRef(newAccommodationAttempt());
+  const createMutation = useMutation({
+    mutationFn: ({
+      body,
+      idempotencyKey,
+    }: {
+      body: CreateAccommodationRequest;
+      idempotencyKey: string;
+    }) => client.createAccommodation(body, idempotencyKey),
+  });
+
+  function fieldIssue(field: string) {
+    return issues.find((issue) => issue.field === field)?.message;
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const numericCapacity = capacity === "" ? Number.NaN : capacity;
+    const draft = {
+      name,
+      category,
+      capacity: numericCapacity,
+      client_submission_id: attempt.current.clientSubmissionId,
+    };
+    const validationIssues = validateCreateAccommodation(draft);
+    setIssues(validationIssues);
+    if (validationIssues.length > 0) {
+      const first = validationIssues[0];
+      setStatus("Revise os campos destacados.");
+      formRef.current
+        ?.querySelector<HTMLElement>(`[name="${first?.field ?? ""}"]`)
+        ?.focus();
+      return;
+    }
+
+    const body: CreateAccommodationRequest = {
+      name: name.trim(),
+      category: category as AccommodationInputCategory,
+      capacity: numericCapacity,
+      client_submission_id: attempt.current.clientSubmissionId,
+    };
+    setStatus("Cadastrar local: processando…");
+    createMutation.mutate(
+      { body, idempotencyKey: attempt.current.idempotencyKey },
+      {
+        onError: (error) => setStatus(operationError(error)),
+        onSuccess: (result) => {
+          attempt.current = newAccommodationAttempt();
+          onCreated(result.data, result.etag);
+        },
+      },
+    );
+  }
+
+  function cancel() {
+    attempt.current = newAccommodationAttempt();
+    setName("");
+    setCategory("");
+    setCapacity(1);
+    setIssues([]);
+    setStatus("");
+    createMutation.reset();
+    onCancel();
+  }
+
+  return (
+    <form
+      ref={formRef}
+      aria-labelledby="accommodation-onboarding-title"
+      noValidate
+      onSubmit={submit}
+    >
+      <h4 id="accommodation-onboarding-title">Cadastrar meu local</h4>
+      <div className="field-grid">
+        <div className="field-control">
+          <label htmlFor="accommodation-name">Nome do local</label>
+          <p
+            id="accommodation-name-warning"
+            className="privacy-warning"
+            role="note"
+          >
+            Informe apenas o nome público do local. Não inclua CPF, CNPJ,
+            documento, contato, chave FNRH ou outro dado pessoal.
+          </p>
+          <input
+            id="accommodation-name"
+            name="name"
+            value={name}
+            required
+            maxLength={200}
+            aria-invalid={fieldIssue("name") !== undefined}
+            aria-describedby={describedBy(
+              "accommodation-name-warning",
+              "accommodation-name-error",
+              fieldIssue("name") !== undefined,
+            )}
+            onChange={(event) => {
+              setName(event.target.value);
+              setIssues((current) => withoutValidationIssue(current, "name"));
+            }}
+          />
+          {fieldIssue("name") === undefined ? null : (
+            <span id="accommodation-name-error" className="field-error">
+              {fieldIssue("name")}
+            </span>
+          )}
+        </div>
+        <div className="field-control">
+          <label htmlFor="accommodation-category">Tipo</label>
+          <select
+            id="accommodation-category"
+            name="category"
+            value={category}
+            required
+            aria-invalid={fieldIssue("category") !== undefined}
+            aria-describedby={fieldIssue("category") === undefined ? undefined : "accommodation-category-error"}
+            onChange={(event) => {
+              setCategory(event.target.value);
+              setIssues((current) =>
+                withoutValidationIssue(current, "category"),
+              );
+            }}
+          >
+            <option value="">Selecione</option>
+            {accommodationCategoryOptions.map((option) => (
+              <option key={option} value={option}>
+                {accommodationCategoryLabels[option]}
+              </option>
+            ))}
+          </select>
+          {fieldIssue("category") === undefined ? null : (
+            <span id="accommodation-category-error" className="field-error">
+              {fieldIssue("category")}
+            </span>
+          )}
+        </div>
+        <div className="field-control">
+          <label htmlFor="accommodation-capacity">
+            Capacidade aproximada
+          </label>
+          <input
+            id="accommodation-capacity"
+            name="capacity"
+            type="number"
+            value={capacity}
+            min={1}
+            max={10_000}
+            required
+            aria-invalid={fieldIssue("capacity") !== undefined}
+            aria-describedby={fieldIssue("capacity") === undefined ? undefined : "accommodation-capacity-error"}
+            onChange={(event) => {
+              setCapacity(
+                event.target.value === "" ? "" : event.target.valueAsNumber,
+              );
+              setIssues((current) =>
+                withoutValidationIssue(current, "capacity"),
+              );
+            }}
+          />
+          {fieldIssue("capacity") === undefined ? null : (
+            <span id="accommodation-capacity-error" className="field-error">
+              {fieldIssue("capacity")}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="button-row">
+        <button type="submit" disabled={createMutation.isPending}>
+          {createMutation.isPending ? "Cadastrando…" : "Cadastrar local"}
+        </button>
+        <button
+          type="button"
+          disabled={createMutation.isPending}
+          onClick={cancel}
+        >
+          Cancelar
+        </button>
+      </div>
+      <p role="status" aria-live="polite">
+        {status}
+      </p>
+    </form>
+  );
+}
+
+interface AccommodationOnboardingTriggerProps {
+  accommodationCount: number;
+  onOpen: () => void;
+  visible: boolean;
+}
+
+function AccommodationOnboardingTrigger({
+  accommodationCount,
+  onOpen,
+  visible,
+}: AccommodationOnboardingTriggerProps) {
+  if (!visible) {
+    return null;
+  }
+  return (
+    <button type="button" className="onboarding-trigger" onClick={onOpen}>
+      {accommodationCount === 0
+        ? "Cadastrar meu local"
+        : "Cadastrar outro local"}
+    </button>
+  );
+}
+
+interface AccommodationOnboardingPanelProps
+  extends AccommodationOnboardingFormProps {
+  visible: boolean;
+}
+
+function AccommodationOnboardingPanel({
+  onCancel,
+  onCreated,
+  visible,
+}: AccommodationOnboardingPanelProps) {
+  if (!visible) {
+    return null;
+  }
+  return (
+    <AccommodationOnboardingForm
+      onCancel={onCancel}
+      onCreated={onCreated}
+    />
+  );
+}
+
+function showAccommodationOnboardingTrigger(
+  listKnown: boolean,
+  showOnboarding: boolean,
+) {
+  return listKnown && !showOnboarding;
+}
+
+interface AccommodationOperationsProps {
+  onSelect: (id: string) => void;
+}
+
+function AccommodationOperations({ onSelect }: AccommodationOperationsProps) {
   const { client } = useAuthSession();
   const operation = useOperationStatus();
   const keys = useRef(makeKeys());
@@ -124,9 +488,53 @@ function AccommodationOperations() {
   const [issuer, setIssuer] = useState("");
   const [subject, setSubject] = useState("");
   const [role, setRole] = useState<MembershipRole>("operator");
+  const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
+  const [listKnown, setListKnown] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingNotice, setOnboardingNotice] = useState("");
   const [projection, setProjection] = useState(
     "Nenhuma acomodação ou vínculo consultado.",
   );
+
+  function selectAccommodation(accommodation: Accommodation) {
+    setAccommodationId(accommodation.id);
+    setAccommodationName(accommodation.name);
+    onSelect(accommodation.id);
+  }
+
+  function receiveAccommodations(items: Accommodation[]) {
+    const first = items[0];
+    setAccommodations(items);
+    setListKnown(true);
+    setShowOnboarding(first === undefined);
+    setOnboardingNotice("");
+    if (first !== undefined) {
+      selectAccommodation(first);
+    }
+    setProjection(
+      first === undefined
+        ? "Nenhuma acomodação disponível."
+        : `${items.length} acomodação(ões) disponível(is). A primeira foi selecionada.`,
+    );
+  }
+
+  function receiveCreatedAccommodation(
+    accommodation: Accommodation,
+    etag: string | null,
+  ) {
+    setAccommodations((current) => [
+      accommodation,
+      ...current.filter((item) => item.id !== accommodation.id),
+    ]);
+    selectAccommodation(accommodation);
+    captureEtag(etag, setAccommodationEtag);
+    setListKnown(true);
+    setShowOnboarding(false);
+    setOnboardingNotice("Cadastrar local: concluído.");
+    setProjection(
+      `Local ${accommodation.name} cadastrado e selecionado para a estadia.`,
+    );
+  }
 
   function updateAccommodation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -170,6 +578,18 @@ function AccommodationOperations() {
   return (
     <section className="operation-card" aria-labelledby="accommodation-title">
       <h3 id="accommodation-title">Acomodações e vínculos</h3>
+      <div className="participation-tracks" aria-label="Como participar">
+        <p>
+          <strong>Observatório local: funciona sem CNPJ, Cadastur ou chave</strong>
+        </p>
+        <p>
+          <strong>FNRH opcional: processo federal separado, quando aplicável</strong>
+        </p>
+        <p>
+          O tipo e a situação ativa organizam a operação local; não comprovam
+          regularização nem elegibilidade para FNRH.
+        </p>
+      </div>
       <div className="field-grid">
         <label>
           ID da acomodação
@@ -208,10 +628,7 @@ function AccommodationOperations() {
             void operation.run(
               "Listar acomodações",
               () => client.listAccommodations(),
-              (result) =>
-                setProjection(
-                  `${result.data.items.length} acomodação(ões) disponível(is).`,
-                ),
+              (result) => receiveAccommodations(result.data.items),
             )
           }
         >
@@ -252,6 +669,29 @@ function AccommodationOperations() {
           Listar vínculos
         </button>
       </div>
+      <AccommodationCatalog
+        accommodations={accommodations}
+        onSelect={selectAccommodation}
+      />
+      <AccommodationOnboardingTrigger
+        accommodationCount={accommodations.length}
+        visible={showAccommodationOnboardingTrigger(
+          listKnown,
+          showOnboarding,
+        )}
+        onOpen={() => {
+          setOnboardingNotice("");
+          setShowOnboarding(true);
+        }}
+      />
+      <AccommodationOnboardingPanel
+        visible={showOnboarding}
+        onCancel={() => setShowOnboarding(false)}
+        onCreated={receiveCreatedAccommodation}
+      />
+      <p role="status" aria-live="polite">
+        {onboardingNotice}
+      </p>
       <form onSubmit={updateAccommodation}>
         <label>
           Nome operacional da acomodação
@@ -412,15 +852,28 @@ function StayIdentityFields(props: StayIdentityFieldsProps) {
   );
 }
 
-function StayOperations() {
-  const { client } = useAuthSession();
+interface StayOperationsProps {
+  accommodationId: string;
+  onStayCreated: (id: string, etag: string) => void;
+}
+
+function StayOperations({
+  accommodationId: selectedAccommodationId,
+  onStayCreated,
+}: StayOperationsProps) {
+  const { client, localDemo } = useAuthSession();
   const operation = useOperationStatus();
   const keys = useRef(makeKeys());
+  const [initialDates] = useState(() =>
+    localDemo
+      ? localDemoStayDates()
+      : { arrival: "", departure: "" },
+  );
   const [accommodationId, setAccommodationId] = useState("");
   const [stayId, setStayId] = useState("");
   const [etag, setEtag] = useState("");
-  const [arrival, setArrival] = useState("");
-  const [departure, setDeparture] = useState("");
+  const [arrival, setArrival] = useState(initialDates.arrival);
+  const [departure, setDeparture] = useState(initialDates.departure);
   const [guestCount, setGuestCount] = useState(1);
   const [status, setStatus] = useState<StayStatus>("draft");
   const [projection, setProjection] = useState(
@@ -432,6 +885,12 @@ function StayOperations() {
   const arrivalInputRef = useRef<HTMLInputElement>(null);
   const departureInputRef = useRef<HTMLInputElement>(null);
   const guestCountInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (selectedAccommodationId.length > 0) {
+      setAccommodationId(selectedAccommodationId);
+    }
+  }, [selectedAccommodationId]);
 
   function createStay(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -461,6 +920,10 @@ function StayOperations() {
       () => client.createStay(body, keys.current.stay),
       (result) => {
         captureEtag(result.etag, setEtag);
+        setStayId(result.data.id);
+        if (result.etag !== null) {
+          onStayCreated(result.data.id, result.etag);
+        }
         setProjection(
           `Estadia ${result.data.id}: ${result.data.status}, versão ${result.data.version}.`,
         );
@@ -622,13 +1085,69 @@ function StayOperations() {
   );
 }
 
-function GroupAndLifecycleOperations() {
-  const { client } = useAuthSession();
-  const operation = useOperationStatus();
-  const keys = useRef(makeKeys());
+interface GroupAndLifecycleOperationsProps {
+  selectedEtag: string;
+  selectedStayId: string;
+}
+
+function useSelectedStayFields(
+  selectedEtag: string,
+  selectedStayId: string,
+) {
   const [stayId, setStayId] = useState("");
   const [etag, setEtag] = useState("");
-  const [privacyVersion, setPrivacyVersion] = useState("");
+  useEffect(() => {
+    if (selectedStayId.length > 0) {
+      setStayId(selectedStayId);
+    }
+    if (selectedEtag.length > 0) {
+      setEtag(selectedEtag);
+    }
+  }, [selectedEtag, selectedStayId]);
+  return { etag, setEtag, setStayId, stayId };
+}
+
+interface InvitePreviewProps {
+  inviteUrlRef: RefObject<string | null>;
+  localDemo: boolean;
+  onDiscard: () => void;
+  onOpenHere: () => void;
+  show: boolean;
+}
+
+function InvitePreview({
+  inviteUrlRef,
+  localDemo,
+  onDiscard,
+  onOpenHere,
+  show,
+}: InvitePreviewProps) {
+  if (!show || inviteUrlRef.current === null) {
+    return null;
+  }
+  return (
+    <InviteQr
+      url={inviteUrlRef.current}
+      onDiscard={onDiscard}
+      {...(localDemo ? { onOpenHere } : {})}
+    />
+  );
+}
+
+function GroupAndLifecycleOperations({
+  selectedEtag,
+  selectedStayId,
+}: GroupAndLifecycleOperationsProps) {
+  const { client, localDemo } = useAuthSession();
+  const operation = useOperationStatus();
+  const keys = useRef(makeKeys());
+  const { etag, setEtag, setStayId, stayId } = useSelectedStayFields(
+    selectedEtag,
+    selectedStayId,
+  );
+  const [privacyVersion, setPrivacyVersion] = useState(
+    localDemo ? "prototype-v1" : "",
+  );
   const [visitors, setVisitors] = useState(() => [
     createVisitor("responsible"),
   ]);
@@ -712,6 +1231,34 @@ function GroupAndLifecycleOperations() {
   function discardInvite() {
     inviteUrlRef.current = null;
     setShowInvite(false);
+  }
+
+  function openInviteHere() {
+    const inviteUrl = inviteUrlRef.current;
+    if (inviteUrl === null) {
+      return;
+    }
+    let parsedInvite: URL;
+    try {
+      parsedInvite = new URL(inviteUrl);
+    } catch {
+      setProjection(
+        "Não foi possível abrir este convite neste navegador. O QR permanece disponível.",
+      );
+      return;
+    }
+    const captured = captureInviteCapability(
+      parsedInvite,
+      (path) => window.history.replaceState(null, "", path),
+    );
+    if (!captured) {
+      setProjection(
+        "Não foi possível abrir este convite neste navegador. O QR permanece disponível.",
+      );
+      return;
+    }
+    discardInvite();
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
   return (
@@ -878,9 +1425,13 @@ function GroupAndLifecycleOperations() {
           Não compareceu
         </button>
       </div>
-      {showInvite && inviteUrlRef.current !== null ? (
-        <InviteQr url={inviteUrlRef.current} onDiscard={discardInvite} />
-      ) : null}
+      <InvitePreview
+        inviteUrlRef={inviteUrlRef}
+        localDemo={localDemo}
+        onDiscard={discardInvite}
+        onOpenHere={openInviteHere}
+        show={showInvite}
+      />
       <output className="result-projection" aria-live="polite">
         {projection}
       </output>
@@ -893,6 +1444,8 @@ function GroupAndLifecycleOperations() {
 
 export function OperatorWorkspace() {
   const { endSession } = useAuthSession();
+  const [accommodationId, setAccommodationId] = useState("");
+  const [selectedStay, setSelectedStay] = useState({ etag: "", id: "" });
 
   return (
     <section aria-labelledby="operator-title">
@@ -909,9 +1462,15 @@ export function OperatorWorkspace() {
         </button>
       </div>
       <div className="operation-grid">
-        <AccommodationOperations />
-        <StayOperations />
-        <GroupAndLifecycleOperations />
+        <AccommodationOperations onSelect={setAccommodationId} />
+        <StayOperations
+          accommodationId={accommodationId}
+          onStayCreated={(id, etag) => setSelectedStay({ etag, id })}
+        />
+        <GroupAndLifecycleOperations
+          selectedEtag={selectedStay.etag}
+          selectedStayId={selectedStay.id}
+        />
       </div>
     </section>
   );

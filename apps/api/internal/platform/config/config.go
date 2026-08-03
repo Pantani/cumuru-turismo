@@ -161,7 +161,13 @@ func (c Config) validate() error {
 		c.validateLogLevel,
 		c.validateOIDC,
 		c.validateTelemetry,
-		func() error { return c.Phase2.validate(c.requiresHTTPS()) },
+		func() error {
+			return c.Phase2.validate(
+				c.requiresHTTPS(),
+				c.Environment,
+				c.OIDC.Mode,
+			)
+		},
 		c.Phase3.validate,
 		func() error {
 			return c.Phase4.validate(

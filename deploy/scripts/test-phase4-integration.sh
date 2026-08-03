@@ -125,7 +125,7 @@ VALUES
     '0197f4cf-2a69-7000-8000-000000000101',
     '0197f4cf-2a69-7000-8000-000000000100',
     'private-accommodation-canary-f4-a',
-    'pousada',
+    'formal_lodging',
     'active',
     10
   ),
@@ -133,7 +133,7 @@ VALUES
     '0197f4cf-2a69-7000-8000-000000000102',
     '0197f4cf-2a69-7000-8000-000000000100',
     'private-accommodation-canary-f4-b',
-    'hotel',
+    'formal_lodging',
     'active',
     20
   ),
@@ -141,7 +141,7 @@ VALUES
     '0197f4cf-2a69-7000-8000-000000000103',
     '0197f4cf-2a69-7000-8000-000000000100',
     'private-accommodation-canary-f4-c',
-    'hostel',
+    'formal_lodging',
     'active',
     30
   );
@@ -1381,7 +1381,7 @@ INSERT INTO analytics.quality_coverage (
 )
 VALUES (
   '0197f4cf-2a69-7000-8000-000000000160',
-  'pousada',
+  'formal_lodging',
   'available',
   0.65
 );

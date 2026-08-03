@@ -11,6 +11,39 @@ COMPOSE=(
   --project-name "${PROJECT_NAME}"
 )
 MIGRATION_URL="postgres://cumuru_migration:cumuru-local-migration-only@postgres:5432/cumuru?sslmode=disable"
+GATE_LOCK_DIR="${TMPDIR:-/tmp}/cumuru-docker-subnet-172-30-1.lock"
+GATE_LOCK_HELD=false
+
+release_gate_lock() {
+  if test "${GATE_LOCK_HELD}" != "true"; then
+    return
+  fi
+  rm -f "${GATE_LOCK_DIR}/pid"
+  rmdir "${GATE_LOCK_DIR}" 2>/dev/null || true
+  GATE_LOCK_HELD=false
+}
+
+acquire_gate_lock() {
+  local deadline=$((SECONDS + 900))
+  local owner_pid=""
+  while ! mkdir "${GATE_LOCK_DIR}" 2>/dev/null; do
+    if test -f "${GATE_LOCK_DIR}/pid"; then
+      owner_pid="$(tr -cd '0-9' <"${GATE_LOCK_DIR}/pid")"
+      if test -n "${owner_pid}" && ! kill -0 "${owner_pid}" 2>/dev/null; then
+        rm -f "${GATE_LOCK_DIR}/pid"
+        rmdir "${GATE_LOCK_DIR}" 2>/dev/null || true
+        continue
+      fi
+    fi
+    if test "${SECONDS}" -ge "${deadline}"; then
+      echo "migration test timed out waiting for Docker subnet lock" >&2
+      return 1
+    fi
+    sleep 1
+  done
+  printf '%s\n' "$$" >"${GATE_LOCK_DIR}/pid"
+  GATE_LOCK_HELD=true
+}
 
 cleanup() {
   local primary_status=$?
@@ -18,6 +51,7 @@ cleanup() {
   set +e
   "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1
   local cleanup_status=$?
+  release_gate_lock
   set -e
   if test "${primary_status}" -ne 0; then
     exit "${primary_status}"
@@ -25,6 +59,8 @@ cleanup() {
   exit "${cleanup_status}"
 }
 trap cleanup EXIT
+
+acquire_gate_lock
 
 run_migrate() {
   "${COMPOSE[@]}" run --rm --no-deps migrate \
@@ -52,12 +88,21 @@ expect_psql_failure() {
   fi
 }
 
+expect_migrate_failure() {
+  local description="$1"
+  shift
+  if run_migrate "$@" >/dev/null 2>&1; then
+    echo "${description}" >&2
+    exit 1
+  fi
+}
+
 migration_files="$(
   find "${ROOT_DIR}/apps/api/migrations" \
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_accommodation_onboarding.down.sql\n000002_accommodation_onboarding.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
@@ -74,7 +119,11 @@ psql_as cumuru_migration cumuru-local-migration-only <<'SQL'
 INSERT INTO core.organizations (id, name)
 VALUES
   ('00000000-0000-7000-8000-000000000001', 'Organização Fictícia A'),
-  ('00000000-0000-7000-8000-000000000002', 'Organização Fictícia B');
+  ('00000000-0000-7000-8000-000000000002', 'Organização Fictícia B'),
+  (
+    '019fae10-0000-7000-8000-000000000001',
+    'Organização fictícia Cumuru'
+  );
 
 INSERT INTO core.accommodations (id, organization_id, name, category, status)
 VALUES
@@ -82,14 +131,49 @@ VALUES
     '00000000-0000-7000-8000-000000000011',
     '00000000-0000-7000-8000-000000000001',
     'Hospedagem Fictícia A',
-    'prototype',
+    'formal_lodging',
     'active'
   ),
   (
     '00000000-0000-7000-8000-000000000012',
     '00000000-0000-7000-8000-000000000002',
     'Hospedagem Fictícia B',
-    'prototype',
+    'family_hosting',
+    'active'
+  ),
+  (
+    '019fae11-0000-7000-8000-000000000001',
+    '019fae10-0000-7000-8000-000000000001',
+    'Pousada Farol Fictícia',
+    'pousada',
+    'active'
+  ),
+  (
+    '019fae11-0000-7000-8000-000000000002',
+    '019fae10-0000-7000-8000-000000000001',
+    'Hospedaria Rio Fictícia',
+    'hospedaria',
+    'active'
+  ),
+  (
+    '019fae11-0000-7000-8000-000000000003',
+    '019fae10-0000-7000-8000-000000000001',
+    'Chalés Areia Fictícios',
+    'chale',
+    'active'
+  ),
+  (
+    '019fae11-0000-7000-8000-000000000004',
+    '019fae10-0000-7000-8000-000000000001',
+    'Casa Silenciosa Fictícia',
+    'casa',
+    'active'
+  ),
+  (
+    '00000000-0000-7000-8000-000000000099',
+    '00000000-0000-7000-8000-000000000001',
+    'Categoria desconhecida deve bloquear',
+    'legacy-unknown',
     'active'
   );
 
@@ -135,6 +219,63 @@ VALUES (
   'success'
 );
 SQL
+
+if run_migrate up 1 >/dev/null 2>&1; then
+  echo "migration 000002 unexpectedly inferred an unknown legacy category" >&2
+  exit 1
+fi
+
+failed_upgrade_state="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
+)"
+test "${failed_upgrade_state}" = "2:true"
+
+run_migrate force 1
+psql_as cumuru_migration cumuru-local-migration-only \
+  --command="DELETE FROM core.accommodations
+    WHERE id = '00000000-0000-7000-8000-000000000099'"
+run_migrate up 1
+
+upgraded_migration_state="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
+)"
+test "${upgraded_migration_state}" = "2:false"
+
+fixture_categories_and_cadastur="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT
+        string_agg(category, ',' ORDER BY id)
+        || ':'
+        || count(*) FILTER (WHERE cadastur_id IS NOT NULL)
+        || ':'
+        || min(cadastur_id) FILTER (WHERE cadastur_id IS NOT NULL)
+      FROM core.accommodations
+      WHERE organization_id =
+        '019fae10-0000-7000-8000-000000000001'
+    "
+)"
+test "${fixture_categories_and_cadastur}" = \
+  "formal_lodging,formal_lodging,seasonal_rental,family_hosting:1:CADASTUR-FICTICIO-NAO-VALIDO"
+
+expect_psql_failure \
+  cumuru_migration \
+  cumuru-local-migration-only \
+  "closed accommodation categories unexpectedly accepted unknown text" \
+  "INSERT INTO core.accommodations (
+     id, organization_id, name, category, status
+   ) VALUES (
+     '00000000-0000-7000-8000-000000000098',
+     '00000000-0000-7000-8000-000000000001',
+     'Categoria inválida',
+     'personal-data-canary',
+     'active'
+   )"
 
 preserved_memberships="$(
   psql_as cumuru_migration cumuru-local-migration-only \
@@ -197,6 +338,69 @@ survey_catalog_tables="$(
 test "${survey_catalog_tables}" = "9"
 
 psql_as cumuru_app cumuru-local-app-only <<'SQL'
+INSERT INTO core.organizations (id, name)
+VALUES
+  (
+    '00000000-0000-7000-8000-000000000801',
+    'Onboarding local fictício A'
+  ),
+  (
+    '00000000-0000-7000-8000-000000000802',
+    'Onboarding local fictício B'
+  );
+
+INSERT INTO core.accommodations (
+  id,
+  organization_id,
+  name,
+  category,
+  status,
+  capacity,
+  onboarding_submission_id
+)
+VALUES
+  (
+    '00000000-0000-7000-8000-000000000811',
+    '00000000-0000-7000-8000-000000000801',
+    'Hospedagem familiar fictícia',
+    'family_hosting',
+    'active',
+    6,
+    '00000000-0000-7000-8000-000000000831'
+  ),
+  (
+    '00000000-0000-7000-8000-000000000812',
+    '00000000-0000-7000-8000-000000000802',
+    'Camping fictício',
+    'camping',
+    'active',
+    20,
+    '00000000-0000-7000-8000-000000000831'
+  );
+
+INSERT INTO core.memberships (
+  id,
+  accommodation_id,
+  oidc_issuer,
+  oidc_subject,
+  role
+)
+VALUES
+  (
+    '00000000-0000-7000-8000-000000000821',
+    '00000000-0000-7000-8000-000000000811',
+    'https://oidc.invalid/local',
+    'onboarding-a',
+    'manager'
+  ),
+  (
+    '00000000-0000-7000-8000-000000000822',
+    '00000000-0000-7000-8000-000000000812',
+    'https://oidc.invalid/local',
+    'onboarding-b',
+    'manager'
+  );
+
 INSERT INTO core.memberships (
   id,
   accommodation_id,
@@ -290,6 +494,59 @@ VALUES (
   now() - interval '1 minute'
 );
 SQL
+
+expect_psql_failure \
+  cumuru_app \
+  cumuru-local-app-only \
+  "onboarding submission unexpectedly duplicated inside one organization" \
+  "INSERT INTO core.accommodations (
+     id,
+     organization_id,
+     name,
+     category,
+     status,
+     capacity,
+     onboarding_submission_id
+   ) VALUES (
+     '00000000-0000-7000-8000-000000000813',
+     '00000000-0000-7000-8000-000000000801',
+     'Duplicata fictícia',
+     'other',
+     'active',
+     2,
+     '00000000-0000-7000-8000-000000000831'
+   )"
+
+expect_psql_failure \
+  cumuru_app \
+  cumuru-local-app-only \
+  "app_runtime unexpectedly inserted an organization document HMAC" \
+  "INSERT INTO core.organizations (id, name, document_hmac)
+   VALUES (
+     '00000000-0000-7000-8000-000000000803',
+     'Documento proibido',
+     decode('aa', 'hex')
+   )"
+
+for runtime_user in cumuru_app cumuru_worker; do
+  runtime_password="cumuru-local-app-only"
+  if test "${runtime_user}" = "cumuru_worker"; then
+    runtime_password="cumuru-local-worker-only"
+  fi
+  expect_psql_failure \
+    "${runtime_user}" \
+    "${runtime_password}" \
+    "${runtime_user} unexpectedly selected organization document HMAC" \
+    "SELECT document_hmac FROM core.organizations LIMIT 1"
+done
+
+expect_psql_failure \
+  cumuru_app \
+  cumuru-local-app-only \
+  "app_runtime unexpectedly updated trusted Cadastur metadata" \
+  "UPDATE core.accommodations
+   SET cadastur_id = 'NAO-PERMITIDO'
+   WHERE id = '00000000-0000-7000-8000-000000000011'"
 
 producer_outbox_defaults="$(
   psql_as cumuru_migration cumuru-local-migration-only \
@@ -1204,6 +1461,61 @@ psql_as cumuru_migration cumuru-local-migration-only \
     WHERE operation_key LIKE 'cleanupExpired%';
   "
 
+psql_as cumuru_migration cumuru-local-migration-only \
+  --command="UPDATE core.accommodations
+    SET name = 'Pousada Farol divergente'
+    WHERE id = '019fae11-0000-7000-8000-000000000001'"
+
+expect_migrate_failure \
+  "migration 000002 down unexpectedly accepted a divergent reserved fixture" \
+  down 1
+
+failed_down_state="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
+)"
+test "${failed_down_state}" = "1:true"
+
+run_migrate force 2
+psql_as cumuru_migration cumuru-local-migration-only \
+  --command="UPDATE core.accommodations
+    SET name = 'Pousada Farol Fictícia'
+    WHERE id = '019fae11-0000-7000-8000-000000000001'"
+
+run_migrate down 1
+down_to_baseline_state="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
+)"
+test "${down_to_baseline_state}" = "1:false"
+
+onboarding_columns_after_down="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT count(*)
+      FROM information_schema.columns
+      WHERE table_schema = 'core'
+        AND table_name = 'accommodations'
+        AND column_name = 'onboarding_submission_id'
+    "
+)"
+test "${onboarding_columns_after_down}" = "0"
+
+restored_fixture_categories="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT string_agg(category, ',' ORDER BY id)
+      FROM core.accommodations
+      WHERE organization_id =
+        '019fae10-0000-7000-8000-000000000001'
+    "
+)"
+test "${restored_fixture_categories}" = "pousada,hospedaria,chale,casa"
+
 run_migrate down 1
 schemas_left="$(
   psql_as cumuru_migration cumuru-local-migration-only \
@@ -1229,6 +1541,6 @@ final_version="$(
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${final_version}" = "1:false"
+test "${final_version}" = "2:false"
 
-echo "consolidated migration 001 zero-to-one-to-zero-to-one cycle, deterministic quality, grants, bounded cleanup and fictitious tenant isolation passed"
+echo "migrations zero-to-latest and 1-to-2 upgrade, closed categories, onboarding grants, bounded cleanup and fictitious tenant isolation passed"

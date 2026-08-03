@@ -11,6 +11,10 @@ import {
 } from "../../shared/security/invite-capability";
 import RegistrationPage from "../../pages/RegistrationPage";
 import {
+  clearSurveyCapability,
+  setSurveyCapability,
+} from "../../shared/security/survey-capability";
+import {
   clearAllDrafts,
   inspectDraftPresence,
   saveDraft,
@@ -57,6 +61,7 @@ function draftIdFromLocation() {
 describe("registro por convite", () => {
   beforeEach(async () => {
     clearInviteCapability();
+    clearSurveyCapability();
     await clearAllDrafts();
     window.history.replaceState(null, "", "/registro");
   });
@@ -92,6 +97,19 @@ describe("registro por convite", () => {
 
     expect(
       screen.getByRole("heading", { name: "Convite necessário" }),
+    ).toBeInTheDocument();
+  });
+
+  it("preserva a confirmação após consumir o convite", () => {
+    setSurveyCapability("payload.signature");
+
+    render(<RegistrationPage />);
+
+    expect(
+      screen.getByRole("heading", { name: "Registro concluído" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Responder pesquisa voluntária" }),
     ).toBeInTheDocument();
   });
 
@@ -165,6 +183,9 @@ describe("registro por convite", () => {
       window.dispatchEvent(new Event("online"));
 
       await screen.findByText("Grupo enviado com sucesso.");
+      expect(
+        screen.getByRole("button", { name: "Responder pesquisa voluntária" }),
+      ).toBeInTheDocument();
       const requests = fetcher.mock.calls.map(
         (call) => call[0] as Request,
       );
@@ -176,6 +197,76 @@ describe("registro por convite", () => {
       });
     },
   );
+
+  it("mantém a capability em memória ao avançar para a pesquisa", async () => {
+    const user = userEvent.setup();
+    captureCapability();
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(phase2Response(inviteContext))
+      .mockResolvedValueOnce(phase2Response(inviteContext))
+      .mockResolvedValueOnce(
+        phase2Response(
+          { submission_id: "0190aabb-7ccd-7eef-8abc-001122334455", status: "accepted" },
+          {
+            headers: {
+              ETag: '"1"',
+              "Idempotency-Replayed": "false",
+              "Survey-Capability": "payload.signature",
+            },
+          },
+        ),
+      );
+    render(<RegistrationPage />);
+    await screen.findByRole("heading", {
+      name: "Confirme o grupo da estadia",
+    });
+    await completeBrazilResidence(user);
+    await user.click(screen.getByRole("button", { name: "Enviar grupo" }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Responder pesquisa voluntária",
+      }),
+    );
+
+    expect(window.location.pathname).toBe("/pesquisa");
+  });
+
+  it("conclui sem oferecer pesquisa quando a resposta omite a capability", async () => {
+    const user = userEvent.setup();
+    captureCapability();
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(phase2Response(inviteContext))
+      .mockResolvedValueOnce(phase2Response(inviteContext))
+      .mockResolvedValueOnce(
+        phase2Response(
+          {
+            submission_id: "0190aabb-7ccd-7eef-8abc-001122334455",
+            status: "accepted",
+          },
+          {
+            headers: {
+              ETag: '"1"',
+              "Idempotency-Replayed": "false",
+            },
+          },
+        ),
+      );
+    render(<RegistrationPage />);
+    await screen.findByRole("heading", {
+      name: "Confirme o grupo da estadia",
+    });
+    await completeBrazilResidence(user);
+    await user.click(screen.getByRole("button", { name: "Enviar grupo" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Registro concluído" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Responder pesquisa voluntária" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/pesquisa voluntária não foi disponibilizada/i))
+      .toBeInTheDocument();
+  });
 
   it("expurga rascunho, chave e capability quando a revalidação retorna 404", async () => {
     const user = userEvent.setup();

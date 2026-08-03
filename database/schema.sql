@@ -62,15 +62,32 @@ CREATE TABLE core.accommodations (
   cadastur_id text,
   capacity integer,
   public_area_code text,
+  onboarding_submission_id uuid,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   version bigint NOT NULL DEFAULT 1,
   CONSTRAINT accommodations_capacity_positive
-    CHECK (capacity IS NULL OR capacity > 0)
+    CHECK (capacity IS NULL OR capacity > 0),
+  CONSTRAINT accommodations_category_valid
+    CHECK (
+      category IN (
+        'formal_lodging',
+        'seasonal_rental',
+        'family_hosting',
+        'camping',
+        'regularizing',
+        'other',
+        'unclassified'
+      )
+    )
 );
 
 CREATE INDEX accommodations_organization_idx
   ON core.accommodations (organization_id, status);
+
+CREATE UNIQUE INDEX accommodations_onboarding_submission_idx
+  ON core.accommodations (organization_id, onboarding_submission_id)
+  WHERE onboarding_submission_id IS NOT NULL;
 
 CREATE TABLE core.memberships (
   id uuid PRIMARY KEY,

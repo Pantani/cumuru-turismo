@@ -21,6 +21,12 @@ const createBody = {
   expected_guest_count: 2,
   client_submission_id: stayId,
 };
+const createAccommodationBody = {
+  name: "Casa da Praia Fictícia",
+  category: "family_hosting" as const,
+  capacity: 6,
+  client_submission_id: stayId,
+};
 const groupBody = {
   client_submission_id: stayId,
   privacy_notice_version: "2026-07",
@@ -76,6 +82,7 @@ function contractCases(): ReadonlyArray<
 > {
   return [
     ["listAccommodations", "GET", "/api/v1/accommodations", 200, {}, (client) => client.listAccommodations()],
+    ["createAccommodation", "POST", "/api/v1/accommodations", 201, { ETag: '"1"', Location: `/api/v1/accommodations/${stayId}`, "Idempotency-Replayed": "false" }, (client) => client.createAccommodation(createAccommodationBody, "idem-12345678")],
     ["getAccommodation", "GET", `/api/v1/accommodations/${stayId}`, 200, { ETag: '"1"' }, (client) => client.getAccommodation(stayId)],
     ["updateAccommodation", "PATCH", `/api/v1/accommodations/${stayId}`, 200, { ETag: '"1"' }, (client) => client.updateAccommodation(stayId, { name: "Pousada" }, '"1"')],
     ["listAccommodationMemberships", "GET", `/api/v1/accommodations/${stayId}/memberships`, 200, {}, (client) => client.listAccommodationMemberships(stayId)],
@@ -98,12 +105,56 @@ function contractCases(): ReadonlyArray<
 }
 
 describe("cliente tipado da Fase 2", () => {
-  it("declara exatamente as 19 operações do contrato da fase", () => {
+  it("declara exatamente as 20 operações do contrato da fase", () => {
     expectTypeOf(phase2OperationNames).toMatchTypeOf<
       ReadonlyArray<keyof operations>
     >();
-    expect(phase2OperationNames).toHaveLength(19);
-    expect(new Set(phase2OperationNames).size).toBe(19);
+    expect(phase2OperationNames).toHaveLength(20);
+    expect(new Set(phase2OperationNames).size).toBe(20);
+  });
+
+  it("envia o onboarding fechado com autorização e chave idempotente", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json(
+        {
+          id: stayId,
+          organization_id: stayId,
+          ...createAccommodationBody,
+          status: "active",
+          version: 1,
+          created_at: "2026-08-02T12:00:00Z",
+          updated_at: "2026-08-02T12:00:00Z",
+        },
+        {
+          status: 201,
+          headers: {
+            ...responseHeaders,
+            ETag: '"1"',
+            Location: `/api/v1/accommodations/${stayId}`,
+            "Idempotency-Replayed": "false",
+          },
+        },
+      ),
+    );
+    const client = createPhase2Client({ fetcher, getAccessToken: () => token });
+
+    const result = await client.createAccommodation(
+      createAccommodationBody,
+      "idem-12345678",
+    );
+
+    const request = fetcher.mock.calls[0]?.[0] as Request;
+    expect(request.method).toBe("POST");
+    expect(new URL(request.url).pathname).toBe("/api/v1/accommodations");
+    expect(request.headers.get("authorization")).toBe(`Bearer ${token}`);
+    expect(request.headers.get("idempotency-key")).toBe("idem-12345678");
+    expect(await request.json()).toEqual(createAccommodationBody);
+    expect(result).toMatchObject({
+      etag: '"1"',
+      location: `/api/v1/accommodations/${stayId}`,
+      replayed: false,
+      requestId,
+    });
   });
 
   it.each(contractCases())(

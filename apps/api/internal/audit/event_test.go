@@ -95,6 +95,31 @@ func TestSurveyEventRequiresSurveyPurpose(t *testing.T) {
 	}
 }
 
+func TestAccommodationCreatedEventUsesOnlyAllowlistedFields(t *testing.T) {
+	t.Parallel()
+	event := audit.Event{
+		ID:             uuid.MustParse("019f0000-0000-7000-8000-000000000081"),
+		Actor:          audit.ActorDigest{Version: "actor-v1", Sum: [32]byte{1}},
+		ActorType:      audit.ActorUser,
+		OrganizationID: uuid.MustParse("019f0000-0000-7000-8000-000000000082"),
+		Action:         audit.ActionAccommodationCreated,
+		EntityType:     audit.EntityAccommodation,
+		EntityID:       uuid.MustParse("019f0000-0000-7000-8000-000000000083"),
+		PurposeCode:    audit.PurposeStayOperation,
+		RequestID:      "019f0000-0000-7000-8000-000000000084",
+		ChangedFields: []audit.ChangedField{
+			audit.FieldName,
+			audit.FieldCategory,
+			audit.FieldCapacity,
+			audit.FieldStatus,
+		},
+		Outcome: audit.OutcomeSucceeded,
+	}
+	if err := event.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
 func phase3Event(
 	actorType audit.ActorType,
 	action audit.Action,
