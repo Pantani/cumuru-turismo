@@ -19,6 +19,8 @@ FROM nginxinc/nginx-unprivileged:1.29.8-alpine3.23@sha256:0c79d56aee561a1d81c63f
 ARG BUILD_VERSION
 ARG BUILD_REVISION
 ARG BUILD_TIME
+ARG VITE_LOCAL_DEMO_MODE=false
+ARG LOCAL_DEMO_PROXY_LOOPBACK=false
 
 LABEL org.opencontainers.image.version="${BUILD_VERSION}" \
       org.opencontainers.image.revision="${BUILD_REVISION}" \
@@ -43,7 +45,17 @@ RUN echo "${BUILD_VERSION}" | grep -Eq \
       libssl3=3.5.7-r0 \
       libxml2=2.13.9-r1
 
-COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY deploy/nginx/default.conf /tmp/cumuru-default.conf.template
+RUN case "${VITE_LOCAL_DEMO_MODE}:${LOCAL_DEMO_PROXY_LOOPBACK}" in \
+      false:false) proxy_client_address='$remote_addr' ;; \
+      true:true) proxy_client_address='127.0.0.1' ;; \
+      *) echo "local demo proxy and web build modes must match" >&2; exit 1 ;; \
+    esac \
+  && export CUMURU_PROXY_CLIENT_ADDRESS="${proxy_client_address}" \
+  && envsubst '${CUMURU_PROXY_CLIENT_ADDRESS}' \
+      < /tmp/cumuru-default.conf.template \
+      > /etc/nginx/conf.d/default.conf \
+  && rm /tmp/cumuru-default.conf.template
 COPY --from=build --chown=101:101 /src/apps/web/dist /usr/share/nginx/html
 
 USER 101:101

@@ -521,7 +521,8 @@ migrate-down-local: ## Reverte uma migration local descart√°vel; exige confirma√
 		down 1
 
 smoke: ## Executa o smoke da stack Compose local
-	@SMOKE_PROFILE=local-demo bash deploy/scripts/smoke.sh
+	@LOCAL_FAKE_OIDC_TOKEN=cumuru-local-platform-read \
+		SMOKE_PROFILE=local-demo bash deploy/scripts/smoke.sh
 
 ci: ## Executa o gate completo sequencial; pesado, usa Docker e rede
 	@$(MAKE) --no-print-directory openapi-lint

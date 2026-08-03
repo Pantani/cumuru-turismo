@@ -198,6 +198,7 @@ func TestAnalyticsQualityRequiresInternalScopeAndNoStore(t *testing.T) {
 	request := httptest.NewRequest(
 		http.MethodGet, "/api/v1/analytics/quality?window=last_30_days", nil,
 	)
+	request.RemoteAddr = "127.0.0.1:4312"
 	request.Header.Set(
 		"Authorization",
 		"Bearer "+access.DevelopmentAnalyticsQualityToken,
@@ -218,6 +219,7 @@ func TestAnalyticsQualityRequiresInternalScopeAndNoStore(t *testing.T) {
 	forbiddenRequest := httptest.NewRequest(
 		http.MethodGet, "/api/v1/analytics/quality?window=last_30_days", nil,
 	)
+	forbiddenRequest.RemoteAddr = "127.0.0.1:4312"
 	forbiddenRequest.Header.Set(
 		"Authorization",
 		"Bearer "+access.DevelopmentPlatformToken,

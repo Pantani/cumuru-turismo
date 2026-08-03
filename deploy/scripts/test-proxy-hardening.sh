@@ -78,12 +78,15 @@ assert_absent() {
 
 CANARY="c2-capability-canary-9f74d4"
 QUERY_CANARY="query-canary-44d8"
+rendered_nginx_config="${WORK_DIR}/default.conf"
+sed 's/${CUMURU_PROXY_CLIENT_ADDRESS}/$remote_addr/g' \
+  "${ROOT_DIR}/deploy/nginx/default.conf" >"${rendered_nginx_config}"
 
 docker run --detach \
   --name "${NGINX_CONTAINER}" \
   --add-host api:127.0.0.1 \
   --publish 127.0.0.1::8080 \
-  --volume "${ROOT_DIR}/deploy/nginx:/etc/nginx/conf.d:ro" \
+  --volume "${rendered_nginx_config}:/etc/nginx/conf.d/default.conf:ro" \
   "${NGINX_IMAGE}" >/dev/null
 nginx_address="$(docker port "${NGINX_CONTAINER}" 8080/tcp)"
 nginx_port="${nginx_address##*:}"
@@ -169,10 +172,10 @@ assert_absent "${WORK_DIR}/vite.stderr" "ECONNREFUSED" \
   "Vite stderr leaked proxy error data"
 
 grep --fixed-strings --quiet \
-  'proxy_set_header X-Forwarded-For $remote_addr;' \
+  'proxy_set_header X-Forwarded-For ${CUMURU_PROXY_CLIENT_ADDRESS};' \
   "${ROOT_DIR}/deploy/nginx/default.conf"
 grep --fixed-strings --quiet \
-  'proxy_set_header X-Real-IP $remote_addr;' \
+  'proxy_set_header X-Real-IP ${CUMURU_PROXY_CLIENT_ADDRESS};' \
   "${ROOT_DIR}/deploy/nginx/default.conf"
 grep --fixed-strings --quiet \
   'proxy_set_header Forwarded "";' \

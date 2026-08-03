@@ -64,6 +64,34 @@ func TestDevelopmentFakeRejectsUnknownToken(t *testing.T) {
 	}
 }
 
+func TestDevelopmentFakeClassifiesOnlyItsFixtureCredentials(t *testing.T) {
+	t.Parallel()
+
+	verifier, err := access.NewDevelopmentFake("test", "https://oidc.invalid/local")
+	if err != nil {
+		t.Fatalf("NewDevelopmentFake() error = %v", err)
+	}
+	classifier, ok := verifier.(interface {
+		IsFixtureCredential(string) bool
+	})
+	if !ok {
+		t.Fatal("development verifier does not classify fixture credentials")
+	}
+	for _, token := range []string{
+		access.DevelopmentPlatformToken,
+		access.DevelopmentQuestionnaireEditorToken,
+		access.DevelopmentQuestionnaireReviewToken,
+		access.DevelopmentAnalyticsQualityToken,
+	} {
+		if !classifier.IsFixtureCredential(token) {
+			t.Errorf("IsFixtureCredential(%q) = false", token)
+		}
+	}
+	if classifier.IsFixtureCredential("institutional-token") {
+		t.Fatal("institutional token classified as a fixture credential")
+	}
+}
+
 func TestDevelopmentFakeSeparatesQuestionnaireEditorAndReviewer(t *testing.T) {
 	t.Parallel()
 	verifier, err := access.NewDevelopmentFake("test", "https://oidc.invalid/local")

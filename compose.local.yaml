@@ -78,6 +78,7 @@ services:
       args:
         VITE_LOCAL_DEMO_IDENTITY: cumuru-local-platform-read
         VITE_LOCAL_DEMO_MODE: "true"
+        LOCAL_DEMO_PROXY_LOOPBACK: "true"
     healthcheck:
       test:
         - CMD-SHELL

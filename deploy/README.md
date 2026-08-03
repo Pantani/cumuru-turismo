@@ -50,7 +50,8 @@ deliberadamente locais e não podem ser reutilizadas em outro ambiente.
 - `scripts/test-complexity.sh`: prova o limiar 10 em fixtures temporárias,
   incluindo `_test.go`, e mede Go e todo código web próprio com máximo 9;
 - `scripts/smoke.sh`: testa API, web, proxy e uma rota autenticada da Fase 2
-  com o fake OIDC local depois de `make up`.
+  com o fake OIDC local depois de `make up`; ao invocar diretamente o perfil
+  `local-demo`, exige `LOCAL_FAKE_OIDC_TOKEN` explícito.
 
 O Nginx serve deep links da SPA e é a única entrada host para `/api/v1/**`; a
 API não publica porta. O proxy mantém access log desligado, descarta error log
