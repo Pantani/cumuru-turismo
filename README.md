@@ -255,12 +255,12 @@ O cleanup remove dump, base restaurada, containers, rede e volume temporários.
 Essa prova é estritamente local: não comprova backup contínuo, PITR, RPO, RTO,
 custódia, retenção, reaplicação de exclusões ou restore institucional.
 
-## Plataforma da Fase 2 — contrato congelado
+## Plataforma da Fase 2 — contrato e onboarding local
 
-O contrato `0.3.0` e o trecho da Fase 2 incorporado à migration consolidada
-`000001_initial_schema` congelam as fronteiras de acomodações previamente
-provisionadas, memberships, estadias, grupos, convites e comandos de estado.
-Essa onda não entrega sozinha handlers de negócio nem telas: consumidores só
+A baseline `000001_initial_schema` materializa acomodações, memberships,
+estadias, grupos, convites e comandos de estado. A migration incremental
+`000002_accommodation_onboarding` acrescenta o onboarding local contratado na
+versão `0.6.0`, sem exigir CNPJ, CPF, Cadastur ou chave FNRH. Consumidores só
 podem ser considerados integrados depois do QA cruzar OpenAPI, PostgreSQL, Go,
 cliente gerado e React.
 
@@ -323,11 +323,10 @@ projeto descartável, valida timezone, service worker, proxy e rota autenticada,
 derruba/restaura a API para o canário de logs e confirma a remoção de
 containers, rede e volume.
 
-O primeiro upgrade a partir de uma release anterior é `N/A`; antes do primeiro
-lançamento, toda a cadeia de desenvolvimento foi consolidada em
-`000001_initial_schema`. A suíte exige exatamente esse par e exercita o ciclo
-`zero → 1 → zero → 1`. A pipeline remota continua não verificada enquanto
-este diretório não estiver em um repositório Git.
+A cadeia pré-lançamento original foi consolidada em `000001_initial_schema`.
+O onboarding local é a migration incremental `000002_accommodation_onboarding`;
+a suíte exige os dois pares e exercita fresh install, upgrade, rollback para a
+baseline, reaplicação e rejeição fail-closed de fixture reservada divergente.
 
 ## Plataforma da Fase 3 — contrato congelado
 

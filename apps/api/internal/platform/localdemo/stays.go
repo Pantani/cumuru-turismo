@@ -3,7 +3,6 @@ package localdemo
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -38,7 +37,7 @@ func loadStayFixture(
 		fixture,
 	)
 	if err != nil {
-		return errors.New("stay create")
+		return fmt.Errorf("stay create: %w", err)
 	}
 	group, groupExists, err := ensureGroupFixture(
 		ctx,
@@ -65,7 +64,7 @@ func loadStayFixture(
 	}
 	current, err = services.stays.Get(ctx, operator, current.ID)
 	if err != nil {
-		return errors.New("stay inspect")
+		return fmt.Errorf("stay inspect: %w", err)
 	}
 	return transitionStayFixture(
 		ctx,
@@ -86,7 +85,7 @@ func ensureGroupFixture(
 ) (stay.SubmissionAccepted, bool, error) {
 	exists, err := provisioner.HasGroupSubmission(ctx, current.ID)
 	if err != nil {
-		return stay.SubmissionAccepted{}, false, errors.New("group inspect")
+		return stay.SubmissionAccepted{}, false, fmt.Errorf("group inspect: %w", err)
 	}
 	if exists {
 		return stay.SubmissionAccepted{}, true, nil
@@ -99,7 +98,7 @@ func ensureGroupFixture(
 		current,
 	)
 	if err != nil {
-		return stay.SubmissionAccepted{}, false, errors.New("group submit")
+		return stay.SubmissionAccepted{}, false, fmt.Errorf("group submit: %w", err)
 	}
 	return group, false, nil
 }
@@ -124,7 +123,7 @@ func ensureSurveyFixture(
 		surveyClientSubmissionID(fixture),
 	)
 	if err != nil {
-		return errors.New("survey inspect")
+		return fmt.Errorf("survey inspect: %w", err)
 	}
 	if responseExists {
 		return nil
@@ -138,7 +137,7 @@ func ensureSurveyFixture(
 			current,
 		)
 		if err != nil {
-			return errors.New("group replay")
+			return fmt.Errorf("group replay: %w", err)
 		}
 	}
 	if err := submitSurveyFixture(
@@ -147,7 +146,7 @@ func ensureSurveyFixture(
 		fixture,
 		group,
 	); err != nil {
-		return errors.New("survey submit")
+		return fmt.Errorf("survey submit: %w", err)
 	}
 	return nil
 }
@@ -261,6 +260,17 @@ func transitionStayFixture(
 	if stayTransitionComplete(current.Status, fixture.keepCheckedIn) {
 		return nil
 	}
+	if current.Status == stay.StatusCheckedIn && !fixture.keepCheckedIn {
+		return checkOutStayFixture(
+			ctx,
+			service,
+			operator,
+			fixture,
+			stay.MutationResult{
+				ID: current.ID, Status: current.Status, Version: current.Version,
+			},
+		)
+	}
 	if current.Status != stay.StatusPreRegistered {
 		return errFixtureConflict
 	}
@@ -274,7 +284,7 @@ func transitionStayFixture(
 		RequestID:       fixtureRequestID("stay-checkin-" + fixture.key),
 	})
 	if err != nil {
-		return errors.New("stay check-in")
+		return fmt.Errorf("stay check-in: %w", err)
 	}
 	if fixture.keepCheckedIn {
 		return nil
@@ -304,7 +314,7 @@ func checkOutStayFixture(
 		RequestID:       fixtureRequestID("stay-checkout-" + fixture.key),
 	})
 	if err != nil {
-		return errors.New("stay check-out")
+		return fmt.Errorf("stay check-out: %w", err)
 	}
 	return nil
 }

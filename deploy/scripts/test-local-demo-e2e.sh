@@ -33,6 +33,7 @@ COMPOSE=(
 cleanup() {
   local status=$?
   local cleanup_status=0
+  local inspect_status=0
   local residual=""
   trap - EXIT
   set +e
@@ -41,21 +42,23 @@ cleanup() {
   residual="$(
     docker container ls --all --quiet \
       --filter "label=com.docker.compose.project=${PROJECT_NAME}"
-  )"
-  if test -n "${residual}"; then
+  )" || inspect_status=$?
+  if test "${inspect_status}" -ne 0 || test -n "${residual}"; then
     cleanup_status=1
   fi
+  inspect_status=0
   residual="$(
     docker network ls --quiet --filter "name=^${PROJECT_NAME}_private$"
-  )"
-  if test -n "${residual}"; then
+  )" || inspect_status=$?
+  if test "${inspect_status}" -ne 0 || test -n "${residual}"; then
     cleanup_status=1
   fi
+  inspect_status=0
   residual="$(
     docker volume ls --quiet \
       --filter "name=^${PROJECT_NAME}_postgres-data$"
-  )"
-  if test -n "${residual}"; then
+  )" || inspect_status=$?
+  if test "${inspect_status}" -ne 0 || test -n "${residual}"; then
     cleanup_status=1
   fi
   set -e

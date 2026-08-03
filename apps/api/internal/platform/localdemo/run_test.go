@@ -65,3 +65,49 @@ func TestReconcileAndPublishFailsClosedBeforePublication(t *testing.T) {
 		t.Fatalf("calls = %v, publication must not run", stub.calls)
 	}
 }
+
+func TestReconcileAndPublishPreservesPublicationFailure(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("publish")
+	stub := &analyticsPublisherStub{publishErr: wantErr}
+	asOf, err := stay.ParseCivilDate("2026-07-29")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reconcileAndPublish(context.Background(), stub, asOf); !errors.Is(err, wantErr) {
+		t.Fatalf("reconcileAndPublish() error = %v, want publication cause", err)
+	}
+	if len(stub.calls) != 2 || stub.calls[1] != "publish" {
+		t.Fatalf("calls = %v, want publication after reconciliation", stub.calls)
+	}
+}
+
+func TestExecuteWithRunLockPreservesWorkAndUnlockFailures(t *testing.T) {
+	t.Parallel()
+
+	workErr := errors.New("work")
+	unlockErr := errors.New("unlock")
+	err := executeWithRunLock(
+		func() (func() error, error) {
+			return func() error { return unlockErr }, nil
+		},
+		func() error { return workErr },
+	)
+	if !errors.Is(err, workErr) || !errors.Is(err, unlockErr) {
+		t.Fatalf("executeWithRunLock() error = %v, want both causes", err)
+	}
+}
+
+func TestExecuteWithRunLockPreservesAcquireFailure(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("lock")
+	err := executeWithRunLock(
+		func() (func() error, error) { return nil, wantErr },
+		func() error { t.Fatal("work ran after lock failure"); return nil },
+	)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("executeWithRunLock() error = %v, want lock cause", err)
+	}
+}

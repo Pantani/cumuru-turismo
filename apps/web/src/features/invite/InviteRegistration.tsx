@@ -27,7 +27,10 @@ import {
   clearInviteCapability,
   peekInviteCapability,
 } from "../../shared/security/invite-capability";
-import { setSurveyCapability } from "../../shared/security/survey-capability";
+import {
+  peekSurveyCapability,
+  setSurveyCapability,
+} from "../../shared/security/survey-capability";
 import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import {
   type ValidationIssue,
@@ -145,6 +148,28 @@ interface FailureActions {
   setMessage: (message: string) => void;
 }
 
+function SurveyContinuation() {
+  if (peekSurveyCapability() === null) {
+    return (
+      <p>
+        A pesquisa voluntária não foi disponibilizada para esta conclusão.
+      </p>
+    );
+  }
+  return (
+    <button
+      className="primary-action"
+      type="button"
+      onClick={() => {
+        window.history.pushState(null, "", "/pesquisa");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }}
+    >
+      Responder pesquisa voluntária
+    </button>
+  );
+}
+
 export function RegistrationCompletion({
   message = "Grupo enviado com sucesso.",
 }: {
@@ -156,16 +181,7 @@ export function RegistrationCompletion({
       <p role="status" aria-live="polite">
         {message}
       </p>
-      <button
-        className="primary-action"
-        type="button"
-        onClick={() => {
-          window.history.pushState(null, "", "/pesquisa");
-          window.dispatchEvent(new PopStateEvent("popstate"));
-        }}
-      >
-        Responder pesquisa voluntária
-      </button>
+      <SurveyContinuation />
     </section>
   );
 }

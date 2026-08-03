@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: API do Observatório Turístico de Cumuruxatiba
-  version: 0.5.3
+  version: 0.6.0
   license:
     name: Licença a definir pelo Município de Prado
     identifier: LicenseRef-Proprietary
@@ -2612,16 +2612,33 @@ components:
             - "60_plus"
         residence_country:
           type: string
-          minLength: 2
-          maxLength: 2
+          pattern: "^[A-Z]{2}$"
         residence_state:
           type: [string, "null"]
-          minLength: 2
-          maxLength: 2
+          pattern: "^[A-Z]{2}$"
         residence_city_code:
           type: [string, "null"]
           pattern: "^[0-9]{7}$"
-          maxLength: 12
+      if:
+        required: [residence_country]
+        properties:
+          residence_country:
+            const: BR
+      then:
+        required: [residence_state, residence_city_code]
+        properties:
+          residence_state:
+            type: string
+            pattern: "^[A-Z]{2}$"
+          residence_city_code:
+            type: string
+            pattern: "^[0-9]{7}$"
+      else:
+        properties:
+          residence_state:
+            type: "null"
+          residence_city_code:
+            type: "null"
     Visitor:
       type: object
       required:

@@ -230,13 +230,19 @@ func (r *LocalDemoRepository) inTransaction(
 	}
 	queries := generated.New(tx)
 	if err := work(queries); err != nil {
-		_ = tx.Rollback(ctx)
+		rollbackLocalDemo(tx, r.timeout)
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return ErrUnavailable
 	}
 	return nil
+}
+
+func rollbackLocalDemo(tx pgx.Tx, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	_ = tx.Rollback(ctx)
 }
 
 func ensureLocalOrganization(
@@ -254,11 +260,18 @@ func ensureLocalOrganization(
 		return ErrUnavailable
 	}
 	name, err := q.GetLocalDemoOrganization(ctx, pgUUID(fixture.OrganizationID))
-	if errors.Is(err, pgx.ErrNoRows) || name != fixture.OrganizationName {
+	return classifyLocalOrganizationResult(name, err, fixture.OrganizationName)
+}
+
+func classifyLocalOrganizationResult(name string, err error, expectedName string) error {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrLocalDemoConflict
 	}
 	if err != nil {
 		return ErrUnavailable
+	}
+	if name != expectedName {
+		return ErrLocalDemoConflict
 	}
 	return nil
 }

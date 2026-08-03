@@ -442,6 +442,11 @@ image-scan: ## Escaneia imagens já construídas sem montar o Docker socket
 compose-config: ## Valida o Compose base e o overlay local com metadata reprodutível
 	@"$(WITH_BUILD_METADATA)" docker compose config --quiet
 	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) config --quiet
+	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
+		-f deploy/compose.local-test.yaml config --quiet
+	@LOCAL_E2E_PORT=4174 "$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
+		-f deploy/compose.phase4-full-stack.yaml \
+		-f deploy/compose.local-e2e.yaml config --quiet
 
 up: ## Sobe a demo local, aplica fixtures idempotentes e espera a publicação
 	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) up --build --detach --wait

@@ -5,8 +5,6 @@ package store_test
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -195,7 +193,7 @@ func assertOnboardingPersistence(
 	persisted := strings.ToLower(string(organizationJSON) + string(accommodationJSON))
 	for _, forbidden := range []string{"cnpj", "cpf", "cadastur-ficticio", "fnrh"} {
 		if strings.Contains(persisted, forbidden) {
-			t.Fatalf("onboarding persistence contains %q: %s", forbidden, persisted)
+			t.Fatalf("onboarding persistence contains forbidden canary %q", forbidden)
 		}
 	}
 	var managerCount int
@@ -244,7 +242,7 @@ func assertOnboardingAuditOutboxPrivacy(
 		t.Fatalf("read onboarding outbox event: %v", err)
 	}
 	serialized := strings.ToLower(string(auditJSON) + string(outboxJSON))
-	for _, forbidden := range []string{
+	for index, forbidden := range []string{
 		strings.ToLower(command.Actor.Subject),
 		strings.ToLower(command.Name),
 		strings.ToLower(command.IdempotencyKey),
@@ -254,7 +252,7 @@ func assertOnboardingAuditOutboxPrivacy(
 		"fnrh",
 	} {
 		if strings.Contains(serialized, forbidden) {
-			t.Fatalf("audit/outbox contains forbidden %q: %s", forbidden, serialized)
+			t.Fatalf("audit/outbox contains forbidden canary at index %d", index)
 		}
 	}
 }
@@ -447,7 +445,11 @@ func assertAccommodationOnboardingRollback(
 	).Scan(&organizationCount); err != nil {
 		t.Fatalf("read rollback organization count: %v", err)
 	}
-	actorDigest := integrationActorDigest(subject)
+	actorDigest := store.ActorDigestForTest(
+		bytesRepeat('a', 32),
+		"https://issuer.invalid",
+		subject,
+	)
 	if err := pool.QueryRow(
 		ctx,
 		`SELECT count(*) FROM platform.idempotency_records WHERE actor_key_hmac=$1`,
@@ -458,14 +460,6 @@ func assertAccommodationOnboardingRollback(
 	if organizationCount != 0 || idempotencyCount != 0 {
 		t.Fatalf("rollback counts: organization=%d idempotency=%d", organizationCount, idempotencyCount)
 	}
-}
-
-func integrationActorDigest(subject string) []byte {
-	mac := hmac.New(sha256.New, bytesRepeat('a', 32))
-	_, _ = mac.Write([]byte("actor"))
-	_, _ = mac.Write([]byte{0})
-	_, _ = mac.Write([]byte("https://issuer.invalid\x00" + subject))
-	return mac.Sum(nil)
 }
 
 func (c onboardingCleanup) run(t *testing.T, pool *pgxpool.Pool) {
@@ -505,7 +499,12 @@ func deleteOnboardingIdempotency(
 ) {
 	t.Helper()
 	for _, subject := range subjects {
-		if _, err := pool.Exec(ctx, `DELETE FROM platform.idempotency_records WHERE actor_key_hmac=$1`, integrationActorDigest(subject)); err != nil {
+		actorDigest := store.ActorDigestForTest(
+			bytesRepeat('a', 32),
+			"https://issuer.invalid",
+			subject,
+		)
+		if _, err := pool.Exec(ctx, `DELETE FROM platform.idempotency_records WHERE actor_key_hmac=$1`, actorDigest); err != nil {
 			t.Errorf("cleanup onboarding idempotency: %v", err)
 		}
 	}

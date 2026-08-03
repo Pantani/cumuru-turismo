@@ -12,6 +12,7 @@ import {
 import { AppLink } from "./AppLink";
 import { normalizePathname, type AppPath } from "./routes";
 import { useAuthSession } from "../shared/auth/AuthSession";
+import { CAPABILITY_CHANGE_EVENT } from "../shared/security/capability-events";
 import { peekInviteCapability } from "../shared/security/invite-capability";
 import { peekSurveyCapability } from "../shared/security/survey-capability";
 
@@ -275,13 +276,10 @@ export function App({ routeRenderer = renderRoute }: AppProps) {
     const handleCapabilityChange = () => {
       setCapabilityRevision((current) => current + 1);
     };
-    window.addEventListener(
-      "cumuru:capability-change",
-      handleCapabilityChange,
-    );
+    window.addEventListener(CAPABILITY_CHANGE_EVENT, handleCapabilityChange);
     return () =>
       window.removeEventListener(
-        "cumuru:capability-change",
+        CAPABILITY_CHANGE_EVENT,
         handleCapabilityChange,
       );
   }, []);

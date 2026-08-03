@@ -169,6 +169,36 @@ func TestGroupValidationRequiresOneResponsibleAndUniqueClients(t *testing.T) {
 	}
 }
 
+func TestGroupValidationRejectsInvalidResidenceShapes(t *testing.T) {
+	t.Parallel()
+
+	base := stay.Visitor{
+		ClientID: "019f0000-0000-7000-8000-000000000001",
+		Role:     stay.VisitorResponsible, AgeBand: stay.Age25To34,
+		ResidenceCountry: "BR", ResidenceState: "BA", ResidenceCityCode: "2925509",
+	}
+	tests := []struct {
+		name   string
+		mutate func(*stay.Visitor)
+	}{
+		{name: "lowercase country", mutate: func(value *stay.Visitor) { value.ResidenceCountry = "br" }},
+		{name: "Brazil without state", mutate: func(value *stay.Visitor) { value.ResidenceState = "" }},
+		{name: "Brazil without city", mutate: func(value *stay.Visitor) { value.ResidenceCityCode = "" }},
+		{name: "Brazil non numeric city", mutate: func(value *stay.Visitor) { value.ResidenceCityCode = "abcdefg" }},
+		{name: "foreign country with state", mutate: func(value *stay.Visitor) { value.ResidenceCountry = "AR" }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			visitor := base
+			test.mutate(&visitor)
+			if err := stay.ValidateGroup([]stay.Visitor{visitor}); !errors.Is(err, stay.ErrInvalidGroup) {
+				t.Fatalf("ValidateGroup() error = %v, want %v", err, stay.ErrInvalidGroup)
+			}
+		})
+	}
+}
+
 func fixtureStay(status stay.Status) stay.Stay {
 	return stay.Stay{
 		Status:           status,

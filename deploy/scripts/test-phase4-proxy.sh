@@ -181,7 +181,7 @@ if (
 ) {
   throw new Error("forecast methodology bounds drifted");
 }
-if (document.info.version !== "0.5.3") {
+if (document.info.version !== "0.6.0") {
   throw new Error("phase 4 contract version drifted");
 }
 requireRef(

@@ -137,8 +137,12 @@ run_local_demo >"${CONCURRENT_FIRST}" 2>&1 &
 first_pid=$!
 run_local_demo >"${CONCURRENT_SECOND}" 2>&1 &
 second_pid=$!
-wait "${first_pid}"
-wait "${second_pid}"
+first_status=0
+second_status=0
+wait "${first_pid}" || first_status=$?
+wait "${second_pid}" || second_status=$?
+require_equal "${first_status}" "0" "first concurrent run status"
+require_equal "${second_status}" "0" "second concurrent run status"
 require_log_marker \
   "$(cat "${CONCURRENT_FIRST}")" \
   "LOCAL_DEMO_SEED=PASS"

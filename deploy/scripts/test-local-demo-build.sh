@@ -8,7 +8,7 @@ trap 'rm -f -- "${FAILURE_LOG}"' EXIT
 cd "${ROOT_DIR}"
 
 if VITE_LOCAL_DEMO_MODE=true \
-  VITE_LOCAL_DEMO_IDENTITY= \
+  VITE_LOCAL_DEMO_IDENTITY='' \
   npm --workspace @cumuru/web run build >"${FAILURE_LOG}" 2>&1; then
   echo "local demo build accepted a missing identity" >&2
   exit 1
@@ -28,13 +28,13 @@ grep --fixed-strings --quiet \
 VITE_LOCAL_DEMO_MODE=true \
 VITE_LOCAL_DEMO_IDENTITY=cumuru-local-platform-read \
   npm --workspace @cumuru/web run build
-rg --quiet --fixed-strings "cumuru-local-platform-read" apps/web/dist
-rg --quiet --fixed-strings "PROTOTYPE_ONLY" apps/web/dist
+grep -rqF "cumuru-local-platform-read" apps/web/dist
+grep -rqF "PROTOTYPE_ONLY" apps/web/dist
 
 VITE_LOCAL_DEMO_MODE=false \
-VITE_LOCAL_DEMO_IDENTITY= \
+VITE_LOCAL_DEMO_IDENTITY='' \
   npm --workspace @cumuru/web run build
-if rg --quiet --fixed-strings "cumuru-local-platform-read" apps/web/dist; then
+if grep -rqF "cumuru-local-platform-read" apps/web/dist; then
   echo "default web bundle contains the local demo identity" >&2
   exit 1
 fi

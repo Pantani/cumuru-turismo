@@ -27,11 +27,12 @@ describe("capability de convite", () => {
   it("remove token inválido sem mantê-lo em memória", () => {
     const replace = vi.fn();
 
-    captureInviteCapability(
+    const captured = captureInviteCapability(
       new URL("https://registro.invalid/convites/curto"),
       replace,
     );
 
+    expect(captured).toBe(false);
     expect(peekInviteCapability()).toBeNull();
     expect(replace).toHaveBeenCalledWith("/registro");
   });

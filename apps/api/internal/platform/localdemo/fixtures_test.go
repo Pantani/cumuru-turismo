@@ -76,7 +76,7 @@ func TestStayFixtureIdentityRollsHistoricalCohortsByMonth(
 	}
 	july := time.Date(2026, time.July, 29, 12, 0, 0, 0, location)
 	nextDay := july.AddDate(0, 0, 1)
-	august := july.AddDate(0, 1, 3)
+	august := time.Date(2026, time.August, 1, 12, 0, 0, 0, location)
 
 	first := stayFixtures(july, location)
 	sameMonth := stayFixtures(nextDay, location)
@@ -84,6 +84,23 @@ func TestStayFixtureIdentityRollsHistoricalCohortsByMonth(
 	assertFixtureCounts(t, first, sameMonth, nextMonth)
 	assertHistoricalFixtureKeys(t, first, sameMonth, nextMonth)
 	assertCurrentFixtureKeys(t, first, sameMonth, nextMonth)
+}
+
+func TestFixtureSummaryIsDerivedFromFoundationAndResponseFixtures(t *testing.T) {
+	t.Parallel()
+
+	foundation := foundationFixture()
+	foundation.Accommodations = foundation.Accommodations[:2]
+	fixtures := []stayFixture{
+		{responseCategory: "first_visit"},
+		{responseCategory: ""},
+		{responseCategory: "returning"},
+	}
+	got := fixtureSummary(foundation, fixtures)
+	want := "organizations=1 accommodations=2 responses=2"
+	if got != want {
+		t.Fatalf("fixtureSummary() = %q, want %q", got, want)
+	}
 }
 
 func TestCurrentStayFixturesCoverForecastHorizon(t *testing.T) {

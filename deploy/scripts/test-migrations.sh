@@ -11,6 +11,39 @@ COMPOSE=(
   --project-name "${PROJECT_NAME}"
 )
 MIGRATION_URL="postgres://cumuru_migration:cumuru-local-migration-only@postgres:5432/cumuru?sslmode=disable"
+GATE_LOCK_DIR="${TMPDIR:-/tmp}/cumuru-docker-subnet-172-30-1.lock"
+GATE_LOCK_HELD=false
+
+release_gate_lock() {
+  if test "${GATE_LOCK_HELD}" != "true"; then
+    return
+  fi
+  rm -f "${GATE_LOCK_DIR}/pid"
+  rmdir "${GATE_LOCK_DIR}" 2>/dev/null || true
+  GATE_LOCK_HELD=false
+}
+
+acquire_gate_lock() {
+  local deadline=$((SECONDS + 900))
+  local owner_pid=""
+  while ! mkdir "${GATE_LOCK_DIR}" 2>/dev/null; do
+    if test -f "${GATE_LOCK_DIR}/pid"; then
+      owner_pid="$(tr -cd '0-9' <"${GATE_LOCK_DIR}/pid")"
+      if test -n "${owner_pid}" && ! kill -0 "${owner_pid}" 2>/dev/null; then
+        rm -f "${GATE_LOCK_DIR}/pid"
+        rmdir "${GATE_LOCK_DIR}" 2>/dev/null || true
+        continue
+      fi
+    fi
+    if test "${SECONDS}" -ge "${deadline}"; then
+      echo "migration test timed out waiting for Docker subnet lock" >&2
+      return 1
+    fi
+    sleep 1
+  done
+  printf '%s\n' "$$" >"${GATE_LOCK_DIR}/pid"
+  GATE_LOCK_HELD=true
+}
 
 cleanup() {
   local primary_status=$?
@@ -18,6 +51,7 @@ cleanup() {
   set +e
   "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1
   local cleanup_status=$?
+  release_gate_lock
   set -e
   if test "${primary_status}" -ne 0; then
     exit "${primary_status}"
@@ -25,6 +59,8 @@ cleanup() {
   exit "${cleanup_status}"
 }
 trap cleanup EXIT
+
+acquire_gate_lock
 
 run_migrate() {
   "${COMPOSE[@]}" run --rm --no-deps migrate \
@@ -47,6 +83,15 @@ expect_psql_failure() {
   local description="$3"
   local statement="$4"
   if psql_as "${user}" "${password}" --command="${statement}" >/dev/null 2>&1; then
+    echo "${description}" >&2
+    exit 1
+  fi
+}
+
+expect_migrate_failure() {
+  local description="$1"
+  shift
+  if run_migrate "$@" >/dev/null 2>&1; then
     echo "${description}" >&2
     exit 1
   fi
@@ -1415,6 +1460,28 @@ psql_as cumuru_migration cumuru-local-migration-only \
     DELETE FROM platform.idempotency_records
     WHERE operation_key LIKE 'cleanupExpired%';
   "
+
+psql_as cumuru_migration cumuru-local-migration-only \
+  --command="UPDATE core.accommodations
+    SET name = 'Pousada Farol divergente'
+    WHERE id = '019fae11-0000-7000-8000-000000000001'"
+
+expect_migrate_failure \
+  "migration 000002 down unexpectedly accepted a divergent reserved fixture" \
+  down 1
+
+failed_down_state="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
+)"
+test "${failed_down_state}" = "1:true"
+
+run_migrate force 2
+psql_as cumuru_migration cumuru-local-migration-only \
+  --command="UPDATE core.accommodations
+    SET name = 'Pousada Farol Fictícia'
+    WHERE id = '019fae11-0000-7000-8000-000000000001'"
 
 run_migrate down 1
 down_to_baseline_state="$(

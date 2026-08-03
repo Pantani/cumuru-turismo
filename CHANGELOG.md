@@ -3,7 +3,7 @@
 Todas as mudanças relevantes do contrato e da plataforma são registradas neste
 arquivo.
 
-## 0.5.3 — em desenvolvimento
+## 0.6.0 — em desenvolvimento
 
 ### Adicionado
 
@@ -22,9 +22,27 @@ arquivo.
 
 - cadastro e edição local deixam de tratar Cadastur como pré-requisito ou campo
   editável; quando previamente provisionado, ele continua apenas informativo;
+- `PATCH /accommodations/{accommodation_id}` agora restringe `category` aos
+  códigos de `AccommodationInputCategory` e remove `cadastur_id` do request;
+  clientes existentes devem migrar categorias livres para o enum publicado e
+  deixar de enviar Cadastur em alterações genéricas;
 - o fluxo e a interface passam a separar explicitamente participação local de
   integração FNRH, que permanece bloqueada pelos gates externos da Fase 5 e
   exige credencial oficial própria de cada estabelecimento.
+
+### Corrigido
+
+- o contrato de residência exige país e UF em maiúsculas, UF e município IBGE
+  para o Brasil e ausência desses campos para outros países, em paridade com o
+  domínio Go e a validação React;
+- o rollback do onboarding falha fechado diante de fixtures reservadas
+  parciais ou divergentes, sem remover a coluna antes de restaurar os dados;
+- a CI executa o gate canônico `make ci`, instala Chromium explicitamente e o
+  Trivy grava artefatos com a identidade numérica do runner; a suíte de
+  migrations serializa o uso da subnet Docker fixa e recupera lock órfão;
+- o protótipo local distingue falha de banco de conflito de fixture, não inclui
+  conteúdo persistido em mensagens de teste e preserva o QR diante de URL
+  malformada.
 
 ### Segurança
 

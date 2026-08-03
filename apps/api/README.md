@@ -1,12 +1,16 @@
-# Backend da fundação
+# Backend modular
 
-Este módulo contém somente a fundação técnica da Fase 1. Ele não implementa
-estadias, questionários, analytics, dashboard ou FNRH.
+Este módulo contém a fundação e os domínios implementados das Fases 1 a 4:
+acesso OIDC, acomodações, estadias, questionários, analytics e publicação
+anônima. A integração FNRH continua bloqueada e não deve ser inferida da
+existência de adaptadores, contratos ou fixtures locais.
 
 ## Processos
 
 - `api`: API pública e listener operacional separado.
-- `worker`: worker de infraestrutura e métricas, ainda sem jobs de domínio.
+- `worker`: manutenção de infraestrutura, métricas e jobs internos de
+  reconciliação e publicação. Entrega externa da outbox e FNRH não fazem parte
+  do runtime concluído.
 
 Os binários encerram listeners, conexões e telemetria ao receber `SIGINT` ou
 `SIGTERM`.
@@ -42,12 +46,15 @@ HTTP_WRITE_TIMEOUT=15s
 HTTP_IDLE_TIMEOUT=60s
 ```
 
-## Superfícies
+## Superfícies da fundação
 
 - `GET /api/v1/platform/health`
 - `GET /api/v1/platform/readiness`
 - `GET /api/v1/platform/build` com `platform:read`
 - `GET /metrics` somente no listener operacional
+
+As demais operações implementadas são definidas em `contracts/openapi.yaml` e
+devem ser consumidas pelo cliente TypeScript gerado, sem contratos paralelos.
 
 Logs, spans e labels são formados por allowlist. Corpos, query strings,
 credenciais, cookies, tokens, sujeitos OIDC e identificadores de tenant não são

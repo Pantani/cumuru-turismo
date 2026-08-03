@@ -10,6 +10,7 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store/generated"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -64,6 +65,36 @@ func TestLocalDemoReadRequiresCanonicalCategoryAndExplicitCadastur(t *testing.T)
 	row.CadasturID = nil
 	if localAccommodationMatches(row, organizationID, fixture) {
 		t.Fatal("fixture verification accepted missing fake Cadastur")
+	}
+}
+
+func TestClassifyLocalOrganizationResult(t *testing.T) {
+	t.Parallel()
+
+	databaseFailure := errors.New("database unavailable canary")
+	tests := []struct {
+		name       string
+		actualName string
+		queryErr   error
+		want       error
+	}{
+		{name: "missing reserved row", queryErr: pgx.ErrNoRows, want: ErrLocalDemoConflict},
+		{name: "database failure", queryErr: databaseFailure, want: ErrUnavailable},
+		{name: "different reserved name", actualName: "Outro nome", want: ErrLocalDemoConflict},
+		{name: "matching reserved name", actualName: "Organização fictícia Cumuru"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			err := classifyLocalOrganizationResult(
+				test.actualName,
+				test.queryErr,
+				"Organização fictícia Cumuru",
+			)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("classifyLocalOrganizationResult() error = %v, want %v", err, test.want)
+			}
+		})
 	}
 }
 

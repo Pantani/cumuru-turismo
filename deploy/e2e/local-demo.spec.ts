@@ -292,11 +292,39 @@ test("percorre a jornada local sem persistir authorities", async ({
     const serviceWorkers = "serviceWorker" in navigator
       ? await navigator.serviceWorker.getRegistrations()
       : [];
+    const databaseNames = (await indexedDB.databases())
+      .map((database) => database.name)
+      .filter((name): name is string => name !== undefined)
+      .sort();
+    const indexedDatabases = await Promise.all(
+      databaseNames.map(async (name) => {
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open(name);
+          request.addEventListener("success", () => resolve(request.result));
+          request.addEventListener("error", () => reject(request.error));
+        });
+        const storeNames = Array.from(database.objectStoreNames).sort();
+        const stores = await Promise.all(
+          storeNames.map(async (storeName) => {
+            const transaction = database.transaction(storeName, "readonly");
+            const count = await new Promise<number>((resolve, reject) => {
+              const request = transaction.objectStore(storeName).count();
+              request.addEventListener("success", () => resolve(request.result));
+              request.addEventListener("error", () => reject(request.error));
+            });
+            return { count, name: storeName };
+          }),
+        );
+        database.close();
+        return { name, stores };
+      }),
+    );
     return {
       body: document.body.textContent ?? "",
       cachedRequests,
       caches: cacheNames,
       cookies: document.cookie,
+      indexedDatabases,
       local: Object.values(localStorage),
       serviceWorkerCount: serviceWorkers.length,
       session: Object.values(sessionStorage),
@@ -309,6 +337,15 @@ test("percorre a jornada local sem persistir authorities", async ({
   expect(storage.local).toEqual([]);
   expect(storage.session).toEqual([]);
   expect(storage.cookies).toBe("");
+  expect(storage.indexedDatabases).toEqual([
+    {
+      name: "cumuru-encrypted-drafts",
+      stores: [
+        { count: 0, name: "drafts" },
+        { count: 0, name: "keys" },
+      ],
+    },
+  ]);
   expect(storage.serviceWorkerCount).toBe(1);
   expect(storage.caches).toContain("cumuru-shell-v1");
   expect(storage.caches.every((name) => name === "cumuru-shell-v1")).toBe(true);

@@ -1,12 +1,8 @@
+import { notifyCapabilityChange } from "./capability-events";
+
 let surveyCapability: string | null = null;
 
 const capabilityPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-
-function notifyCapabilityChange() {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("cumuru:capability-change"));
-  }
-}
 
 export function setSurveyCapability(value: string | null) {
   surveyCapability =

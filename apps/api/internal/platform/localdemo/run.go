@@ -40,7 +40,7 @@ func Run(
 ) error {
 	location, err := time.LoadLocation("America/Bahia")
 	if err != nil {
-		return errors.New("local demo timezone unavailable")
+		return fmt.Errorf("local demo timezone unavailable: %w", err)
 	}
 	pools, err := openLocalDemoPools(ctx, cfg)
 	if err != nil {
@@ -96,26 +96,37 @@ func loadFixtures(
 		pools.provisioning,
 		cfg.DatabaseTimeout,
 	)
-	release, err := provisioner.AcquireRunLock(ctx)
-	if err != nil {
-		return errors.New("local demo lock failed")
-	}
-	result := loadFixturesLocked(
-		ctx,
-		cfg,
-		pools,
-		location,
-		output,
-		provisioner,
+	return executeWithRunLock(
+		func() (func() error, error) {
+			return provisioner.AcquireRunLock(ctx)
+		},
+		func() error {
+			return loadFixturesLocked(
+				ctx,
+				cfg,
+				pools,
+				location,
+				output,
+				provisioner,
+			)
+		},
 	)
+}
+
+func executeWithRunLock(
+	acquire func() (func() error, error),
+	work func() error,
+) error {
+	release, err := acquire()
+	if err != nil {
+		return fmt.Errorf("local demo lock failed: %w", err)
+	}
+	workErr := work()
 	releaseErr := release()
-	if result != nil {
-		return result
-	}
 	if releaseErr != nil {
-		return errors.New("local demo unlock failed")
+		releaseErr = fmt.Errorf("local demo unlock failed: %w", releaseErr)
 	}
-	return nil
+	return errors.Join(workErr, releaseErr)
 }
 
 func loadFixturesLocked(
@@ -126,8 +137,9 @@ func loadFixturesLocked(
 	output io.Writer,
 	provisioner *store.LocalDemoRepository,
 ) error {
-	if err := provisioner.EnsureFoundation(ctx, foundationFixture()); err != nil {
-		return errors.New("local demo foundation failed")
+	foundation := foundationFixture()
+	if err := provisioner.EnsureFoundation(ctx, foundation); err != nil {
+		return fmt.Errorf("local demo foundation failed: %w", err)
 	}
 	now := time.Now().UTC()
 	factory := fixtureServiceFactory(pools.application, cfg)
@@ -136,16 +148,17 @@ func loadFixturesLocked(
 		return err
 	}
 	if err := ensureQuestionnaire(ctx, currentServices.questionnaires); err != nil {
-		return errors.New("local demo questionnaire failed")
+		return fmt.Errorf("local demo questionnaire failed: %w", err)
 	}
 	if err := provisioner.EnsureMappings(ctx, mappingFixtures()); err != nil {
-		return errors.New("local demo mappings failed")
+		return fmt.Errorf("local demo mappings failed: %w", err)
 	}
+	fixtures := stayFixtures(now, location)
 	if err := loadStayFixtures(
 		ctx,
 		factory,
 		provisioner,
-		stayFixtures(now, location),
+		fixtures,
 	); err != nil {
 		return err
 	}
@@ -155,13 +168,34 @@ func loadFixturesLocked(
 		cfg,
 		civilDay(now, location),
 	); err != nil {
-		return errors.New("local demo analytics publication failed")
+		return fmt.Errorf("local demo analytics publication failed: %w", err)
 	}
-	_, err = fmt.Fprintln(
+	_, err = fmt.Fprintf(
 		output,
-		"LOCAL_DEMO_SEED=PASS organizations=1 accommodations=4 responses=20 source=go",
+		"LOCAL_DEMO_SEED=PASS %s source=go\n",
+		fixtureSummary(foundation, fixtures),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("local demo summary failed: %w", err)
+	}
+	return nil
+}
+
+func fixtureSummary(
+	foundation store.LocalDemoFoundation,
+	fixtures []stayFixture,
+) string {
+	responses := 0
+	for _, fixture := range fixtures {
+		if fixture.responseCategory != "" {
+			responses++
+		}
+	}
+	return fmt.Sprintf(
+		"organizations=1 accommodations=%d responses=%d",
+		len(foundation.Accommodations),
+		responses,
+	)
 }
 
 func loadStayFixtures(

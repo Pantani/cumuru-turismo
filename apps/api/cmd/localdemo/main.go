@@ -15,7 +15,13 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg, err := config.LoadLocalDemo(os.LookupEnv)
 	if err != nil {
-		logger.Error("local demo configuration rejected", "error_code", "local_demo_config_invalid")
+		logger.Error(
+			"local demo configuration rejected",
+			"error_code",
+			"local_demo_config_invalid",
+			"reason",
+			err.Error(),
+		)
 		os.Exit(1)
 	}
 	ctx, stop := signal.NotifyContext(
@@ -29,8 +35,8 @@ func main() {
 			"local demo failed",
 			"error_code",
 			"local_demo_failed",
-			"stage",
-			err.Error(),
+			"reason",
+			"bootstrap_failed",
 		)
 		os.Exit(1)
 	}

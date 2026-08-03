@@ -157,6 +157,7 @@ run_trivy() {
   local tar_name="$1"
   shift
   docker run --rm \
+    --user "$(id -u):$(id -g)" \
     --volume "${WORK_DIR}:/input:ro" \
     --volume "${WORK_DIR}/cache:/cache" \
     --volume "${OUTPUT_DIR}:/output" \

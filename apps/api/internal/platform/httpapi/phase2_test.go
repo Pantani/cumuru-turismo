@@ -208,8 +208,9 @@ func assertAccommodationOnboardingPrivacy(
 		}
 	}
 	if strings.Contains(logs, "accommodation-log-canary") ||
-		strings.Contains(logs, "aaaaaaaaaaaaaaaa") {
-		t.Fatalf("HTTP log leaked onboarding body or idempotency key: %s", logs)
+		strings.Contains(logs, "aaaaaaaaaaaaaaaa") ||
+		strings.Contains(logs, "onboard") {
+		t.Fatalf("HTTP log leaked onboarding body, token, or idempotency key: %s", logs)
 	}
 }
 

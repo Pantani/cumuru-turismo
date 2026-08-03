@@ -12,10 +12,12 @@ import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuthSessionProvider } from "../../shared/auth/AuthSession";
-import {
-  localDemoStayDates,
-  OperatorWorkspace,
-} from "./OperatorWorkspace";
+import { peekInviteCapability } from "../../shared/security/invite-capability";
+import { OperatorWorkspace } from "./OperatorWorkspace";
+
+const { toCanvas } = vi.hoisted(() => ({ toCanvas: vi.fn() }));
+
+vi.mock("qrcode", () => ({ default: { toCanvas } }));
 
 const uuid = "018f4e59-7a2a-7b12-8fd7-5d2e8dc99b80";
 
@@ -147,8 +149,13 @@ describe("workspace operacional", () => {
 
     const form = await revealOnboarding(user);
 
-    expect(within(form).getByLabelText("Nome do local")).toBeRequired();
-    expect(within(form).getByLabelText("Tipo")).toBeRequired();
+    const name = within(form).getByLabelText("Nome do local");
+    const category = within(form).getByLabelText("Tipo");
+    expect(name).toBeRequired();
+    expect(name).toHaveAccessibleDescription(
+      /não inclua CPF, CNPJ, documento, contato, chave FNRH ou outro dado pessoal/i,
+    );
+    expect(category).toBeRequired();
     expect(within(form).getByLabelText("Capacidade aproximada")).toBeRequired();
     expect(within(form).queryByLabelText(
       /CPF|CNPJ|Cadastur|FNRH|issuer|subject|tenant|organiza[cç][aã]o/i,
@@ -161,7 +168,16 @@ describe("workspace operacional", () => {
     )).toBeInTheDocument();
     await user.click(within(form).getByRole("button", { name: "Cadastrar local" }));
     expect(within(form).getByText("Informe o nome do local.")).toBeInTheDocument();
-    expect(within(form).getByLabelText("Nome do local")).toHaveFocus();
+    expect(name).toHaveFocus();
+    expect(name).toHaveAttribute("aria-invalid", "true");
+    expect(category).toHaveAttribute("aria-invalid", "true");
+
+    await user.type(name, "Local sem dados pessoais");
+
+    expect(name).toHaveAttribute("aria-invalid", "false");
+    expect(category).toHaveAttribute("aria-invalid", "true");
+    expect(within(form).queryByText("Informe o nome do local."))
+      .not.toBeInTheDocument();
   });
 
   it("mostra Cadastur apenas como informação existente e permite outro local", async () => {
@@ -188,6 +204,31 @@ describe("workspace operacional", () => {
     expect(screen.getByText("Cadastur: Não informado")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cadastrar outro local" }));
     expect(screen.getByRole("form", { name: "Cadastrar meu local" })).toBeInTheDocument();
+  });
+
+  it("mantém capacidade vazia sem enviar NaN ao input controlado", async () => {
+    const user = userEvent.setup();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      phase2Response({ items: [], next_cursor: null }),
+    );
+    renderWorkspace();
+    const form = await revealOnboarding(user);
+    await user.type(within(form).getByLabelText("Nome do local"), "Local Fictício");
+    await user.selectOptions(within(form).getByLabelText("Tipo"), "family_hosting");
+    const capacity = within(form).getByLabelText("Capacidade aproximada");
+
+    await user.clear(capacity);
+    await user.click(within(form).getByRole("button", { name: "Cadastrar local" }));
+
+    expect(capacity).toHaveValue(null);
+    expect(capacity).toHaveFocus();
+    expect(within(form).getByText(
+      "Informe uma capacidade entre 1 e 10.000 pessoas.",
+    )).toBeInTheDocument();
+    expect(consoleError.mock.calls.some((call) =>
+      call.some((value) => String(value).includes("NaN")),
+    )).toBe(false);
   });
 
   it.each([
@@ -332,16 +373,15 @@ describe("workspace operacional", () => {
   it("inicia a jornada local com datas da Bahia e aviso de privacidade", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-29T01:30:00Z"));
-    const expected = localDemoStayDates();
 
     renderWorkspace(true);
 
     const stays = screen.getByRole("region", { name: "Estadias" });
     expect(within(stays).getByLabelText("Chegada prevista")).toHaveValue(
-      expected.arrival,
+      "2026-07-28",
     );
     expect(within(stays).getByLabelText("Saída prevista")).toHaveValue(
-      expected.departure,
+      "2026-07-30",
     );
     const lifecycle = screen.getByRole("region", {
       name: "Grupo, convite e ciclo da estadia",
@@ -349,6 +389,61 @@ describe("workspace operacional", () => {
     expect(
       within(lifecycle).getByLabelText("Versão do aviso de privacidade"),
     ).toHaveValue("prototype-v1");
+  });
+
+  it.each([
+    ["sem padrão sensível", "https://registro.invalid/registro", "/acesso"],
+    ["com capability inválida", "https://registro.invalid/convites/curto", "/registro"],
+    ["com URL malformada", "url-malformada", "/acesso"],
+  ] as const)("preserva o convite quando a URL está %s", async (
+    _case,
+    inviteUrl,
+    expectedPath,
+  ) => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/acesso");
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      phase2Response(
+        {
+          invite_id: uuid,
+          url: inviteUrl,
+          expires_at: "2026-08-03T12:00:00Z",
+        },
+        {
+          status: 201,
+          headers: {
+            ETag: '"2"',
+            Location: `/api/v1/stays/${uuid}/invite`,
+            "Idempotency-Replayed": "false",
+          },
+        },
+      ),
+    );
+    const popstate = vi.fn();
+    window.addEventListener("popstate", popstate);
+    renderWorkspace(true);
+    const lifecycle = screen.getByRole("region", {
+      name: "Grupo, convite e ciclo da estadia",
+    });
+    await user.type(within(lifecycle).getByLabelText("ID da estadia"), uuid);
+    await user.type(within(lifecycle).getByLabelText("ETag da estadia"), '"1"');
+    await user.click(
+      within(lifecycle).getByRole("button", { name: "Criar QR de convite" }),
+    );
+    await user.click(await within(lifecycle).findByRole("button", {
+      name: "Abrir registro neste navegador",
+    }));
+
+    expect(peekInviteCapability()).toBeNull();
+    expect(popstate).not.toHaveBeenCalled();
+    expect(within(lifecycle).getByRole("heading", {
+      name: "Convite pronto para leitura local",
+    })).toBeInTheDocument();
+    expect(within(lifecycle).getByText(/QR permanece disponível/i))
+      .toBeInTheDocument();
+    expect(window.location.pathname).toBe(expectedPath);
+    window.removeEventListener("popstate", popstate);
+    window.history.replaceState(null, "", "/");
   });
 
   it("propaga a estadia criada e seu ETag para o passo de convite", async () => {

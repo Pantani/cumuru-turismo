@@ -209,6 +209,17 @@ function AccommodationCatalog({
   );
 }
 
+function withoutValidationIssue(
+  issues: ValidationIssue[],
+  field: string,
+) {
+  return issues.filter((issue) => issue.field !== field);
+}
+
+function describedBy(warningId: string, issueId: string, hasIssue: boolean) {
+  return hasIssue ? `${warningId} ${issueId}` : warningId;
+}
+
 interface AccommodationOnboardingFormProps {
   onCancel: () => void;
   onCreated: (accommodation: Accommodation, etag: string | null) => void;
@@ -221,7 +232,7 @@ function AccommodationOnboardingForm({
   const { client } = useAuthSession();
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
-  const [capacity, setCapacity] = useState(1);
+  const [capacity, setCapacity] = useState<number | "">(1);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [status, setStatus] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
@@ -242,10 +253,11 @@ function AccommodationOnboardingForm({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const numericCapacity = capacity === "" ? Number.NaN : capacity;
     const draft = {
       name,
       category,
-      capacity,
+      capacity: numericCapacity,
       client_submission_id: attempt.current.clientSubmissionId,
     };
     const validationIssues = validateCreateAccommodation(draft);
@@ -262,7 +274,7 @@ function AccommodationOnboardingForm({
     const body: CreateAccommodationRequest = {
       name: name.trim(),
       category: category as AccommodationInputCategory,
-      capacity,
+      capacity: numericCapacity,
       client_submission_id: attempt.current.clientSubmissionId,
     };
     setStatus("Cadastrar local: processando…");
@@ -300,6 +312,14 @@ function AccommodationOnboardingForm({
       <div className="field-grid">
         <div className="field-control">
           <label htmlFor="accommodation-name">Nome do local</label>
+          <p
+            id="accommodation-name-warning"
+            className="privacy-warning"
+            role="note"
+          >
+            Informe apenas o nome público do local. Não inclua CPF, CNPJ,
+            documento, contato, chave FNRH ou outro dado pessoal.
+          </p>
           <input
             id="accommodation-name"
             name="name"
@@ -307,8 +327,15 @@ function AccommodationOnboardingForm({
             required
             maxLength={200}
             aria-invalid={fieldIssue("name") !== undefined}
-            aria-describedby={fieldIssue("name") === undefined ? undefined : "accommodation-name-error"}
-            onChange={(event) => setName(event.target.value)}
+            aria-describedby={describedBy(
+              "accommodation-name-warning",
+              "accommodation-name-error",
+              fieldIssue("name") !== undefined,
+            )}
+            onChange={(event) => {
+              setName(event.target.value);
+              setIssues((current) => withoutValidationIssue(current, "name"));
+            }}
           />
           {fieldIssue("name") === undefined ? null : (
             <span id="accommodation-name-error" className="field-error">
@@ -325,7 +352,12 @@ function AccommodationOnboardingForm({
             required
             aria-invalid={fieldIssue("category") !== undefined}
             aria-describedby={fieldIssue("category") === undefined ? undefined : "accommodation-category-error"}
-            onChange={(event) => setCategory(event.target.value)}
+            onChange={(event) => {
+              setCategory(event.target.value);
+              setIssues((current) =>
+                withoutValidationIssue(current, "category"),
+              );
+            }}
           >
             <option value="">Selecione</option>
             {accommodationCategoryOptions.map((option) => (
@@ -354,7 +386,14 @@ function AccommodationOnboardingForm({
             required
             aria-invalid={fieldIssue("capacity") !== undefined}
             aria-describedby={fieldIssue("capacity") === undefined ? undefined : "accommodation-capacity-error"}
-            onChange={(event) => setCapacity(event.target.valueAsNumber)}
+            onChange={(event) => {
+              setCapacity(
+                event.target.value === "" ? "" : event.target.valueAsNumber,
+              );
+              setIssues((current) =>
+                withoutValidationIssue(current, "capacity"),
+              );
+            }}
           />
           {fieldIssue("capacity") === undefined ? null : (
             <span id="accommodation-capacity-error" className="field-error">
@@ -1199,10 +1238,25 @@ function GroupAndLifecycleOperations({
     if (inviteUrl === null) {
       return;
     }
-    captureInviteCapability(
-      new URL(inviteUrl),
+    let parsedInvite: URL;
+    try {
+      parsedInvite = new URL(inviteUrl);
+    } catch {
+      setProjection(
+        "Não foi possível abrir este convite neste navegador. O QR permanece disponível.",
+      );
+      return;
+    }
+    const captured = captureInviteCapability(
+      parsedInvite,
       (path) => window.history.replaceState(null, "", path),
     );
+    if (!captured) {
+      setProjection(
+        "Não foi possível abrir este convite neste navegador. O QR permanece disponível.",
+      );
+      return;
+    }
     discardInvite();
     window.dispatchEvent(new PopStateEvent("popstate"));
   }

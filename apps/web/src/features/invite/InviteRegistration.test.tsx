@@ -231,6 +231,43 @@ describe("registro por convite", () => {
     expect(window.location.pathname).toBe("/pesquisa");
   });
 
+  it("conclui sem oferecer pesquisa quando a resposta omite a capability", async () => {
+    const user = userEvent.setup();
+    captureCapability();
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(phase2Response(inviteContext))
+      .mockResolvedValueOnce(phase2Response(inviteContext))
+      .mockResolvedValueOnce(
+        phase2Response(
+          {
+            submission_id: "0190aabb-7ccd-7eef-8abc-001122334455",
+            status: "accepted",
+          },
+          {
+            headers: {
+              ETag: '"1"',
+              "Idempotency-Replayed": "false",
+            },
+          },
+        ),
+      );
+    render(<RegistrationPage />);
+    await screen.findByRole("heading", {
+      name: "Confirme o grupo da estadia",
+    });
+    await completeBrazilResidence(user);
+    await user.click(screen.getByRole("button", { name: "Enviar grupo" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Registro concluído" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Responder pesquisa voluntária" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/pesquisa voluntária não foi disponibilizada/i))
+      .toBeInTheDocument();
+  });
+
   it("expurga rascunho, chave e capability quando a revalidação retorna 404", async () => {
     const user = userEvent.setup();
     captureCapability();

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Pantani/cumuru/apps/api/internal/access"
 	"github.com/google/uuid"
@@ -255,7 +256,7 @@ func hasAccommodationPatch(patch UpdatePatch) bool {
 }
 
 func validRequiredTextPatch(set bool, value string, maximum int) bool {
-	return !set || (strings.TrimSpace(value) != "" && len(value) <= maximum)
+	return !set || (strings.TrimSpace(value) != "" && validTextLength(value, maximum))
 }
 
 func validOptionalFields(patch UpdatePatch) bool {
@@ -267,7 +268,7 @@ func validOptionalFields(patch UpdatePatch) bool {
 
 func validCreate(command CreateCommand) bool {
 	return strings.TrimSpace(command.Name) != "" &&
-		len(command.Name) <= 200 &&
+		validTextLength(command.Name, 200) &&
 		command.Category.ValidInput() &&
 		command.Capacity >= 1 && command.Capacity <= 10000 &&
 		command.ClientSubmissionID.Version() == 7 &&
@@ -277,7 +278,11 @@ func validCreate(command CreateCommand) bool {
 }
 
 func validNullableText(set bool, value *string, maximum int) bool {
-	return !set || value == nil || len(*value) <= maximum
+	return !set || value == nil || validTextLength(*value, maximum)
+}
+
+func validTextLength(value string, maximum int) bool {
+	return utf8.ValidString(value) && utf8.RuneCountInString(value) <= maximum
 }
 
 func validNullableCapacity(set bool, value *int32) bool {

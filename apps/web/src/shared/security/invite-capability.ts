@@ -1,15 +1,11 @@
+import { notifyCapabilityChange } from "./capability-events";
+
 const capabilityPattern = /^[A-Za-z0-9_-]{64,128}$/;
 const invitePathPattern = /^\/convites\/([^/]+)\/?$/i;
 const sensitiveInvitePathPattern = /^\/convites(?:\/|$)/i;
 const queryKeys = new Set(["convite", "invite", "invite_token", "token"]);
 
 let inviteCapability: string | null = null;
-
-function notifyCapabilityChange() {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("cumuru:capability-change"));
-  }
-}
 
 function capabilityFromPath(pathname: string) {
   const candidate = invitePathPattern.exec(pathname)?.[1];
@@ -69,7 +65,7 @@ export function captureInviteCapability(
   inviteCapability = capability;
   replace(scrubbedPath(url, cameFromInvitePath, sensitiveKeys));
   notifyCapabilityChange();
-  return true;
+  return capability !== null;
 }
 
 export function peekInviteCapability() {

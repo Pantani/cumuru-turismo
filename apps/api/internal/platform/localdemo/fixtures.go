@@ -15,6 +15,7 @@ const (
 	issuer               = "https://oidc.invalid/local"
 	operatorSubject      = "fixture-operator"
 	privacyNoticeVersion = "prototype-v1"
+	firstVisitMetricCode = "first_visit_share"
 )
 
 var (
@@ -60,10 +61,7 @@ func localAccommodation(
 	cadasturID *string,
 ) store.LocalDemoAccommodation {
 	return store.LocalDemoAccommodation{
-		ID: uuid.MustParse(fmt.Sprintf(
-			"019fae11-0000-7000-8000-%012x",
-			index,
-		)),
+		ID:             localAccommodationID(index),
 		Name:           name,
 		Category:       category,
 		CadasturID:     cadasturID,
@@ -75,7 +73,7 @@ func localAccommodation(
 func questionnaireDefinition() questionnaire.Definition {
 	introduction := "Participação voluntária com dados fictícios e finalidade demonstrativa."
 	help := "Escolha somente uma opção. Não informe dados pessoais."
-	analyticsKey := "first_visit_share"
+	analyticsKey := firstVisitMetricCode
 	minimumCell := int32(10)
 	return questionnaire.Definition{
 		Title:                "Pesquisa turística de demonstração",
@@ -127,16 +125,20 @@ func questionnaireDefinition() questionnaire.Definition {
 func mappingFixtures() []store.LocalDemoMetricMapping {
 	result := make([]store.LocalDemoMetricMapping, 0, 2)
 	for _, category := range []string{"first_visit", "returning"} {
-		result = append(result, store.LocalDemoMetricMapping{
-			PrivacyPolicyVersion:   privacyNoticeVersion,
-			MetricCode:             "first_visit_share",
-			QuestionnaireVersionID: versionID,
-			QuestionID:             questionID,
-			SourceValue:            category,
-			CategoryCode:           category,
-		})
+		result = append(result, metricMapping(category))
 	}
 	return result
+}
+
+func metricMapping(category string) store.LocalDemoMetricMapping {
+	return store.LocalDemoMetricMapping{
+		PrivacyPolicyVersion:   privacyNoticeVersion,
+		MetricCode:             firstVisitMetricCode,
+		QuestionnaireVersionID: versionID,
+		QuestionID:             questionID,
+		SourceValue:            category,
+		CategoryCode:           category,
+	}
 }
 
 func stayFixtures(now time.Time, location *time.Location) []stayFixture {
