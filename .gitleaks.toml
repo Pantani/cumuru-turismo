@@ -1,0 +1,8 @@
+title = "Cumuru secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated SBOM evidence is scanned separately from source files"
+paths = ['''^artifacts/sbom/''']
