@@ -160,7 +160,7 @@ func (d Dependencies) requireScope(scope string, next http.Handler) http.Handler
 			writeProblem(writer, request, http.StatusUnauthorized, "unauthorized", "Credencial inválida ou ausente")
 			return
 		}
-		principal, err := d.Verifier.Verify(request.Context(), token)
+		principal, err := d.verifyCredential(request, token)
 		if err != nil {
 			writeProblem(writer, request, http.StatusUnauthorized, "unauthorized", "Credencial inválida ou ausente")
 			return
@@ -181,7 +181,7 @@ func (d Dependencies) requireAnyScope(scopes []string, next http.Handler) http.H
 			writeProblem(writer, request, http.StatusUnauthorized, "unauthorized", "Credencial inválida ou ausente")
 			return
 		}
-		principal, err := d.Verifier.Verify(request.Context(), token)
+		principal, err := d.verifyCredential(request, token)
 		if err != nil {
 			writeProblem(writer, request, http.StatusUnauthorized, "unauthorized", "Credencial inválida ou ausente")
 			return
@@ -193,6 +193,20 @@ func (d Dependencies) requireAnyScope(scopes []string, next http.Handler) http.H
 		ctx := context.WithValue(request.Context(), principalKey, principal)
 		next.ServeHTTP(writer, request.WithContext(ctx))
 	})
+}
+
+func (d Dependencies) verifyCredential(
+	request *http.Request,
+	token string,
+) (access.Principal, error) {
+	fixtureVerifier, fixture := d.Verifier.(access.FixtureCredentialVerifier)
+	if fixture && fixtureVerifier.IsFixtureCredential(token) {
+		address, err := clientAddress(request, d.TrustedProxyCIDRs)
+		if err != nil || !address.IsLoopback() {
+			return access.Principal{}, access.ErrInvalidToken
+		}
+	}
+	return d.Verifier.Verify(request.Context(), token)
 }
 
 func hasAnyScope(principal access.Principal, scopes []string) bool {

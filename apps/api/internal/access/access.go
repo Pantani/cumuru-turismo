@@ -45,6 +45,11 @@ type Verifier interface {
 	Verify(context.Context, string) (Principal, error)
 }
 
+type FixtureCredentialVerifier interface {
+	Verifier
+	IsFixtureCredential(string) bool
+}
+
 type developmentFake struct {
 	issuer string
 }
@@ -61,34 +66,35 @@ func NewDevelopmentFake(environment, issuer string) (Verifier, error) {
 }
 
 func (f *developmentFake) Verify(_ context.Context, token string) (Principal, error) {
+	subject, scopes, ok := developmentFixture(token)
+	if !ok {
+		return Principal{}, ErrInvalidToken
+	}
+	return NewPrincipal(f.issuer, subject, scopes), nil
+}
+
+func (f *developmentFake) IsFixtureCredential(token string) bool {
+	_, _, ok := developmentFixture(token)
+	return ok
+}
+
+func developmentFixture(token string) (string, []string, bool) {
 	switch token {
 	case DevelopmentPlatformToken:
-		return NewPrincipal(f.issuer, "fixture-operator", []string{
+		return "fixture-operator", []string{
 			"platform:read",
 			"accommodations:onboard",
 			"accommodations:manage",
 			"stays:read:own",
 			"stays:write",
-		}), nil
+		}, true
 	case DevelopmentQuestionnaireEditorToken:
-		return NewPrincipal(
-			f.issuer,
-			"fixture-questionnaire-editor",
-			[]string{"questionnaires:manage"},
-		), nil
+		return "fixture-questionnaire-editor", []string{"questionnaires:manage"}, true
 	case DevelopmentQuestionnaireReviewToken:
-		return NewPrincipal(
-			f.issuer,
-			"fixture-questionnaire-reviewer",
-			[]string{"questionnaires:approve"},
-		), nil
+		return "fixture-questionnaire-reviewer", []string{"questionnaires:approve"}, true
 	case DevelopmentAnalyticsQualityToken:
-		return NewPrincipal(
-			f.issuer,
-			"fixture-analytics-quality",
-			[]string{"analytics:read:internal"},
-		), nil
+		return "fixture-analytics-quality", []string{"analytics:read:internal"}, true
 	default:
-		return Principal{}, ErrInvalidToken
+		return "", nil, false
 	}
 }

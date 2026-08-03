@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -65,6 +66,90 @@ func TestOperationalEndpoints(t *testing.T) {
 			t.Parallel()
 			assertOperationalEndpoint(t, handler, tt)
 		})
+	}
+}
+
+func TestDevelopmentFixtureCredentialRequiresResolvedLoopback(t *testing.T) {
+	t.Parallel()
+
+	verifier, err := access.NewDevelopmentFake("test", "https://oidc.invalid/local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	trusted := netip.MustParsePrefix("172.30.0.10/32")
+	handler, _ := httpapi.New(httpapi.Dependencies{
+		Verifier:          verifier,
+		TrustedProxyCIDRs: []netip.Prefix{trusted},
+		Logger:            slog.New(slog.DiscardHandler),
+		Registry:          prometheus.NewRegistry(),
+		Tracer:            noop.NewTracerProvider().Tracer("test"),
+		Build: httpapi.BuildInfo{
+			Version: "0.2.0", Revision: testBuildRevision,
+			BuiltAt: time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC),
+		},
+	})
+	tests := []fixtureCredentialExpectation{
+		{name: "direct IPv4 loopback", remote: "127.0.0.1:4312", want: http.StatusOK},
+		{name: "direct IPv6 loopback", remote: "[::1]:4312", want: http.StatusOK},
+		{name: "direct remote", remote: "203.0.113.9:4312", want: http.StatusUnauthorized},
+		{
+			name: "untrusted spoofed loopback", remote: "203.0.113.9:4312",
+			forwarded: "127.0.0.1", realIP: "127.0.0.1", want: http.StatusUnauthorized,
+		},
+		{
+			name: "trusted proxy loopback", remote: "172.30.0.10:4312",
+			forwarded: "127.0.0.1", realIP: "127.0.0.1", want: http.StatusOK,
+		},
+		{
+			name: "trusted proxy real IP only", remote: "172.30.0.10:4312",
+			realIP: "::1", want: http.StatusOK,
+		},
+		{
+			name: "trusted proxy remote", remote: "172.30.0.10:4312",
+			forwarded: "198.51.100.44", realIP: "198.51.100.44",
+			want: http.StatusUnauthorized,
+		},
+		{
+			name: "trusted proxy disagreement", remote: "172.30.0.10:4312",
+			forwarded: "127.0.0.1", realIP: "198.51.100.44",
+			want: http.StatusUnauthorized,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assertFixtureCredentialExpectation(t, handler, tt)
+		})
+	}
+}
+
+type fixtureCredentialExpectation struct {
+	name      string
+	remote    string
+	forwarded string
+	realIP    string
+	want      int
+}
+
+func assertFixtureCredentialExpectation(
+	t *testing.T,
+	handler http.Handler,
+	want fixtureCredentialExpectation,
+) {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/platform/build", nil)
+	request.RemoteAddr = want.remote
+	request.Header.Set("Authorization", "Bearer "+access.DevelopmentPlatformToken)
+	if want.forwarded != "" {
+		request.Header.Set("X-Forwarded-For", want.forwarded)
+	}
+	if want.realIP != "" {
+		request.Header.Set("X-Real-IP", want.realIP)
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != want.want {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, want.want, recorder.Body)
 	}
 }
 

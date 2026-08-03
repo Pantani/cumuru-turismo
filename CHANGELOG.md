@@ -48,6 +48,9 @@ arquivo.
 
 - o onboarding rejeita identificadores de organização, CPF, CNPJ, Cadastur,
   contato, senha gov.br, chave FNRH e qualquer texto livre fora do contrato;
+- credenciais do OIDC fictício são aceitas pela API somente quando o endereço
+  de cliente resolvido é loopback; cabeçalhos de proxy não confiáveis são
+  ignorados e valores confiáveis divergentes falham fechados;
 - criação, replay idempotente, auditoria e outbox são persistidos na mesma
   transação, sem registrar credenciais ou dados pessoais em logs.
 

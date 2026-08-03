@@ -99,6 +99,80 @@ func TestRateSubjectsSeparateForwardedClients(t *testing.T) {
 	}
 }
 
+func TestRateSubjectAcceptsRealIPOnlyFromTrustedProxy(t *testing.T) {
+	t.Parallel()
+
+	trusted := []netip.Prefix{netip.MustParsePrefix("10.20.30.40/32")}
+	tests := []proxyHeaderExpectation{
+		{
+			name: "trusted real IP", remote: "10.20.30.40:4321",
+			realIP: "198.51.100.44", want: "198.51.100.0/24",
+		},
+		{
+			name: "trusted matching headers", remote: "10.20.30.40:4321",
+			forwarded: []string{"198.51.100.44"}, realIP: "198.51.100.44",
+			want: "198.51.100.0/24",
+		},
+		{
+			name: "trusted mismatched headers", remote: "10.20.30.40:4321",
+			forwarded: []string{"198.51.100.44"}, realIP: "203.0.113.9", wantErr: true,
+		},
+		{
+			name: "trusted comma-separated forwarded header", remote: "10.20.30.40:4321",
+			forwarded: []string{"203.0.113.9, 198.51.100.44"}, wantErr: true,
+		},
+		{
+			name: "trusted repeated forwarded header", remote: "10.20.30.40:4321",
+			forwarded: []string{"203.0.113.9", "198.51.100.44"}, wantErr: true,
+		},
+		{
+			name: "untrusted ignores spoofed real IP", remote: "203.0.113.123:4321",
+			realIP: "127.0.0.1", want: "203.0.113.0/24",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assertProxyHeaderExpectation(t, trusted, tt)
+		})
+	}
+}
+
+type proxyHeaderExpectation struct {
+	name      string
+	remote    string
+	forwarded []string
+	realIP    string
+	want      string
+	wantErr   bool
+}
+
+func assertProxyHeaderExpectation(
+	t *testing.T,
+	trusted []netip.Prefix,
+	want proxyHeaderExpectation,
+) {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.RemoteAddr = want.remote
+	for _, forwarded := range want.forwarded {
+		request.Header.Add("X-Forwarded-For", forwarded)
+	}
+	if want.realIP != "" {
+		request.Header.Set("X-Real-IP", want.realIP)
+	}
+	got, err := rateSubject(request, trusted)
+	if want.wantErr {
+		if err == nil {
+			t.Fatalf("rateSubject() = %q, want error", got)
+		}
+		return
+	}
+	if err != nil || got != want.want {
+		t.Fatalf("rateSubject() = %q, %v; want %q, nil", got, err, want.want)
+	}
+}
+
 func assertRateSubject(
 	t *testing.T,
 	remote string,

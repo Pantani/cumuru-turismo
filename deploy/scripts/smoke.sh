@@ -3,7 +3,7 @@ set -euo pipefail
 
 WEB_BASE_URL="${WEB_BASE_URL:-http://127.0.0.1:4173}"
 API_BASE_URL="${API_BASE_URL:-${WEB_BASE_URL}/api/v1}"
-LOCAL_FAKE_OIDC_TOKEN="${LOCAL_FAKE_OIDC_TOKEN:-cumuru-local-platform-read}"
+LOCAL_FAKE_OIDC_TOKEN="${LOCAL_FAKE_OIDC_TOKEN:-}"
 SMOKE_PROFILE="${SMOKE_PROFILE:-base}"
 
 case "${SMOKE_PROFILE}" in
@@ -13,6 +13,12 @@ case "${SMOKE_PROFILE}" in
     exit 2
     ;;
 esac
+
+if test "${SMOKE_PROFILE}" = "local-demo" &&
+  test -z "${LOCAL_FAKE_OIDC_TOKEN}"; then
+  echo "LOCAL_FAKE_OIDC_TOKEN is required for the local-demo profile" >&2
+  exit 2
+fi
 
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/cumuru-local-smoke.XXXXXX")"
 trap 'rm -rf -- "${temporary_dir}"' EXIT
@@ -57,6 +63,8 @@ request_json \
   "/public/preferences?period=last_complete_month" \
   "${temporary_dir}/preferences.json"
 request_json "/public/methodology" "${temporary_dir}/methodology.json"
+# The questionnaire is no-store with a revision ETag, so it is intentionally
+# excluded from the public analytics cache-header assertions below.
 curl --fail --silent --show-error \
   --output "${temporary_dir}/questionnaire.json" \
   "${API_BASE_URL}/questionnaires/tourism_profile/active"

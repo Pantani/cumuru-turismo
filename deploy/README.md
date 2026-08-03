@@ -50,7 +50,8 @@ deliberadamente locais e não podem ser reutilizadas em outro ambiente.
 - `scripts/test-complexity.sh`: prova o limiar 10 em fixtures temporárias,
   incluindo `_test.go`, e mede Go e todo código web próprio com máximo 9;
 - `scripts/smoke.sh`: testa API, web, proxy e uma rota autenticada da Fase 2
-  com o fake OIDC local depois de `make up`.
+  com o fake OIDC local depois de `make up`; ao invocar diretamente o perfil
+  `local-demo`, exige `LOCAL_FAKE_OIDC_TOKEN` explícito.
 
 O Nginx serve deep links da SPA e é a única entrada host para `/api/v1/**`; a
 API não publica porta. O proxy mantém access log desligado, descarta error log
@@ -58,6 +59,10 @@ na location `/api/v1/invites/**`, remove `Referer` e `Forwarded`, e sobrescreve
 `X-Forwarded-For`/`X-Real-IP` com `$remote_addr`. O IP estático do web é
 `172.30.0.10`, exatamente o único CIDR confiável local (`/32`). Web e
 PostgreSQL publicam somente em `127.0.0.1`.
+Quando `LOCAL_DEMO_PROXY_LOOPBACK=true`, esse bind é uma restrição de segurança:
+a porta web deve permanecer em `127.0.0.1` e não pode ser publicada em
+`0.0.0.0` nem em outra interface acessível pelo host, pois o proxy renderizado
+confia a identidade fixture exclusivamente ao caminho loopback.
 
 No modo nativo, API e Vite usam somente os loopbacks
 `127.0.0.1/32,::1/128`. `COMPOSE_TRUSTED_PROXY_CIDRS` é separado de

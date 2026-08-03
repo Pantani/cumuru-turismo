@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
@@ -16,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type servicesAt func(time.Time) (fixtureServices, error)
+type servicesAt func(time.Time) fixtureServices
 
 type analyticsPublisher interface {
 	Reconcile(
@@ -142,11 +143,11 @@ func loadFixturesLocked(
 		return fmt.Errorf("local demo foundation failed: %w", err)
 	}
 	now := time.Now().UTC()
-	factory := fixtureServiceFactory(pools.application, cfg)
-	currentServices, err := factory(now)
+	factory, err := fixtureServiceFactory(pools.application, cfg, now)
 	if err != nil {
-		return err
+		return fmt.Errorf("local demo fixture services failed: %w", err)
 	}
+	currentServices := factory(now)
 	if err := ensureQuestionnaire(ctx, currentServices.questionnaires); err != nil {
 		return fmt.Errorf("local demo questionnaire failed: %w", err)
 	}
@@ -205,11 +206,8 @@ func loadStayFixtures(
 	fixtures []stayFixture,
 ) error {
 	for _, fixture := range fixtures {
-		services, serviceErr := factory(fixture.clock)
-		if serviceErr != nil {
-			return serviceErr
-		}
-		if serviceErr = loadStayFixture(
+		services := factory(fixture.clock)
+		if serviceErr := loadStayFixture(
 			ctx,
 			services,
 			provisioner,
@@ -240,29 +238,36 @@ func (p localDemoPools) close() {
 func fixtureServiceFactory(
 	pool *pgxpool.Pool,
 	cfg config.Config,
-) servicesAt {
-	return func(now time.Time) (fixtureServices, error) {
-		platformStore, err := store.NewPhase3(
-			pool,
-			cfg.DatabaseTimeout,
-			cfg.Phase2,
-			cfg.Phase3,
-			store.WithCurrentTime(func() time.Time { return now }),
-		)
-		if err != nil {
-			return fixtureServices{}, err
-		}
-		stayRepository, err := store.NewStayRepository(platformStore)
-		if err != nil {
-			return fixtureServices{}, err
-		}
-		return fixtureServices{
-			stays: stay.NewService(stayRepository),
-			questionnaires: questionnaire.NewService(
-				store.NewQuestionnaireRepository(platformStore),
-			),
-		}, nil
+	initialTime time.Time,
+) (servicesAt, error) {
+	var currentTime atomic.Pointer[time.Time]
+	currentTime.Store(&initialTime)
+	platformStore, err := store.NewPhase3(
+		pool,
+		cfg.DatabaseTimeout,
+		cfg.Phase2,
+		cfg.Phase3,
+		store.WithCurrentTime(func() time.Time { return *currentTime.Load() }),
+	)
+	if err != nil {
+		return nil, err
 	}
+	stayRepository, err := store.NewStayRepository(platformStore)
+	if err != nil {
+		return nil, err
+	}
+	services := fixtureServices{
+		stays: stay.NewService(stayRepository),
+		questionnaires: questionnaire.NewService(
+			store.NewQuestionnaireRepository(platformStore),
+		),
+	}
+	// The run lock serializes fixture journeys; atomic storage also keeps the
+	// callback race-safe if a future caller observes the clock concurrently.
+	return func(now time.Time) fixtureServices {
+		currentTime.Store(&now)
+		return services
+	}, nil
 }
 
 func publishAnalytics(

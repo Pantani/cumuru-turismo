@@ -46,15 +46,28 @@ O build web do overlay local recebe um sinal de modo demo e o token público do
 verificador fake já existente. Esse identificador público e não institucional
 existe somente no bundle da variante local; o build padrão o rejeita. O
 `AuthSessionProvider` só inicia a sessão quando sinal, identificador e host
-loopback concordam. O estado autenticado permanece em memória e não existe
-formulário de login, conta local, cookie, refresh token, fallback OIDC,
-`localStorage`, `sessionStorage` ou IndexedDB. Recarregar a variante local
-recria a sessão fictícia por decisão de usabilidade, sem transformá-la em
-credencial válida fora de `local|test`. A interface mostra permanentemente os
-marcadores “Sessão fictícia local” e `PROTOTYPE_ONLY` enquanto essa sessão
-estiver ativa. Builds sem o sinal e o identificador, servidos em host não
-loopback ou com configuração parcial continuam fail-closed, e o bundle de
-produção não contém a fixture.
+loopback concordam. A API também reconhece credenciais do verificador fake e
+só as valida quando o endereço de cliente resolvido é loopback. Cabeçalhos
+`X-Forwarded-For` e `X-Real-IP` contam somente quando `RemoteAddr` pertence a
+um CIDR de proxy confiável, devem apontar para o mesmo endereço quando ambos
+existem e qualquer ambiguidade falha fechada. Credenciais OIDC institucionais
+não passam por essa restrição específica da fixture. Como o Docker Desktop
+traduz o bind `127.0.0.1` para o gateway da bridge antes do Nginx, a imagem web
+da variante local fixa ambos os headers em `127.0.0.1`; esse build só é aceito
+quando o modo web local e o modo de proxy loopback estão habilitados juntos. A
+imagem padrão continua encaminhando `$remote_addr`.
+
+O estado autenticado permanece em memória e não existe formulário de login,
+conta local, cookie, refresh token ou fallback OIDC. Sessão e capabilities não
+são gravadas em `localStorage`, `sessionStorage` ou IndexedDB. O subsistema de
+rascunhos offline pode inicializar seu banco técnico vazio, mas a jornada local
+deve terminar sem payload ou chave nas stores de rascunho. Recarregar a
+variante local recria a sessão fictícia por decisão de usabilidade, sem
+transformá-la em credencial válida fora de `local|test`. A interface mostra
+permanentemente os marcadores “Sessão fictícia local” e `PROTOTYPE_ONLY`
+enquanto essa sessão estiver ativa. Builds sem o sinal e o identificador,
+servidos em host não loopback ou com configuração parcial continuam
+fail-closed, e o bundle de produção não contém a fixture.
 
 A navegação mostra registro e pesquisa somente quando as capabilities
 correspondentes existem. A jornada do operador compartilha a acomodação e a
@@ -103,6 +116,8 @@ fora do namespace reservado permanecem intocados.
 - testes full-stack canônicos continuam isolados do seed local porque não usam
   o overlay;
 - a separação entre OIDC real e fake permanece aplicada no backend e no build;
+- copiar a credencial pública do bundle local não autoriza requisições vindas
+  de endereço não loopback, inclusive por cabeçalho de proxy falsificado;
 - capabilities continuam necessárias e não podem ser obtidas abrindo rotas
   fora de ordem;
 - o ambiente local não representa dados oficiais, produção, homologação ou

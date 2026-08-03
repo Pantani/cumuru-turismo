@@ -41,17 +41,25 @@ func (d Dependencies) inviteCORS(next http.Handler) http.Handler {
 }
 
 func rateSubject(request *http.Request, trustedProxies []netip.Prefix) (string, error) {
-	address, err := remoteAddress(request)
+	address, err := clientAddress(request, trustedProxies)
 	if err != nil {
 		return "", err
 	}
-	if proxyContains(trustedProxies, address) {
-		address, err = forwardedAddress(request)
-		if err != nil {
-			return "", err
-		}
-	}
 	return generalizedAddress(address), nil
+}
+
+func clientAddress(
+	request *http.Request,
+	trustedProxies []netip.Prefix,
+) (netip.Addr, error) {
+	address, err := remoteAddress(request)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	if proxyContains(trustedProxies, address) {
+		return forwardedAddress(request)
+	}
+	return address, nil
 }
 
 func remoteAddress(request *http.Request) (netip.Addr, error) {
@@ -63,11 +71,42 @@ func remoteAddress(request *http.Request) (netip.Addr, error) {
 }
 
 func forwardedAddress(request *http.Request) (netip.Addr, error) {
-	values := request.Header.Values("X-Forwarded-For")
-	if len(values) != 1 || strings.Contains(values[0], ",") {
+	forwarded, hasForwarded, err := proxyHeaderAddress(request, "X-Forwarded-For")
+	if err != nil {
 		return netip.Addr{}, errInvalidClientAddress
 	}
-	return parseAddress(values[0])
+	realIP, hasRealIP, err := proxyHeaderAddress(request, "X-Real-IP")
+	if err != nil {
+		return netip.Addr{}, errInvalidClientAddress
+	}
+	if !hasForwarded && !hasRealIP {
+		return netip.Addr{}, errInvalidClientAddress
+	}
+	if hasForwarded && hasRealIP && forwarded != realIP {
+		return netip.Addr{}, errInvalidClientAddress
+	}
+	if hasForwarded {
+		return forwarded, nil
+	}
+	return realIP, nil
+}
+
+func proxyHeaderAddress(
+	request *http.Request,
+	name string,
+) (netip.Addr, bool, error) {
+	values := request.Header.Values(name)
+	if len(values) == 0 {
+		return netip.Addr{}, false, nil
+	}
+	if len(values) != 1 || strings.Contains(values[0], ",") {
+		return netip.Addr{}, false, errInvalidClientAddress
+	}
+	address, err := parseAddress(values[0])
+	if err != nil {
+		return netip.Addr{}, false, err
+	}
+	return address, true, nil
 }
 
 func parseAddress(value string) (netip.Addr, error) {
