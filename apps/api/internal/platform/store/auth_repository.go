@@ -65,16 +65,42 @@ func (s *Store) Authenticate(
 	if normalized == "" || access.ValidatePasswordLength(password) != nil {
 		return SessionGrant{}, ErrAuthRejected
 	}
+	return s.commitAttempt(ctx, normalized, password)
+}
+
+// commitAttempt commits the transaction even when the credential is refused.
+// registerFailure writes the counter that arms the lockout, and returning the
+// rejection from inside the transaction would roll that write back: the
+// counter would never reach the limit, locked_until would never be set, and
+// the local password — the one credential with no federal issuer behind it —
+// would have nothing left against an online guessing run.
+func (s *Store) commitAttempt(
+	ctx context.Context,
+	email string,
+	password string,
+) (SessionGrant, error) {
 	var grant SessionGrant
+	var rejection error
 	err := s.inTransaction(ctx, func(queries generated.Querier) error {
 		var workErr error
-		grant, workErr = s.openSession(ctx, queries, normalized, password)
+		grant, workErr = s.openSession(ctx, queries, email, password)
+		if isCredentialRejection(workErr) {
+			rejection = workErr
+			return nil
+		}
 		return workErr
 	})
 	if err != nil {
 		return SessionGrant{}, err
 	}
-	return grant, nil
+	return grant, rejection
+}
+
+// isCredentialRejection separates a decided answer about the credential, which
+// the caller must keep, from an infrastructure failure, which must still abort
+// the transaction.
+func isCredentialRejection(err error) bool {
+	return errors.Is(err, ErrAuthRejected) || errors.Is(err, ErrAuthLocked)
 }
 
 func (s *Store) openSession(
