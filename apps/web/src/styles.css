@@ -2152,6 +2152,30 @@ h3 {
   letter-spacing: 0.02em;
 }
 
+/* Média móvel: linha cheia por cima das barras, sem preenchimento. */
+.chart-trend {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-today {
+  stroke: var(--coral-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-today-label {
+  fill: var(--coral-strong);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .chart-active {
   fill: var(--brand);
   opacity: 0.12;
@@ -2229,6 +2253,64 @@ h3 {
 .legend-weekend::before {
   background: var(--surface-sunken);
   border: 1px solid var(--line-strong);
+}
+
+.legend-trend::before {
+  height: 0;
+  border-top: 2px solid var(--ink);
+  border-radius: 0;
+}
+
+/* Ritmo semanal: sete linhas com barra proporcional ao dia mais cheio, mesma
+   mecânica de --share das preferências. */
+.weekday-pattern {
+  margin-top: 1.75rem;
+}
+
+.weekday-pattern h4 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.weekday-list {
+  display: grid;
+  gap: 0.3rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.weekday-list li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-size: 0.88rem;
+  font-weight: 550;
+}
+
+.weekday-list li::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--share, 0) * 1%);
+  background: color-mix(in srgb, var(--brand) 16%, transparent);
+  transition: width 700ms var(--ease);
+}
+
+.weekday-list li > * {
+  position: relative;
+}
+
+.weekday-list strong {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
 }
 
 .series-details summary,
@@ -2358,7 +2440,8 @@ h3 {
     gap: 0.5rem;
   }
 
-  .preference-list li {
+  .preference-list li,
+  .weekday-list li {
     align-items: flex-start;
     flex-direction: column;
     gap: 0.4rem;
@@ -2412,13 +2495,16 @@ h3 {
   .presence-chart svg,
   .summary-card,
   .quality-card,
-  .preference-list li {
+  .stat-tile,
+  .preference-list li,
+  .weekday-list li {
     border: 1px solid CanvasText;
   }
 
   .summary-card::before,
   .quality-card::before,
-  .preference-list li::before {
+  .preference-list li::before,
+  .weekday-list li::before {
     display: none;
   }
 }

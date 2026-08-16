@@ -1,7 +1,12 @@
 import { useState, type KeyboardEvent } from "react";
 
 import { formatDay, slotLines } from "./presence-format";
-import { isWeekend, type PresencePoint, type SeriesStats } from "./presence-stats";
+import {
+  isWeekend,
+  movingAverage,
+  type PresencePoint,
+  type SeriesStats,
+} from "./presence-stats";
 
 interface PresenceChartProps {
   series: readonly PresencePoint[];
@@ -19,6 +24,8 @@ const PLOT_WIDTH = VIEW_WIDTH - PADDING_LEFT - PADDING_RIGHT;
 const AXIS_LABELS = 6;
 /** Keeps the tooltip inside the frame when the active day sits at an edge. */
 const TOOLTIP_MARGIN_PERCENT = 12;
+/** A week of trailing days: shorter keeps the weekday noise it should remove. */
+const SMOOTH_DAYS = 7;
 
 const axisDateFormatter = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -247,6 +254,87 @@ function ProtectedTick({ slot }: { slot: Plotted }) {
   );
 }
 
+type Run = [number, number][];
+
+/**
+ * Contiguous runs of smoothed values. A day without a smoothed value breaks the
+ * line instead of being bridged: a drawn segment would imply a level nobody
+ * measured.
+ */
+function runsOf(values: readonly (number | null)[]): Run[] {
+  const runs: Run[] = [];
+  let current: Run = [];
+  values.forEach((value, index) => {
+    if (value === null) {
+      current = [];
+      return;
+    }
+    if (current.length === 0) {
+      runs.push(current);
+    }
+    current.push([index, value]);
+  });
+  return runs;
+}
+
+function runPoints(run: Run, slots: readonly Plotted[], bound: number) {
+  return run
+    .map(([index, value]) => {
+      const slot = slots[index];
+      return slot === undefined
+        ? ""
+        : `${centreOf(slot)},${scaleY(value, bound)}`;
+    })
+    .join(" ");
+}
+
+/** Seven-day trailing mean: the weekly level under the day-to-day noise. */
+function TrendLine({
+  bound,
+  series,
+  slots,
+}: {
+  bound: number;
+  series: readonly PresencePoint[];
+  slots: readonly Plotted[];
+}) {
+  const runs = runsOf(movingAverage(series, SMOOTH_DAYS));
+  return (
+    <g aria-hidden="true">
+      {runs.map((run) => (
+        <polyline
+          className="chart-trend"
+          key={run[0]?.[0]}
+          points={runPoints(run, slots, bound)}
+        />
+      ))}
+    </g>
+  );
+}
+
+/** Boundary between the observed stretch and the forecast one, when both show. */
+function TodayMarker({ slots }: { slots: readonly Plotted[] }) {
+  const index = slots.findIndex((slot) => slot.point.kind === "forecast");
+  const slot = index > 0 ? slots[index] : undefined;
+  if (slot === undefined) {
+    return null;
+  }
+  return (
+    <g aria-hidden="true">
+      <line
+        className="chart-today"
+        x1={slot.x}
+        y1={PADDING_TOP - 8}
+        x2={slot.x}
+        y2={BASELINE}
+      />
+      <text className="chart-today-label" x={slot.x + 4} y={PADDING_TOP - 10}>
+        previsão a partir daqui
+      </text>
+    </g>
+  );
+}
+
 function ActiveGuide({ slot }: { slot: Plotted | null }) {
   if (slot === null) {
     return null;
@@ -419,6 +507,8 @@ export function PresenceChart({ series, stats }: PresenceChartProps) {
             </g>
           ))}
           <AverageLine average={stats.average} bound={bound} />
+          <TrendLine bound={bound} series={series} slots={slots} />
+          <TodayMarker slots={slots} />
           <line
             className="chart-axis"
             x1={PADDING_LEFT}
@@ -436,8 +526,9 @@ export function PresenceChart({ series, stats }: PresenceChartProps) {
       </p>
       <figcaption>
         Escala até {bound} pessoas-dia. Fim de semana aparece com fundo
-        sombreado, a linha tracejada marca a média da janela e dias protegidos
-        aparecem como falha, sem valor substituto.
+        sombreado, a linha tracejada marca a média da janela, a linha cheia é a
+        média móvel de {SMOOTH_DAYS} dias e dias protegidos aparecem como falha,
+        sem valor substituto. A média móvel interrompe onde faltam valores.
       </figcaption>
     </figure>
   );

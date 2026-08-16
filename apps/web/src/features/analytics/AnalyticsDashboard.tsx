@@ -18,8 +18,10 @@ import {
   centralValue,
   percentFromAverage,
   seriesStats,
+  weekdayAverages,
   type PresencePoint,
   type SeriesStats,
+  type WeekdayAverage,
 } from "./presence-stats";
 
 type Schemas = components["schemas"];
@@ -133,10 +135,42 @@ interface StatTile {
   value: ReactNode;
 }
 
-const WINDOW_LABELS: Record<PresenceWindow, string> = {
+/** "combined" is composed in the client; the contract still serves one window. */
+type DisplayWindow = PresenceWindow | "combined";
+
+/** Names the scope of the tiles, which is never the forecast half of a join. */
+const WINDOW_LABELS: Record<DisplayWindow, string> = {
   recent_30_days: "últimos 30 dias",
   next_30_days: "próximos 30 dias",
+  combined: "últimos 30 dias observados",
 };
+
+function displayedSeries(
+  window: DisplayWindow,
+  observed: readonly PresencePoint[],
+  predicted: readonly PresencePoint[],
+): readonly PresencePoint[] {
+  if (window === "recent_30_days") {
+    return observed;
+  }
+  if (window === "next_30_days") {
+    return predicted;
+  }
+  return [...observed, ...predicted];
+}
+
+/**
+ * Reference the tiles, the average line and every delta are measured against.
+ * A joined view keeps the observed level as the reference: the useful question
+ * there is how the forecast sits against what was actually measured.
+ */
+function referenceSeries(
+  window: DisplayWindow,
+  observed: readonly PresencePoint[],
+  predicted: readonly PresencePoint[],
+): readonly PresencePoint[] {
+  return window === "next_30_days" ? predicted : observed;
+}
 
 function DayValue({ day }: { day: { date: string; value: number } }) {
   return (
@@ -231,7 +265,7 @@ function WindowStats({
   window,
 }: {
   stats: SeriesStats;
-  window: PresenceWindow;
+  window: DisplayWindow;
 }) {
   return (
     <ul
@@ -266,11 +300,68 @@ function ComparisonCell({
   return <span>{formatDelta(percent)}</span>;
 }
 
+const WEEKDAY_LABELS = [
+  "domingo",
+  "segunda",
+  "terça",
+  "quarta",
+  "quinta",
+  "sexta",
+  "sábado",
+];
+
+/** The bar is proportional to the busiest weekday, filled through --share. */
+function weekdayShare(entry: WeekdayAverage, busiest: number): CSSProperties {
+  const share =
+    entry.average === null || busiest === 0
+      ? 0
+      : (entry.average / busiest) * 100;
+  return { "--share": share } as CSSProperties;
+}
+
+function WeekdayValue({ entry }: { entry: WeekdayAverage }) {
+  if (entry.average === null) {
+    return <span className="stat-when">sem dia publicado</span>;
+  }
+  return (
+    <span>
+      <strong>{Math.round(entry.average)} pessoas-dia</strong>
+      <span className="stat-when">
+        {" "}
+        · {entry.days} {entry.days === 1 ? "dia" : "dias"}
+      </span>
+    </span>
+  );
+}
+
+function WeekdayPattern({ series }: { series: readonly PresencePoint[] }) {
+  const averages = weekdayAverages(series);
+  const busiest = Math.max(...averages.map((entry) => entry.average ?? 0));
+  return (
+    <div className="weekday-pattern">
+      <h4>Ritmo da semana</h4>
+      <p className="metric-hint">
+        Média por dia da semana sobre os dias publicados da janela observada.
+        Mostra o padrão semanal que a série dia a dia esconde; com poucos dias
+        publicados, uma única data pode responder por todo o dia da semana.
+      </p>
+      <ul className="weekday-list" aria-label="Média por dia da semana">
+        {averages.map((entry) => (
+          <li key={entry.weekday} style={weekdayShare(entry, busiest)}>
+            <span>{WEEKDAY_LABELS[entry.weekday]}</span>
+            <WeekdayValue entry={entry} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function PresenceTable({
-  presence,
+  series,
   stats,
 }: {
-  presence: Schemas["PublicPresence"];
+  series: readonly PresencePoint[];
   stats: SeriesStats;
 }) {
   return (
@@ -285,7 +376,7 @@ function PresenceTable({
           </tr>
         </thead>
         <tbody>
-          {presence.series.map((point) => (
+          {series.map((point) => (
             <tr key={`${point.date}-${point.kind}`}>
               <th scope="row">
                 <time dateTime={point.date}>{formatDate(point.date)}</time>
@@ -439,30 +530,29 @@ function dashboardStage(queries: readonly QueryStage[]): DashboardStage {
 
 interface DashboardPayloads<S, P, F, M> {
   summary: S;
-  presence: P;
+  observed: P;
+  predicted: P;
   preferences: F;
   methodology: M;
 }
 
 /**
- * Narrows the four payloads together so the render below reads them without a
- * per-panel undefined check.
+ * Narrows every payload together so the render below reads them without a
+ * per-panel undefined check. Both presence windows load up front: the combined
+ * view needs the two at once, and each is a cacheable public document.
  */
 function loadedPayloads<S, P, F, M>(
-  summary: S | undefined,
-  presence: P | undefined,
-  preferences: F | undefined,
-  methodology: M | undefined,
+  parts: DashboardPayloads<
+    S | undefined,
+    P | undefined,
+    F | undefined,
+    M | undefined
+  >,
 ): DashboardPayloads<S, P, F, M> | null {
-  if (
-    summary === undefined ||
-    presence === undefined ||
-    preferences === undefined ||
-    methodology === undefined
-  ) {
-    return null;
-  }
-  return { summary, presence, preferences, methodology };
+  const complete = Object.values(parts).every(
+    (value) => value !== undefined,
+  );
+  return complete ? (parts as DashboardPayloads<S, P, F, M>) : null;
 }
 
 function DashboardPlaceholder({
@@ -494,16 +584,20 @@ function DashboardPlaceholder({
 export function AnalyticsDashboard({
   client = phase4PublicClient,
 }: AnalyticsDashboardProps) {
-  const [window, setWindow] =
-    useState<PresenceWindow>("recent_30_days");
+  const [window, setWindow] = useState<DisplayWindow>("recent_30_days");
   const summary = useQuery({
     queryKey: ["analytics", "public", "summary"],
     queryFn: () => client.getSummary(),
     staleTime: 300_000,
   });
   const presence = useQuery({
-    queryKey: ["analytics", "public", "presence", window],
-    queryFn: () => client.getPresence(window),
+    queryKey: ["analytics", "public", "presence", "recent_30_days"],
+    queryFn: () => client.getPresence("recent_30_days"),
+    staleTime: 300_000,
+  });
+  const forecast = useQuery({
+    queryKey: ["analytics", "public", "presence", "next_30_days"],
+    queryFn: () => client.getPresence("next_30_days"),
     staleTime: 300_000,
   });
   const preferences = useQuery({
@@ -516,24 +610,28 @@ export function AnalyticsDashboard({
     queryFn: () => client.getMethodology(),
     staleTime: 300_000,
   });
-  const queries = [summary, presence, preferences, methodology];
+  const queries = [summary, presence, forecast, preferences, methodology];
 
   function retry() {
     void Promise.all(queries.map((query) => query.refetch()));
   }
 
-  const loaded = loadedPayloads(
-    summary.data,
-    presence.data,
-    preferences.data,
-    methodology.data,
-  );
+  const loaded = loadedPayloads({
+    summary: summary.data,
+    observed: presence.data,
+    predicted: forecast.data,
+    preferences: preferences.data,
+    methodology: methodology.data,
+  });
   if (loaded === null) {
     return (
       <DashboardPlaceholder onRetry={retry} stage={dashboardStage(queries)} />
     );
   }
-  const stats = seriesStats(loaded.presence.data.series);
+  const observed = loaded.observed.data.series;
+  const predicted = loaded.predicted.data.series;
+  const displayed = displayedSeries(window, observed, predicted);
+  const stats = seriesStats(referenceSeries(window, observed, predicted));
 
   return (
     <section className="analytics-dashboard" aria-labelledby="analytics-title">
@@ -561,11 +659,12 @@ export function AnalyticsDashboard({
             <select
               value={window}
               onChange={(event) =>
-                setWindow(event.target.value as PresenceWindow)
+                setWindow(event.target.value as DisplayWindow)
               }
             >
               <option value="recent_30_days">Últimos 30 dias</option>
               <option value="next_30_days">Próximos 30 dias</option>
+              <option value="combined">Últimos 30 e próximos 30 dias</option>
             </select>
           </label>
         </div>
@@ -575,14 +674,16 @@ export function AnalyticsDashboard({
           <span className="legend-gap">
             Protegido ou indisponível, sem valor substituto
           </span>
-          <span className="legend-average">Média da janela</span>
+          <span className="legend-average">Média de referência</span>
+          <span className="legend-trend">Média móvel de 7 dias</span>
           <span className="legend-weekend">Fim de semana</span>
         </p>
         <WindowStats stats={stats} window={window} />
-        <PresenceChart series={loaded.presence.data.series} stats={stats} />
+        <PresenceChart series={displayed} stats={stats} />
+        <WeekdayPattern series={observed} />
         <details className="series-details">
           <summary>Ver a série dia a dia</summary>
-          <PresenceTable presence={loaded.presence.data} stats={stats} />
+          <PresenceTable series={displayed} stats={stats} />
         </details>
       </section>
       <Preferences preferences={loaded.preferences.data} />

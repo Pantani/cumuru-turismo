@@ -44,13 +44,17 @@ export function formatCount(value: number) {
   return countFormatter.format(value);
 }
 
+/**
+ * "Referência" and not "janela": a joined view measures the forecast against
+ * the observed level, so naming the window here would state the wrong scope.
+ */
 export function formatDelta(percent: number) {
   const rounded = Math.round(percent);
   if (rounded === 0) {
-    return "no mesmo nível da média da janela";
+    return "no mesmo nível da média de referência";
   }
   const direction = rounded > 0 ? "acima" : "abaixo";
-  return `${Math.abs(rounded)}% ${direction} da média da janela`;
+  return `${Math.abs(rounded)}% ${direction} da média de referência`;
 }
 
 export function formatTrend(percent: number, size: number) {
