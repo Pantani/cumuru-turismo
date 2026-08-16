@@ -203,8 +203,9 @@ if [[ "${WEB_IMAGE}" == *@sha256:* && -z "${web_repo_digest}" ]]; then
 fi
 
 export API_IMAGE WEB_IMAGE api_id web_id api_repo_digest web_repo_digest
-export API_SBOM_SHA256="$(hash_file "${OUTPUT_DIR}/api-image.cdx.json")"
-export WEB_SBOM_SHA256="$(hash_file "${OUTPUT_DIR}/web-image.cdx.json")"
+API_SBOM_SHA256="$(hash_file "${OUTPUT_DIR}/api-image.cdx.json")"
+WEB_SBOM_SHA256="$(hash_file "${OUTPUT_DIR}/web-image.cdx.json")"
+export API_SBOM_SHA256 WEB_SBOM_SHA256
 export MANIFEST_PATH="${OUTPUT_DIR}/image-manifest.json"
 
 node <<'NODE'

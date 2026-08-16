@@ -56,7 +56,7 @@ free_port() {
 
 wait_for_url() {
   local url="$1"
-  for ignored in 1 2 3 4 5 6 7 8 9 10; do
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
     if curl --fail --silent --show-error "${url}" >/dev/null 2>&1; then
       return
     fi
@@ -128,8 +128,8 @@ UPSTREAM_PID=$!
 vite_port="$(free_port)"
 CUMURU_VITE_PROXY_TARGET="http://127.0.0.1:${upstream_port}" \
   npm --workspace @cumuru/web exec -- \
-    vite --host 127.0.0.1 --port "${vite_port}" --strictPort \
-    >"${WORK_DIR}/vite.stdout" 2>"${WORK_DIR}/vite.stderr" &
+  vite --host 127.0.0.1 --port "${vite_port}" --strictPort \
+  >"${WORK_DIR}/vite.stdout" 2>"${WORK_DIR}/vite.stderr" &
 VITE_PID=$!
 wait_for_url "http://127.0.0.1:${vite_port}/"
 curl --fail --silent --show-error \

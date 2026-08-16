@@ -7,7 +7,7 @@ LOCAL_FAKE_OIDC_TOKEN="${LOCAL_FAKE_OIDC_TOKEN:-}"
 SMOKE_PROFILE="${SMOKE_PROFILE:-base}"
 
 case "${SMOKE_PROFILE}" in
-  base|local-demo) ;;
+  base | local-demo) ;;
   *)
     echo "unsupported smoke profile: ${SMOKE_PROFILE}" >&2
     exit 2
@@ -76,7 +76,7 @@ authenticated_phase2="$(
 )"
 
 AUTHENTICATED_PHASE2="${authenticated_phase2}" \
-SMOKE_DIRECTORY="${temporary_dir}" node <<'NODE'
+  SMOKE_DIRECTORY="${temporary_dir}" node <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 

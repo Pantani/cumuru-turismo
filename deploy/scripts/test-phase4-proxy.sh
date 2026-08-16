@@ -575,7 +575,7 @@ for service in postgres api web; do
 done
 
 ready=false
-for ignored in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   if request "/api/v1/public/summary" && test "${LAST_STATUS}" = "200"; then
     ready=true
     break

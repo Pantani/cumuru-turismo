@@ -63,18 +63,18 @@ terraform -chdir="${ROOT_DIR}/deploy/terraform/aws" validate
 
 ANSIBLE_CONFIG="${ROOT_DIR}/deploy/ansible/ansible.cfg" \
   ansible-playbook \
-    --inventory "${tmp_dir}/hosts.yml" \
-    "${ROOT_DIR}/deploy/ansible/playbooks/site.yml" \
-    --syntax-check
+  --inventory "${tmp_dir}/hosts.yml" \
+  "${ROOT_DIR}/deploy/ansible/playbooks/site.yml" \
+  --syntax-check
 
 "${ROOT_DIR}/deploy/scripts/local-infra.sh" config
 local_images="$(
   "${ROOT_DIR}/deploy/scripts/with-build-metadata.sh" \
     docker compose \
-      --project-directory "${ROOT_DIR}" \
-      --file "${ROOT_DIR}/compose.yaml" \
-      --file "${ROOT_DIR}/deploy/compose.observability.yaml" \
-      config --images
+    --project-directory "${ROOT_DIR}" \
+    --file "${ROOT_DIR}/compose.yaml" \
+    --file "${ROOT_DIR}/deploy/compose.observability.yaml" \
+    config --images
 )"
 validate_image_list "local Compose" "${local_images}"
 
@@ -119,26 +119,26 @@ mkdir -p "${tmp_dir}/migrations" "${tmp_dir}/secrets"
 touch "${tmp_dir}/Caddyfile" "${tmp_dir}/secrets/rds-global-bundle.pem"
 
 CUMURU_API_IMAGE="example.invalid/cumuru-api:validation@${VALIDATION_DIGEST}" \
-CUMURU_WEB_IMAGE="example.invalid/cumuru-web:validation@${VALIDATION_DIGEST}" \
-CUMURU_DOMAIN=example.invalid \
-ACME_EMAIL=infra@example.invalid \
-MIGRATION_DATABASE_URL='postgresql://validation:validation@db.example.invalid:5432/cumuru?sslmode=verify-full&sslrootcert=/etc/ssl/certs/rds-global-bundle.pem' \
-  docker compose \
-    --project-directory "${tmp_dir}" \
-    --file "${ROOT_DIR}/deploy/compose.production.yaml" \
-    config \
-    --quiet
-
-production_images="$(
-  CUMURU_API_IMAGE="example.invalid/cumuru-api:validation@${VALIDATION_DIGEST}" \
   CUMURU_WEB_IMAGE="example.invalid/cumuru-web:validation@${VALIDATION_DIGEST}" \
   CUMURU_DOMAIN=example.invalid \
   ACME_EMAIL=infra@example.invalid \
   MIGRATION_DATABASE_URL='postgresql://validation:validation@db.example.invalid:5432/cumuru?sslmode=verify-full&sslrootcert=/etc/ssl/certs/rds-global-bundle.pem' \
+  docker compose \
+  --project-directory "${tmp_dir}" \
+  --file "${ROOT_DIR}/deploy/compose.production.yaml" \
+  config \
+  --quiet
+
+production_images="$(
+  CUMURU_API_IMAGE="example.invalid/cumuru-api:validation@${VALIDATION_DIGEST}" \
+    CUMURU_WEB_IMAGE="example.invalid/cumuru-web:validation@${VALIDATION_DIGEST}" \
+    CUMURU_DOMAIN=example.invalid \
+    ACME_EMAIL=infra@example.invalid \
+    MIGRATION_DATABASE_URL='postgresql://validation:validation@db.example.invalid:5432/cumuru?sslmode=verify-full&sslrootcert=/etc/ssl/certs/rds-global-bundle.pem' \
     docker compose \
-      --project-directory "${tmp_dir}" \
-      --file "${ROOT_DIR}/deploy/compose.production.yaml" \
-      config --images
+    --project-directory "${tmp_dir}" \
+    --file "${ROOT_DIR}/deploy/compose.production.yaml" \
+    config --images
 )"
 validate_image_list "production Compose" "${production_images}"
 

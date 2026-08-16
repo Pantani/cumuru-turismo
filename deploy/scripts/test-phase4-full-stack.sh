@@ -188,7 +188,7 @@ done
   grep --fixed-strings --line-regexp --quiet -- "-0300"
 
 publication_ready=false
-for ignored in {1..60}; do
+for _ in {1..60}; do
   current_publication="$(
     psql_migration \
       --tuples-only --no-align \
@@ -263,7 +263,7 @@ psql_migration \
   "
 
 failure_observed=false
-for ignored in {1..60}; do
+for _ in {1..60}; do
   failure_after="$(
     psql_migration \
       --tuples-only --no-align \

@@ -279,7 +279,7 @@ write_web_fixture() {
   local export_prefix="export "
 
   case "${path}" in
-    *.cjs|*.cts) export_prefix="" ;;
+    *.cjs | *.cts) export_prefix="" ;;
   esac
 
   {
@@ -337,7 +337,7 @@ prove_go_threshold() {
   capture_command "${GOCYCLO}" -over 5 "${TEMP_DIR}/go-cyclo-fail"
   if [[ "${ANALYZER_STATUS}" -ne 1 ]] ||
     ! grep -Eq '6 .*cyclomaticCycloFail .*complexity_test\.go:' \
-    <<<"${ANALYZER_OUTPUT}"; then
+      <<<"${ANALYZER_OUTPUT}"; then
     echo "gocyclo did not reject the score-6 fixture" >&2
     echo "${ANALYZER_OUTPUT}" >&2
     return 1
@@ -346,7 +346,7 @@ prove_go_threshold() {
   capture_command "${GOCOGNIT}" -test -over 8 "${TEMP_DIR}/go-cognit-fail"
   if [[ "${ANALYZER_STATUS}" -ne 1 ]] ||
     ! grep -Eq '9 .*cyclomaticCognitFail .*complexity_test\.go:' \
-    <<<"${ANALYZER_OUTPUT}"; then
+      <<<"${ANALYZER_OUTPUT}"; then
     echo "gocognit did not reject the score-9 fixture" >&2
     echo "${ANALYZER_OUTPUT}" >&2
     return 1

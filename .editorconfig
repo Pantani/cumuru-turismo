@@ -1,0 +1,11 @@
+root = true
+
+# Shell scripts in this repository use two-space indentation. shfmt reads this
+# file when no formatting flag is passed, so `make harness-validate` and
+# `make lint-shell` check the convention the code already follows instead of
+# shfmt's tab default.
+[*.sh]
+indent_style = space
+indent_size = 2
+switch_case_indent = true
+space_redirects = false

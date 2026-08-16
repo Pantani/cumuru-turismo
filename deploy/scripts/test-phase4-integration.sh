@@ -1561,7 +1561,7 @@ test "$(
 )" = "0"
 
 if psql_as cumuru_migration cumuru-local-migration-only \
-  >/dev/null 2>&1 <<'SQL'
+  >/dev/null 2>&1 <<'SQL'; then
 BEGIN;
 INSERT INTO public_data.publications (
   publication_version,
@@ -1616,7 +1616,6 @@ VALUES (
 UPDATE public_data.current_publication SET publication_version = 2;
 COMMIT;
 SQL
-then
   echo "invalid release transaction unexpectedly committed" >&2
   exit 1
 fi

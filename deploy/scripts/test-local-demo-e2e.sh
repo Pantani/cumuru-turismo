@@ -76,6 +76,6 @@ trap cleanup EXIT
 
 LOCAL_E2E_BASE_URL="http://127.0.0.1:${LOCAL_E2E_PORT}" \
   npx playwright test \
-    --config "${ROOT_DIR}/deploy/playwright.local.config.ts"
+  --config "${ROOT_DIR}/deploy/playwright.local.config.ts"
 
 echo "LOCAL_DEMO_BROWSER_E2E=PASS"

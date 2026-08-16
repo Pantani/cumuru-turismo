@@ -9,10 +9,10 @@ ACTION="${1:-}"
 compose() {
   "${ROOT_DIR}/deploy/scripts/with-build-metadata.sh" \
     docker compose \
-      --project-directory "${ROOT_DIR}" \
-      --file "${BASE_COMPOSE}" \
-      --file "${OBSERVABILITY_COMPOSE}" \
-      "$@"
+    --project-directory "${ROOT_DIR}" \
+    --file "${BASE_COMPOSE}" \
+    --file "${OBSERVABILITY_COMPOSE}" \
+    "$@"
 }
 
 usage() {

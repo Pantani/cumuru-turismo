@@ -531,7 +531,7 @@ done
 published_address="$("${COMPOSE[@]}" port postgres 5432)"
 database_port="${published_address##*:}"
 case "${database_port}" in
-  ""|*[!0-9]*)
+  "" | *[!0-9]*)
     echo "could not resolve the ephemeral PostgreSQL port" >&2
     exit 1
     ;;
@@ -541,8 +541,8 @@ admin_dsn="postgres://cumuru_migration:cumuru-local-migration-only@127.0.0.1:${d
 runtime_dsn="postgres://cumuru_app:cumuru-local-app-only@127.0.0.1:${database_port}/cumuru?sslmode=disable"
 
 CUMURU_TEST_ADMIN_DATABASE_URL="${admin_dsn}" \
-CUMURU_TEST_DATABASE_URL="${runtime_dsn}" \
+  CUMURU_TEST_DATABASE_URL="${runtime_dsn}" \
   go -C "${ROOT_DIR}/apps/api" test \
-    -tags=integration -race -count=1 ./internal/platform/store
+  -tags=integration -race -count=1 ./internal/platform/store
 
 echo "phase 3 PostgreSQL integration passed with consolidated migration baseline"

@@ -89,7 +89,7 @@ done
 web_address="$("${COMPOSE[@]}" port web 8080)"
 web_port="${web_address##*:}"
 case "${web_port}" in
-  ""|*[!0-9]*)
+  "" | *[!0-9]*)
     echo "could not resolve the ephemeral web port" >&2
     exit 1
     ;;
@@ -101,7 +101,7 @@ web_base_url="http://127.0.0.1:${web_port}"
   grep --fixed-strings --line-regexp --quiet -- "-0300"
 
 WEB_BASE_URL="${web_base_url}" \
-API_BASE_URL="${web_base_url}/api/v1" \
+  API_BASE_URL="${web_base_url}/api/v1" \
   "${ROOT_DIR}/deploy/scripts/smoke.sh"
 
 service_worker="$(
@@ -129,7 +129,7 @@ rm -f "${proxy_log}"
 "${COMPOSE[@]}" up --detach --wait api
 require_running api
 WEB_BASE_URL="${web_base_url}" \
-API_BASE_URL="${web_base_url}/api/v1" \
+  API_BASE_URL="${web_base_url}/api/v1" \
   "${ROOT_DIR}/deploy/scripts/smoke.sh"
 
 echo "phase 2 ephemeral full-stack passed"

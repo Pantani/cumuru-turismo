@@ -16,6 +16,9 @@ comando, resultado ou marcador.
 
 | Data | Mudança | Alvo | Motivo |
 | --- | --- | --- | --- |
+| 2026-08-16 | Convenção shfmt declarada | `.editorconfig` e scripts do harness | `shfmt` passou a existir no ambiente e assumia tabs contra os 2 espaços do repositório; `SHFMT` saiu de `UNVERIFIED` para `PASS` sem suprimir regra |
+| 2026-08-16 | Wave Fase 7 de autoatendimento e aprovação | `prompts/BOOTSTRAP-CODEX.md`, `phase-matrix.md`, `harness.sh`, `test-harness.sh`, `trigger-evals.md`, `Makefile`, `deploy/scripts/test-phase7-*.sh` | Cadastrar acomodação com ativação por capability, convite reutilizável por acomodação, autocadastro com identidade e aprovação do estabelecimento; gate `THIRD_PARTY_IDENTITY_BASIS` isola dados reais |
+| 2026-08-16 | Correção do gate ShellCheck | `.agents/skills/cumuru-bootstrap/scripts/harness.sh` e `test-harness.sh` | ShellCheck 0.11 passou a acusar SC1007/SC2016 e quebrou `make harness-validate`; `CDPATH=''` e `$'...'` restauram o gate sem suprimir regra |
 | 2026-07-29 | Protocolo e build de remediação | bootstrap e Fase 4 | Transformar débitos/runtime divergente em ondas reproduzíveis com PostgreSQL, full-stack e navegador real |
 | 2026-07-28 | Gate global pós-tarefa | harness, agents e CI | Impedir handoff com complexidade/lint ausentes ou mascarados |
 | 2026-07-28 | Configuração inicial | harness completo | Execução faseada no Codex com compatibilidade Claude |
