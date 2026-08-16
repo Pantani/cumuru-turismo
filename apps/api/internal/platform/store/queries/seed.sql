@@ -14,7 +14,10 @@ SET
   version = core.organizations.version + 1
 WHERE core.organizations.name IS DISTINCT FROM EXCLUDED.name;
 
--- name: UpsertSeedAccommodation :exec
+-- The row count is the signal the caller needs: a fresh insert and a re-run
+-- under the same organization both touch one row, so zero means the guard
+-- below refused the write because the identifier belongs to another tenant.
+-- name: UpsertSeedAccommodation :execrows
 INSERT INTO core.accommodations (
   id,
   organization_id,

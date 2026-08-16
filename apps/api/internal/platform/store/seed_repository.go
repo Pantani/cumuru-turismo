@@ -166,24 +166,29 @@ func upsertSeedOrganization(
 }
 
 // The upsert is scoped to the declared organization, so an identifier already
-// held by another organization leaves the row untouched and is reported instead
-// of silently moving an establishment between tenants.
+// held by another organization leaves the row untouched. That refusal has to
+// reach the operator: the statement itself raises no error, so without the row
+// count the run reports success for a catalog entry it never applied, and the
+// file and the database diverge without anyone noticing.
 func upsertSeedAccommodation(
 	ctx context.Context,
 	q *generated.Queries,
 	organizationID uuid.UUID,
 	accommodation SeedAccommodation,
 ) error {
-	err := q.UpsertSeedAccommodation(ctx, generated.UpsertSeedAccommodationParams{
-		ID:             pgUUID(accommodation.ID),
-		OrganizationID: pgUUID(organizationID),
-		Name:           accommodation.Name,
-		Category:       accommodation.Category,
-		CadasturID:     accommodation.CadasturID,
-		Capacity:       accommodation.Capacity,
-		PublicAreaCode: accommodation.PublicAreaCode,
-	})
-	if err != nil {
+	applied, err := q.UpsertSeedAccommodation(
+		ctx,
+		generated.UpsertSeedAccommodationParams{
+			ID:             pgUUID(accommodation.ID),
+			OrganizationID: pgUUID(organizationID),
+			Name:           accommodation.Name,
+			Category:       accommodation.Category,
+			CadasturID:     accommodation.CadasturID,
+			Capacity:       accommodation.Capacity,
+			PublicAreaCode: accommodation.PublicAreaCode,
+		},
+	)
+	if err != nil || applied == 0 {
 		return ErrSeedConflict
 	}
 	return nil

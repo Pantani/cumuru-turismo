@@ -93,7 +93,7 @@ migration_files="$(
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_organization_document.down.sql\n000002_organization_document.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
@@ -1491,6 +1491,37 @@ final_version="$(
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${final_version}" = "1:false"
+test "${final_version}" = "2:false"
 
-echo "migrations zero-to-one, rollback to zero, reapply, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
+# ADR-038: the blind document must be unique, and the baseline alone must not
+# already enforce it, otherwise 000002 would be silently redundant.
+document_guard="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT count(*) FILTER (WHERE indexname = 'organizations_document_hmac_idx')
+        || ':'
+        || count(*) FILTER (WHERE indexdef LIKE '%UNIQUE%document_hmac%')
+      FROM pg_indexes
+      WHERE schemaname = 'core'
+        AND tablename = 'organizations'
+    "
+)"
+test "${document_guard}" = "1:1"
+
+run_migrate down 1
+document_guard_after_rollback="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT count(*)
+      FROM pg_indexes
+      WHERE schemaname = 'core'
+        AND tablename = 'organizations'
+        AND indexname = 'organizations_document_hmac_idx'
+    "
+)"
+test "${document_guard_after_rollback}" = "0"
+run_migrate up
+
+echo "migrations zero-to-two, rollback to zero, reapply, reversible document uniqueness, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"

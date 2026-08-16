@@ -113,7 +113,7 @@ func (q *Queries) ReleaseSeedRunLock(ctx context.Context) (bool, error) {
 	return pg_advisory_unlock, err
 }
 
-const upsertSeedAccommodation = `-- name: UpsertSeedAccommodation :exec
+const upsertSeedAccommodation = `-- name: UpsertSeedAccommodation :execrows
 INSERT INTO core.accommodations (
   id,
   organization_id,
@@ -156,8 +156,11 @@ type UpsertSeedAccommodationParams struct {
 	PublicAreaCode *string     `json:"public_area_code"`
 }
 
-func (q *Queries) UpsertSeedAccommodation(ctx context.Context, arg UpsertSeedAccommodationParams) error {
-	_, err := q.db.Exec(ctx, upsertSeedAccommodation,
+// The row count is the signal the caller needs: a fresh insert and a re-run
+// under the same organization both touch one row, so zero means the guard
+// below refused the write because the identifier belongs to another tenant.
+func (q *Queries) UpsertSeedAccommodation(ctx context.Context, arg UpsertSeedAccommodationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertSeedAccommodation,
 		arg.ID,
 		arg.OrganizationID,
 		arg.Name,
@@ -166,7 +169,10 @@ func (q *Queries) UpsertSeedAccommodation(ctx context.Context, arg UpsertSeedAcc
 		arg.Capacity,
 		arg.PublicAreaCode,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertSeedMembership = `-- name: UpsertSeedMembership :exec

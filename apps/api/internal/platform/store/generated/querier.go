@@ -159,7 +159,10 @@ type Querier interface {
 	UpdateDraftQuestionnaireVersion(ctx context.Context, arg UpdateDraftQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	UpdateStay(ctx context.Context, arg UpdateStayParams) (UpdateStayRow, error)
 	UpsertPresenceDay(ctx context.Context, arg UpsertPresenceDayParams) (int64, error)
-	UpsertSeedAccommodation(ctx context.Context, arg UpsertSeedAccommodationParams) error
+	// The row count is the signal the caller needs: a fresh insert and a re-run
+	// under the same organization both touch one row, so zero means the guard
+	// below refused the write because the identifier belongs to another tenant.
+	UpsertSeedAccommodation(ctx context.Context, arg UpsertSeedAccommodationParams) (int64, error)
 	UpsertSeedMembership(ctx context.Context, arg UpsertSeedMembershipParams) error
 	UpsertSeedOrganization(ctx context.Context, arg UpsertSeedOrganizationParams) error
 	ValidatePublicRuntimeSession(ctx context.Context) (ValidatePublicRuntimeSessionRow, error)
