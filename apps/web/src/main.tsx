@@ -6,6 +6,12 @@ import { App } from "./app/App";
 import { registerServiceWorker } from "./shared/offline/register-service-worker";
 import { captureInviteCapability } from "./shared/security/invite-capability";
 import { purgeExpiredDrafts } from "./shared/offline/encrypted-drafts";
+// Fontes empacotadas no próprio bundle: a CSP serve `default-src 'self'`, então
+// nenhum host externo é alcançável. A entrada do pacote traz só os pesos
+// normais; cada subconjunto tem unicode-range, então o navegador baixa apenas o
+// latino.
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import "./styles.css";
 
 captureInviteCapability(

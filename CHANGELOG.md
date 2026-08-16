@@ -17,10 +17,24 @@ arquivo.
   selecionável, criação de estadia por datas e número de pessoas, e ações de
   ciclo de vida derivadas do estado da estadia;
 - gráfico de presença em SVG no painel público, com a série dia a dia mantida
-  como alternativa acessível.
+  como alternativa acessível;
+- sistema visual em tokens de cor, tipografia, superfície e movimento como
+  fonte única do layout, com tema escuro automático por
+  `prefers-color-scheme`;
+- Geist e Geist Mono empacotadas no próprio bundle, servidas na mesma origem e
+  compatíveis com a CSP `default-src 'self'`; apenas o subconjunto latino é
+  baixado;
+- grade, eixo de valores e rótulos de data no gráfico de presença, com escala
+  arredondada para intervalos legíveis, e barra proporcional por categoria nas
+  preferências agregadas.
 
 ### Alterado
 
+- a cadeia pré-lançamento `000002`–`000004` foi absorvida pelo par
+  `000001_initial_schema`, preservando a ordem efetiva de `up` e a ordem reversa
+  de `down`; `make migration-test` passa a exigir exatamente esse par e a
+  exercitar `zero → 1 → zero → 1`
+  ([ADR-032](docs/decisoes/ADR-032-consolidacao-pre-lancamento-da-baseline-de-migrations.md));
 - limite de complexidade passa de `9` único para ciclomática `5` e cognitiva
   `8` no código de aplicação, gerado e no web inteiro; o Go de teste permanece
   em `9`
@@ -29,7 +43,24 @@ arquivo.
   `Idempotency-Key` passam a ser derivados da versão já listada em vez de
   digitados;
 - densidade e tipografia do layout revistas; rótulos de fase interna removidos
-  das telas voltadas ao público e ao operador.
+  das telas voltadas ao público e ao operador;
+- a paleta deixa de ser papel bege com serifada e passa a codificar significado:
+  presença observada em teal, previsão em coral e dado protegido em neutro, com
+  a mesma correspondência no gráfico, nos cartões e nos selos de estado;
+- a jornada em Chromium passa a entrar por e-mail e senha e a operar pela lista
+  de hospedagens e pelas ações do próprio cartão de estadia, sem identificadores
+  digitados.
+
+### Corrigido
+
+- navegação para `/registro` depois de "Abrir registro neste navegador": a
+  guarda de rota comparava com a URL que `captureInviteCapability` já havia
+  reescrito, o que anulava o clique e deixava o fluxo do convite sem saída;
+- rótulos de categoria exibidos em código (`family_hosting`) na tela de
+  qualidade agregada;
+- botão de remover visitante ocupando uma célula inteira do formulário de
+  registro, porque a distribuição em colunas estava no `fieldset` em vez do
+  grupo de campos aninhado.
 
 ### Removido
 

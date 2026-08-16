@@ -150,14 +150,27 @@ function useRouting() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  const navigate = useCallback((nextPath: AppPath) => {
-    if (window.location.pathname === nextPath) {
-      return;
-    }
-    pendingRouteFocus.current = true;
-    window.history.pushState(null, "", nextPath);
-    setPathname(nextPath);
-  }, []);
+  /**
+   * The guard compares against the rendered route, not the address bar.
+   * `captureInviteCapability` scrubs the token by replacing the URL with
+   * `/registro` while the view is still the operator area; guarding on
+   * `window.location` made every later navigation to that path a no-op and left
+   * the invite flow with no way forward. The push is still skipped when the
+   * address already matches, so no duplicate history entry is created.
+   */
+  const navigate = useCallback(
+    (nextPath: AppPath) => {
+      if (pathname === nextPath) {
+        return;
+      }
+      pendingRouteFocus.current = true;
+      if (window.location.pathname !== nextPath) {
+        window.history.pushState(null, "", nextPath);
+      }
+      setPathname(nextPath);
+    },
+    [pathname],
+  );
 
   const completeRouteFocus = useCallback(() => {
     pendingRouteFocus.current = false;

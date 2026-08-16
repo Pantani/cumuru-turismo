@@ -28,34 +28,49 @@ interface AccommodationFixture {
   name: string;
 }
 
+const DEMO_ACCOUNT_EMAIL = "operador@cumuru.local";
+const DEMO_ACCOUNT_PASSWORD = process.env.LOCAL_DEMO_ACCOUNT_PASSWORD ??
+  "demonstracao-local-2026";
+
+/** The session lives in tab memory only, so every run signs in from scratch. */
+async function signIn(page: Page) {
+  await page.getByLabel("E-mail", { exact: true }).fill(DEMO_ACCOUNT_EMAIL);
+  await page.getByLabel("Senha", { exact: true }).fill(DEMO_ACCOUNT_PASSWORD);
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Suas hospedagens" }),
+  ).toBeVisible();
+}
+
+/** The board is titled after the selected accommodation, never after an id. */
+function stayBoardFor(page: Page, accommodationName: string) {
+  return page.getByRole("region", {
+    name: `Estadias de ${accommodationName}`,
+  });
+}
+
 async function onboardAccommodation(
   page: Page,
   accommodations: Locator,
-  stays: Locator,
   fixture: AccommodationFixture,
 ) {
   await accommodations.getByRole("button", {
-    name: "Cadastrar outro local",
+    name: "Cadastrar outra hospedagem",
     exact: true,
   }).click();
-  await accommodations.getByLabel("Nome do local", { exact: true }).fill(
-    fixture.name,
+  // The labels wrap their controls, so the accessible name carries the current
+  // value as well: match by prefix instead of exact text.
+  await page.getByLabel(/^Como o local é conhecido/u).fill(fixture.name);
+  await page.getByLabel(/^Tipo de hospedagem/u).selectOption(fixture.category);
+  await page.getByLabel(/^Quantas pessoas cabem/u).fill(
+    String(fixture.capacity),
   );
-  await accommodations.getByLabel("Tipo", { exact: true }).selectOption(
-    fixture.category,
-  );
-  await accommodations.getByLabel("Capacidade aproximada", {
-    exact: true,
-  }).fill(String(fixture.capacity));
 
   const responsePromise = page.waitForResponse((response) =>
     response.request().method() === "POST" &&
     new URL(response.url()).pathname === "/api/v1/accommodations"
   );
-  await accommodations.getByRole("button", {
-    name: "Cadastrar local",
-    exact: true,
-  }).click();
+  await page.getByRole("button", { name: "Cadastrar", exact: true }).click();
   const response = await responsePromise;
   expect(response.status()).toBe(201);
 
@@ -87,27 +102,20 @@ async function onboardAccommodation(
     status: "active",
   });
   expect(created.cadastur_id ?? null).toBeNull();
-  await expect(
-    accommodations.getByRole("listitem").filter({ hasText: fixture.name }),
-  ).toContainText("Cadastur: Não informado");
-  await expect(
-    accommodations.getByText("Cadastrar local: concluído.", { exact: true }),
-  ).toBeVisible();
-  await expect(accommodations.getByLabel("ID da acomodação")).toHaveValue(
-    created.id,
-  );
-  await expect(stays.getByLabel("ID da acomodação")).toHaveValue(created.id);
+  // The freshly created accommodation becomes the selection, and the board
+  // header is the only place its identity is surfaced.
+  await expect(stayBoardFor(page, fixture.name)).toBeVisible();
   return created.id;
 }
 
 async function createStayForAccommodation(
   page: Page,
-  stays: Locator,
+  accommodationName: string,
   accommodationId: string,
 ) {
-  await expect(stays.getByLabel("ID da acomodação")).toHaveValue(
-    accommodationId,
-  );
+  const stays = stayBoardFor(page, accommodationName);
+  await expect(stays.getByRole("button", { name: "Criar estadia" }))
+    .toBeEnabled();
   const responsePromise = page.waitForResponse((response) =>
     response.request().method() === "POST" &&
     new URL(response.url()).pathname === "/api/v1/stays"
@@ -120,7 +128,7 @@ async function createStayForAccommodation(
   });
   const created = await response.json() as { id: string };
   await expect(
-    stays.getByText("Criar estadia: concluído.", { exact: true }),
+    stays.getByText("Criando a estadia: pronto.", { exact: true }),
   ).toBeVisible();
   return created.id;
 }
@@ -161,83 +169,76 @@ test("percorre a jornada local sem persistir authorities", async ({
   ).toHaveCount(0);
 
   await page.goto("/acesso");
-  await expect(
-    page.getByLabel("Sessão fictícia local"),
-  ).toContainText("PROTOTYPE_ONLY");
-  await expect(
-    page.getByRole("heading", { name: "Operação de estadias" }),
-  ).toBeVisible();
+  await signIn(page);
 
   const accommodations = page.getByRole("region", {
-    name: "Acomodações e vínculos",
+    name: "Suas hospedagens",
   });
-  await accommodations.getByRole("button", {
-    name: "Listar acomodações",
-  }).click();
+  // The seeded accommodation is preselected, so the board is already titled
+  // after it before anything is created.
   await expect(
-    accommodations.getByText(/A primeira foi selecionada\./u),
+    accommodations.getByRole("button", { pressed: true }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("region", { name: /^Estadias de / }),
   ).toBeVisible();
 
-  const stays = page.getByRole("region", { name: "Estadias", exact: true });
-  const selectedAccommodationId = await accommodations
-    .getByLabel("ID da acomodação")
-    .inputValue();
-  expect(selectedAccommodationId).not.toBe("");
-  await expect(stays.getByLabel("ID da acomodação")).toHaveValue(
-    selectedAccommodationId,
-  );
-  await expect(stays.getByLabel("Chegada prevista")).not.toHaveValue("");
-  await expect(stays.getByLabel("Saída prevista")).not.toHaveValue("");
+  const familyName = "Casa Horizonte Fictícia E2E";
+  const formalName = "Pousada Mar Azul Fictícia E2E";
 
   const familyAccommodationId = await onboardAccommodation(
     page,
     accommodations,
-    stays,
     {
       capacity: 7,
       category: "family_hosting",
-      name: "Casa Horizonte Fictícia E2E",
+      name: familyName,
     },
   );
   const familyStayId = await createStayForAccommodation(
     page,
-    stays,
+    familyName,
     familyAccommodationId,
   );
 
   const formalAccommodationId = await onboardAccommodation(
     page,
     accommodations,
-    stays,
     {
       capacity: 12,
       category: "formal_lodging",
-      name: "Pousada Mar Azul Fictícia E2E",
+      name: formalName,
     },
   );
   const formalStayId = await createStayForAccommodation(
     page,
-    stays,
+    formalName,
     formalAccommodationId,
   );
   expect(formalAccommodationId).not.toBe(familyAccommodationId);
   expect(formalStayId).not.toBe(familyStayId);
 
-  const lifecycle = page.getByRole("region", {
-    name: "Grupo, convite e ciclo da estadia",
-  });
+  // The card offers only the transitions the server accepts for the current
+  // state; a draft stay can be invited, never checked out.
+  const board = stayBoardFor(page, formalName);
+  const draftCard = board.getByRole("listitem").first();
+  await expect(draftCard.getByRole("button", { name: "Gerar convite" }))
+    .toBeVisible();
+  await expect(draftCard.getByRole("button", { name: "Fazer check-out" }))
+    .toHaveCount(0);
+  await draftCard.getByRole("button", { name: "Gerar convite" }).click();
+  // The board refreshes right after the invite, so the transient status line is
+  // replaced. The QR panel and the new stay state are the durable outcomes.
   await expect(
-    lifecycle.getByLabel("Versão do aviso de privacidade"),
-  ).toHaveValue("prototype-v1");
-  await lifecycle.getByRole("button", {
-    name: "Criar QR de convite",
-  }).click();
-  await expect(
-    lifecycle.getByText("Criar convite: concluído."),
+    page.getByRole("group", { name: "Convite pronto para leitura local" }),
   ).toBeVisible();
-  await lifecycle.getByRole("button", {
+  await expect(board.getByText("Convite enviado")).toBeVisible();
+  await page.getByRole("button", {
     name: "Abrir registro neste navegador",
   }).click();
+  // Scrubbing the token rewrites the address; the invite nav entry is what
+  // carries the operator into the registration view.
+  await page.getByRole("link", { name: "Registro", exact: true }).click();
 
   await expect(page).toHaveURL(/\/registro$/u);
   expect(new URL(page.url()).search).toBe("");

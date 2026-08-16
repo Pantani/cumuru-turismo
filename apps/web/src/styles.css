@@ -64,10 +64,11 @@
   --dur: 180ms;
 
   --font-ui:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, "Helvetica Neue", Arial, sans-serif;
+    "Geist Variable", ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-num:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    "Geist Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, monospace;
 
   color: var(--ink);
   background: var(--bg);
@@ -1064,15 +1065,22 @@ h3 {
   font-size: clamp(1.3rem, 2.2vw, 1.7rem);
 }
 
+/* Coluna única: quem distribui os campos é o `.field-grid` aninhado. Com
+   auto-fit aqui, o botão de remover virava uma célula esticada do tamanho de
+   todo o bloco de campos. */
 .form-card fieldset {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   margin: 1.5rem 0;
   padding: 1.25rem;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+}
+
+.form-card fieldset > button {
+  justify-self: start;
 }
 
 .form-card legend {
