@@ -128,6 +128,8 @@ func validPhase2Values() map[string]string {
 		"RATE_LIMIT_HMAC_KEYS":             encodedKey("rate-v1", "rate"),
 		"CURSOR_HMAC_CURRENT_VERSION":      "cursor-v1",
 		"CURSOR_HMAC_KEYS":                 encodedKey("cursor-v1", "cursor"),
+		"DOCUMENT_HMAC_CURRENT_VERSION":    "document-v1",
+		"DOCUMENT_HMAC_KEYS":               encodedKey("document-v1", "document"),
 	}
 }
 

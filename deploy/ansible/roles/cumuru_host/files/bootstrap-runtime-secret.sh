@@ -41,6 +41,7 @@ else
     --arg idempotency_key "$(key)" \
     --arg rate_limit_key "$(key)" \
     --arg cursor_key "$(key)" \
+    --arg document_key "$(key)" \
     '{
       database_migration_password: $migration_password,
       database_app_password: $app_password,
@@ -50,7 +51,8 @@ else
       actor_hmac_key: $actor_key,
       idempotency_hmac_key: $idempotency_key,
       rate_limit_hmac_key: $rate_limit_key,
-      cursor_hmac_key: $cursor_key
+      cursor_hmac_key: $cursor_key,
+      document_hmac_key: $document_key
     }' >"${temporary_file}"
 
   aws secretsmanager put-secret-value \
@@ -69,7 +71,8 @@ jq -e '
     .actor_hmac_key,
     .idempotency_hmac_key,
     .rate_limit_hmac_key,
-    .cursor_hmac_key
+    .cursor_hmac_key,
+    .document_hmac_key
   ]
   | all(type == "string" and length >= 32)
 ' "${temporary_file}" >/dev/null
