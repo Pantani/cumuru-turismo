@@ -2,7 +2,11 @@ _workspace/
 
 # AI assistants and local agent workspaces. The patterns are unanchored so a
 # workspace created inside apps/api or apps/web is ignored like the root one.
-.agents/
+#
+# .agents/ is deliberately NOT ignored: it holds the canonical harness that
+# prompts/BOOTSTRAP-CODEX.md and the Makefile phase targets reference. Ignoring
+# it would ship those references pointing at files nobody else has. The runtime
+# artifacts it produces stay out through the _workspace/ rule above.
 .claude/
 .codex/
 .aider/
