@@ -1,9 +1,7 @@
 import react from "@vitejs/plugin-react";
-import { createLogger, loadEnv } from "vite";
+import { createLogger } from "vite";
 import type { LogErrorOptions, ProxyOptions } from "vite";
 import { defineConfig } from "vitest/config";
-
-import { validateLocalDemoBuild } from "./local-demo-build";
 
 const PROXY_ERROR_MESSAGE = "[vite] proxy upstream unavailable";
 
@@ -51,12 +49,7 @@ const apiProxy: Record<string, ProxyOptions> = {
   },
 };
 
-export default defineConfig(({ mode }) => {
-  const environment = {
-    ...loadEnv(mode, process.cwd(), ""),
-    ...process.env,
-  };
-  validateLocalDemoBuild(environment);
+export default defineConfig(() => {
   return {
     customLogger: viteLogger,
     plugins: [react()],

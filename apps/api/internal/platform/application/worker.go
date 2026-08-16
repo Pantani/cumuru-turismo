@@ -20,6 +20,7 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/platform/telemetry"
 	"github.com/Pantani/cumuru/apps/api/internal/questionnaire"
 	"github.com/Pantani/cumuru/apps/api/internal/stay"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -31,14 +32,8 @@ func RunWorker(ctx context.Context, cfg config.Config, build Build, output io.Wr
 		return err
 	}
 	logger := logging.New(output, cfg.LogLevel)
-	tracing, err := telemetry.New(ctx, cfg.Telemetry, cfg.ServiceName, build.Version)
+	tracing, pool, err := openWorkerResources(ctx, cfg, build, logger)
 	if err != nil {
-		return err
-	}
-
-	pool, err := database.Open(ctx, cfg.DatabaseURL, cfg.DatabaseTimeout)
-	if err != nil {
-		shutdownTelemetry(tracing, cfg.ShutdownTimeout, logger)
 		return err
 	}
 	closeResources := sync.OnceFunc(func() {
@@ -51,43 +46,27 @@ func RunWorker(ctx context.Context, cfg config.Config, build Build, output io.Wr
 			closeResources()
 		}
 	}()
-	platformStore, err := store.NewPhase3(pool, cfg.DatabaseTimeout, cfg.Phase2, cfg.Phase3)
+	return runWorkerWithResources(
+		ctx, cfg, logger, pool, closeResources, &closeResourcesOnReturn,
+	)
+}
+
+func runWorkerWithResources(
+	ctx context.Context,
+	cfg config.Config,
+	logger *slog.Logger,
+	pool *pgxpool.Pool,
+	closeResources func(),
+	closeResourcesOnReturn *bool,
+) error {
+	platformStore, questionnaires, err := workerServices(pool, cfg)
 	if err != nil {
-		return errors.New("worker repository initialization failed")
+		return err
 	}
-	questionnaires := questionnaire.NewService(store.NewQuestionnaireRepository(platformStore))
 
 	registry := prometheus.NewRegistry()
-	alive := prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "cumuru",
-		Subsystem: "worker",
-		Name:      "alive",
-		Help:      "Indica que o processo worker está ativo.",
-	})
-	ready := prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "cumuru",
-		Subsystem: "worker",
-		Name:      "database_ready",
-		Help:      "Indica que a dependência PostgreSQL está pronta.",
-	})
-	cleanupFailures := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: "cumuru",
-		Subsystem: "worker",
-		Name:      "free_text_cleanup_failures_total",
-		Help:      "Total de falhas técnicas no cleanup de texto livre.",
-	})
-	analyticsFailures := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: "cumuru",
-		Subsystem: "worker",
-		Name:      "analytics_failures_total",
-		Help:      "Total de falhas técnicas nos ciclos de analytics.",
-	})
-	analyticsRuns := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "cumuru",
-		Subsystem: "worker",
-		Name:      "analytics_runs_total",
-		Help:      "Total de ciclos de analytics concluídos por tipo.",
-	}, []string{"kind"})
+	alive, ready := workerStateGauges()
+	cleanupFailures, analyticsFailures, analyticsRuns := workerFailureMetrics()
 	expiredCleanupRuns := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "cumuru",
 		Subsystem: "worker",
@@ -153,41 +132,17 @@ func RunWorker(ctx context.Context, cfg config.Config, build Build, output io.Wr
 	if err != nil {
 		return errors.New("worker operations listener failed")
 	}
-	pollers := newPollerCoordinator(ctx)
-	pollers.Go(func(pollerContext context.Context) {
-		pollReadiness(pollerContext, platformStore, ready)
+	pollers := startWorkerPollers(ctx, workerPollerSpec{
+		cfg: cfg, store: platformStore, questionnaires: questionnaires,
+		logger: logger, ready: ready, outboxPending: outboxPending,
+		outboxOldestAge: outboxOldestAge, cleanupFailures: cleanupFailures,
+		analyticsFailures: analyticsFailures, analyticsRuns: analyticsRuns,
+		cleanup: expiredCleanupMetrics{
+			runs: expiredCleanupRuns, deleted: expiredCleanupDeleted,
+			duration: expiredCleanupDuration, batches: expiredCleanupBatches,
+			saturated: expiredCleanupSaturated,
+		},
 	})
-	pollers.Go(func(pollerContext context.Context) {
-		pollOutboxBacklog(
-			pollerContext, platformStore, outboxPending, outboxOldestAge,
-		)
-	})
-	cleanupMetrics := expiredCleanupMetrics{
-		runs: expiredCleanupRuns, deleted: expiredCleanupDeleted,
-		duration: expiredCleanupDuration, batches: expiredCleanupBatches,
-		saturated: expiredCleanupSaturated,
-	}
-	pollers.Go(func(pollerContext context.Context) {
-		pollExpiredRecordCleanup(
-			pollerContext, platformStore, logger, cleanupMetrics,
-		)
-	})
-	if cfg.Phase3.Enabled {
-		pollers.Go(func(pollerContext context.Context) {
-			pollFreeTextCleanup(
-				pollerContext, questionnaires, logger, cleanupFailures,
-			)
-		})
-	}
-	if cfg.Phase4.Enabled {
-		analyticsRepository := store.NewAnalyticsRepository(platformStore, cfg.Phase4)
-		pollers.Go(func(pollerContext context.Context) {
-			pollAnalytics(
-				pollerContext, analyticsRepository, cfg.Phase4, logger,
-				analyticsFailures, analyticsRuns,
-			)
-		})
-	}
 	logger.Info("worker started", "component", "worker")
 	serveErr := server.Serve(
 		pollers.Context(),
@@ -198,8 +153,97 @@ func RunWorker(ctx context.Context, cfg config.Config, build Build, output io.Wr
 	)
 	return finishWorkerShutdown(
 		serveErr, pollers, cfg.ShutdownTimeout, logger,
-		pollerShutdownTimeouts, closeResources, &closeResourcesOnReturn,
+		pollerShutdownTimeouts, closeResources, closeResourcesOnReturn,
 	)
+}
+
+func workerServices(
+	pool *pgxpool.Pool,
+	cfg config.Config,
+) (*store.Store, *questionnaire.Service, error) {
+	platformStore, err := store.NewPhase3(pool, cfg.DatabaseTimeout, cfg.Phase2, cfg.Phase3)
+	if err != nil {
+		return nil, nil, errors.New("worker repository initialization failed")
+	}
+	questionnaires := questionnaire.NewService(
+		store.NewQuestionnaireRepository(platformStore),
+	)
+	return platformStore, questionnaires, nil
+}
+
+// Telemetry is shut down explicitly when the pool fails, since the deferred
+// cleanup is only installed once both resources exist.
+func openWorkerResources(
+	ctx context.Context,
+	cfg config.Config,
+	build Build,
+	logger *slog.Logger,
+) (*telemetry.Provider, *pgxpool.Pool, error) {
+	tracing, err := telemetry.New(ctx, cfg.Telemetry, cfg.ServiceName, build.Version)
+	if err != nil {
+		return nil, nil, err
+	}
+	pool, err := database.Open(ctx, cfg.DatabaseURL, cfg.DatabaseTimeout)
+	if err != nil {
+		shutdownTelemetry(tracing, cfg.ShutdownTimeout, logger)
+		return nil, nil, err
+	}
+	return tracing, pool, nil
+}
+
+type workerPollerSpec struct {
+	cfg               config.Config
+	store             *store.Store
+	questionnaires    *questionnaire.Service
+	logger            *slog.Logger
+	ready             prometheus.Gauge
+	outboxPending     prometheus.Gauge
+	outboxOldestAge   prometheus.Gauge
+	cleanupFailures   prometheus.Counter
+	analyticsFailures prometheus.Counter
+	analyticsRuns     *prometheus.CounterVec
+	cleanup           expiredCleanupMetrics
+}
+
+// Phase-gated pollers only start when their phase is enabled, so a disabled
+// phase costs nothing at run time.
+func startWorkerPollers(ctx context.Context, spec workerPollerSpec) *pollerCoordinator {
+	pollers := newPollerCoordinator(ctx)
+	pollers.Go(func(pollerContext context.Context) {
+		pollReadiness(pollerContext, spec.store, spec.ready)
+	})
+	pollers.Go(func(pollerContext context.Context) {
+		pollOutboxBacklog(
+			pollerContext, spec.store, spec.outboxPending, spec.outboxOldestAge,
+		)
+	})
+	pollers.Go(func(pollerContext context.Context) {
+		pollExpiredRecordCleanup(
+			pollerContext, spec.store, spec.logger, spec.cleanup,
+		)
+	})
+	startPhasePollers(pollers, spec)
+	return pollers
+}
+
+func startPhasePollers(pollers *pollerCoordinator, spec workerPollerSpec) {
+	if spec.cfg.Phase3.Enabled {
+		pollers.Go(func(pollerContext context.Context) {
+			pollFreeTextCleanup(
+				pollerContext, spec.questionnaires, spec.logger, spec.cleanupFailures,
+			)
+		})
+	}
+	if !spec.cfg.Phase4.Enabled {
+		return
+	}
+	analyticsRepository := store.NewAnalyticsRepository(spec.store, spec.cfg.Phase4)
+	pollers.Go(func(pollerContext context.Context) {
+		pollAnalytics(
+			pollerContext, analyticsRepository, spec.cfg.Phase4, spec.logger,
+			spec.analyticsFailures, spec.analyticsRuns,
+		)
+	})
 }
 
 func finishWorkerShutdown(
@@ -342,6 +386,66 @@ func pollExpiredRecordCleanup(
 	}
 }
 
+// The cycle is bounded so one run can never monopolise the worker, and it stops
+// as soon as the context is cancelled.
+func keepCleaning(ctx context.Context, batches int) bool {
+	return batches < expiredRecordCleanupMaxBatches && ctx.Err() == nil
+}
+
+func recordCleanupDeletions(
+	metrics expiredCleanupMetrics,
+	result store.ExpiredRecordCleanupResult,
+) {
+	metrics.deleted.WithLabelValues("idempotency").Add(
+		float64(result.IdempotencyRecords),
+	)
+	metrics.deleted.WithLabelValues("rate_limit").Add(
+		float64(result.RateLimitBuckets),
+	)
+}
+
+func workerStateGauges() (prometheus.Gauge, prometheus.Gauge) {
+	alive := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "cumuru",
+		Subsystem: "worker",
+		Name:      "alive",
+		Help:      "Indica que o processo worker está ativo.",
+	})
+	ready := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "cumuru",
+		Subsystem: "worker",
+		Name:      "database_ready",
+		Help:      "Indica que a dependência PostgreSQL está pronta.",
+	})
+	return alive, ready
+}
+
+func workerFailureMetrics() (
+	prometheus.Counter,
+	prometheus.Counter,
+	*prometheus.CounterVec,
+) {
+	cleanupFailures := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "cumuru",
+		Subsystem: "worker",
+		Name:      "free_text_cleanup_failures_total",
+		Help:      "Total de falhas técnicas no cleanup de texto livre.",
+	})
+	analyticsFailures := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "cumuru",
+		Subsystem: "worker",
+		Name:      "analytics_failures_total",
+		Help:      "Total de falhas técnicas nos ciclos de analytics.",
+	})
+	analyticsRuns := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "cumuru",
+		Subsystem: "worker",
+		Name:      "analytics_runs_total",
+		Help:      "Total de ciclos de analytics concluídos por tipo.",
+	}, []string{"kind"})
+	return cleanupFailures, analyticsFailures, analyticsRuns
+}
+
 func runExpiredRecordCleanup(
 	ctx context.Context,
 	cleaner expiredRecordCleaner,
@@ -358,7 +462,7 @@ func runExpiredRecordCleanup(
 		metrics.batches.Observe(float64(batches))
 		metrics.saturated.Set(boolMetric(saturated))
 	}()
-	for batches < expiredRecordCleanupMaxBatches && ctx.Err() == nil {
+	for keepCleaning(ctx, batches) {
 		result, ok := runExpiredCleanupBatch(
 			ctx, cleaner, cutoff.UTC(), batchSize, logger, metrics,
 		)
@@ -366,17 +470,11 @@ func runExpiredRecordCleanup(
 			return
 		}
 		batches++
-		metrics.deleted.WithLabelValues("idempotency").Add(
-			float64(result.IdempotencyRecords),
-		)
-		metrics.deleted.WithLabelValues("rate_limit").Add(
-			float64(result.RateLimitBuckets),
-		)
-		full := cleanupBatchFull(result, batchSize)
-		saturated = full && batches == expiredRecordCleanupMaxBatches
-		if !full {
+		recordCleanupDeletions(metrics, result)
+		if !cleanupBatchFull(result, batchSize) {
 			break
 		}
+		saturated = batches == expiredRecordCleanupMaxBatches
 	}
 	if ctx.Err() != nil {
 		recordExpiredCleanupCancellation(logger, metrics)

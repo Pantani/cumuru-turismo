@@ -1,11 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {act, cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import QuestionnaireAdminPage from "../../pages/QuestionnaireAdminPage";
-import { AuthSessionProvider } from "../../shared/auth/AuthSession";
+import { renderWithSession } from "../../test/session";
 
 const responseHeaders = {
   "Cache-Control": "no-store",
@@ -16,17 +15,8 @@ const versionId = "019f0000-0000-7000-8000-000000000061";
 const secondQuestionnaireId = "019f0000-0000-7000-8000-000000000072";
 const secondVersionId = "019f0000-0000-7000-8000-000000000071";
 
-function renderPage(token: string | null = null) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <AuthSessionProvider accessToken={token}>
-        <QuestionnaireAdminPage />
-      </AuthSessionProvider>
-    </QueryClientProvider>,
-  );
+function renderPage(signedIn = false) {
+  return renderWithSession(<QuestionnaireAdminPage />, { signedIn });
 }
 
 function questionnairePage() {
@@ -159,7 +149,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await screen.findByText("Nenhum questionário criado.");
     await user.click(screen.getByRole("button", { name: "Criar rascunho" }));
 
@@ -170,9 +160,9 @@ describe("administração de questionários", () => {
       .map((call) => call[0] as Request)
       .find((request) => request.method === "POST");
     expect(post?.headers.get("Authorization")).toBe(
-      "Bearer opaque-editor-token",
+      "Bearer cms_test-session-token",
     );
-    expect(document.body.textContent).not.toContain("opaque-editor-token");
+    expect(document.body.textContent).not.toContain("cms_test-session-token");
   });
 
   it("lista e retoma a versão escolhida com seu ETag", async () => {
@@ -192,7 +182,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    const { container } = renderPage("opaque-editor-token");
+    const { container } = renderPage(true);
     const questionnaireButton = await screen.findByRole("button", {
       name: "Perfil turístico",
     });
@@ -259,7 +249,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await user.click(
       await screen.findByRole("button", {
         name: "Carregar mais questionários",
@@ -317,49 +307,52 @@ describe("administração de questionários", () => {
       revision: 5,
       title: "Segunda página",
     };
+    const unavailablePage = () =>
+      Response.json(
+        { title: "Página indisponível.", status: 503 },
+        { status: 503, headers: responseHeaders },
+      );
+    const okPage = (body: unknown) =>
+      Response.json(body, { headers: responseHeaders });
+    // The second page of each list fails once and succeeds on retry.
+    const failFirst = (attempt: number, body: unknown) =>
+      attempt === 1 ? unavailablePage() : okPage(body);
+
+    const questionnaireRoute = (cursor: string | null) => {
+      if (cursor !== "questionnaires-next") {
+        return okPage({
+          ...questionnairePage(),
+          next_cursor: "questionnaires-next",
+        });
+      }
+      questionnaireAttempts += 1;
+      return failFirst(questionnaireAttempts, {
+        items: [secondQuestionnaire()],
+        next_cursor: null,
+      });
+    };
+
+    const versionRoute = (cursor: string | null) => {
+      if (cursor !== "versions-next") {
+        return okPage({ ...versionPage(), next_cursor: "versions-next" });
+      }
+      versionAttempts += 1;
+      return failFirst(versionAttempts, {
+        items: [laterVersion],
+        next_cursor: null,
+      });
+    };
+
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = new URL((input as Request).url);
       const cursor = url.searchParams.get("cursor");
-      if (url.pathname === "/api/v1/questionnaires") {
-        if (cursor === "questionnaires-next") {
-          questionnaireAttempts += 1;
-          if (questionnaireAttempts === 1) {
-            return Response.json(
-              { title: "Página indisponível.", status: 503 },
-              { status: 503, headers: responseHeaders },
-            );
-          }
-          return Response.json(
-            { items: [secondQuestionnaire()], next_cursor: null },
-            { headers: responseHeaders },
-          );
-        }
-        return Response.json(
-          { ...questionnairePage(), next_cursor: "questionnaires-next" },
-          { headers: responseHeaders },
-        );
-      }
-      if (cursor === "versions-next") {
-        versionAttempts += 1;
-        if (versionAttempts === 1) {
-          return Response.json(
-            { title: "Página indisponível.", status: 503 },
-            { status: 503, headers: responseHeaders },
-          );
-        }
-        return Response.json(
-          { items: [laterVersion], next_cursor: null },
-          { headers: responseHeaders },
-        );
-      }
-      return Response.json(
-        { ...versionPage(), next_cursor: "versions-next" },
-        { headers: responseHeaders },
-      );
+      return url.pathname === "/api/v1/questionnaires"
+        ? questionnaireRoute(cursor)
+        : versionRoute(cursor);
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await user.click(
       await screen.findByRole("button", {
         name: "Carregar mais questionários",
@@ -417,7 +410,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await screen.findByRole("button", { name: "Perfil turístico" });
     expect(
       screen.queryByRole("button", { name: "Carregar mais questionários" }),
@@ -470,7 +463,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await user.click(
       await screen.findByRole("button", { name: "Perfil turístico" }),
     );
@@ -542,7 +535,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await user.click(
       await screen.findByRole("button", { name: "Perfil turístico" }),
     );
@@ -601,7 +594,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await user.click(
       await screen.findByRole("button", { name: "Perfil turístico" }),
     );
@@ -656,7 +649,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await user.click(
       await screen.findByRole("button", { name: "Perfil turístico" }),
     );
@@ -708,7 +701,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await user.click(
       await screen.findByRole("button", { name: "Perfil turístico" }),
     );
@@ -759,7 +752,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await user.click(
       await screen.findByRole("button", { name: "Perfil turístico" }),
     );
@@ -798,7 +791,7 @@ describe("administração de questionários", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-editor-token");
+    renderPage(true);
     await user.click(
       await screen.findByRole("button", { name: "Perfil turístico" }),
     );

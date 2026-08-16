@@ -301,6 +301,13 @@ async function problemFrom(response: Response): Promise<Schemas["Problem"]> {
   }
 }
 
+function usableToken(authenticated: boolean | undefined, token: string | null) {
+  if (authenticated === false || token === null) {
+    return false;
+  }
+  return token.length > 0;
+}
+
 function requestHeaders(
   options: RequestOptions,
   accessToken: string | null,
@@ -312,11 +319,7 @@ function requestHeaders(
   if (options.body !== undefined) {
     headers.set("Content-Type", options.contentType ?? "application/json");
   }
-  if (
-    options.authenticated !== false &&
-    accessToken !== null &&
-    accessToken.length > 0
-  ) {
+  if (usableToken(options.authenticated, accessToken)) {
     headers.set("Authorization", `Bearer ${accessToken}`);
   }
   return headers;

@@ -47,13 +47,31 @@ func (r *AnalyticsRepository) Publish(
 	if version, found, lookupErr := r.findPublication(ctx, fingerprint); found || lookupErr != nil {
 		return version, found, lookupErr
 	}
-	publication, err = r.preparePublication(publication)
+	return r.publishNew(ctx, publication, fingerprint)
+}
+
+func (r *AnalyticsRepository) publishNew(
+	ctx context.Context,
+	publication analytics.Publication,
+	fingerprint string,
+) (int64, bool, error) {
+	publication, err := r.preparePublication(publication)
 	if err != nil {
 		return 0, false, err
 	}
 	if err := r.insertPublicationRun(ctx, publication, fingerprint); err != nil {
 		return r.resolveConcurrentPublication(ctx, fingerprint, err)
 	}
+	return r.stageAndPublish(ctx, publication, fingerprint)
+}
+
+// Any failure after the run row exists must mark that run failed, otherwise a
+// retry would find a stale "processing" run and refuse to proceed.
+func (r *AnalyticsRepository) stageAndPublish(
+	ctx context.Context,
+	publication analytics.Publication,
+	fingerprint string,
+) (int64, bool, error) {
 	if err := r.stagePublication(ctx, publication); err != nil {
 		r.failPublicationRun(ctx, publication.RunID)
 		return 0, false, err
@@ -234,23 +252,47 @@ func publishSnapshot(
 	if err != nil {
 		return 0, ErrUnavailable
 	}
-	for _, cell := range publication.Cells {
+	if err := insertPublishedCells(ctx, queries, version, publication.Cells); err != nil {
+		return 0, err
+	}
+	if err := promotePublication(ctx, queries, version, publication); err != nil {
+		return 0, err
+	}
+	return version, nil
+}
+
+func insertPublishedCells(
+	ctx context.Context,
+	queries generated.Querier,
+	version int64,
+	cells []analytics.PublicationCell,
+) error {
+	for _, cell := range cells {
 		if err := queries.InsertPublishedMetricCell(ctx, publishedCellParams(version, cell)); err != nil {
-			return 0, ErrUnavailable
+			return ErrUnavailable
 		}
 	}
+	return nil
+}
+
+func promotePublication(
+	ctx context.Context,
+	queries generated.Querier,
+	version int64,
+	publication analytics.Publication,
+) error {
 	promoted, err := queries.PromoteCurrentPublication(ctx, version)
 	if err != nil || promoted != 1 {
-		return 0, ErrUnavailable
+		return ErrUnavailable
 	}
 	completed, err := queries.CompletePublicationRun(ctx, generated.CompletePublicationRunParams{
 		Status: "published", CompletedAt: pgTime(publication.PublishedAt),
 		ID: idToPG(publication.RunID),
 	})
 	if err != nil || completed != 1 {
-		return 0, ErrUnavailable
+		return ErrUnavailable
 	}
-	return version, nil
+	return nil
 }
 
 func publicationParams(
@@ -371,15 +413,32 @@ func qualityCoverageRow(
 	result := analytics.QualityCoverage{
 		CategoryCode: *row.CategoryCode, Status: *row.CoverageStatus,
 	}
-	if *row.CoverageStatus == "not_available" {
+	return withCoverageRatio(result, row.CoverageRatio)
+}
+
+// Only an "available" coverage carries a ratio, and that ratio must be a
+// fraction; anything else is a contract break rather than a missing value.
+func coverageFraction(ratio pgtype.Numeric) (float64, error) {
+	value, err := numericFloat(ratio)
+	if err != nil || value < 0 || value > 1 {
+		return 0, analytics.ErrPublicUnavailable
+	}
+	return value, nil
+}
+
+func withCoverageRatio(
+	result analytics.QualityCoverage,
+	ratio pgtype.Numeric,
+) (analytics.QualityCoverage, error) {
+	if result.Status == "not_available" {
 		return result, nil
 	}
-	if *row.CoverageStatus != "available" {
+	if result.Status != "available" {
 		return result, analytics.ErrPublicUnavailable
 	}
-	value, err := numericFloat(row.CoverageRatio)
-	if err != nil || value < 0 || value > 1 {
-		return result, analytics.ErrPublicUnavailable
+	value, err := coverageFraction(ratio)
+	if err != nil {
+		return result, err
 	}
 	result.Ratio = &value
 	return result, nil
@@ -398,14 +457,21 @@ func (r *AnalyticsRepository) Reconcile(
 	kind analytics.ReconciliationKind,
 	asOf stay.CivilDate,
 ) (bool, error) {
-	if kind != analytics.ReconciliationIncremental && kind != analytics.ReconciliationFull {
-		return false, ErrUnavailable
-	}
-	if r.store.pool == nil {
+	known := kind == analytics.ReconciliationIncremental ||
+		kind == analytics.ReconciliationFull
+	if !known || r.store.pool == nil {
 		return false, ErrUnavailable
 	}
 	ctx, cancel := context.WithTimeout(ctx, r.store.timeout)
 	defer cancel()
+	return r.reconcileInTransaction(ctx, kind, asOf)
+}
+
+func (r *AnalyticsRepository) reconcileInTransaction(
+	ctx context.Context,
+	kind analytics.ReconciliationKind,
+	asOf stay.CivilDate,
+) (bool, error) {
 	tx, err := r.store.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	if err != nil {
 		return false, ErrUnavailable
@@ -437,6 +503,17 @@ func (r *AnalyticsRepository) reconcileTransaction(
 	if err != nil || alreadyRan {
 		return false, err
 	}
+	return r.runReconciliation(ctx, queries, kind, asOf, sources, fingerprint)
+}
+
+func (r *AnalyticsRepository) runReconciliation(
+	ctx context.Context,
+	queries generated.Querier,
+	kind analytics.ReconciliationKind,
+	asOf stay.CivilDate,
+	sources []reconciliationSource,
+	fingerprint string,
+) (bool, error) {
 	runID, err := uuid.NewV7()
 	if err != nil {
 		return false, ErrUnavailable
@@ -814,6 +891,36 @@ func (r *AnalyticsRepository) BuildAndPublish(
 	if err != nil {
 		return 0, false, err
 	}
+	version, replayed, err = r.publishAndRecord(ctx, asOf, cells, coverage, inputs, categoryCoverage)
+	if err != nil {
+		return 0, false, err
+	}
+	return version, replayed, nil
+}
+
+func (r *AnalyticsRepository) publishAndRecord(
+	ctx context.Context,
+	asOf stay.CivilDate,
+	cells []analytics.PublicationCell,
+	coverage analytics.Coverage,
+	inputs publicationInputs,
+	categoryCoverage []categoryCoverage,
+) (int64, bool, error) {
+	version, replayed, err := r.Publish(ctx, r.newPublication(asOf, cells, coverage))
+	if err != nil {
+		return 0, false, err
+	}
+	if err := r.recordQuality(ctx, inputs, categoryCoverage); err != nil {
+		return 0, false, err
+	}
+	return version, replayed, nil
+}
+
+func (r *AnalyticsRepository) newPublication(
+	asOf stay.CivilDate,
+	cells []analytics.PublicationCell,
+	coverage analytics.Coverage,
+) analytics.Publication {
 	publication := analytics.Publication{
 		AsOfOn: asOf.String(), DataMode: r.phase4.DataMode,
 		PrivacyPolicyVersion: r.phase4.PrivacyPolicyVersion,
@@ -824,14 +931,7 @@ func (r *AnalyticsRepository) BuildAndPublish(
 		value := int32(*coverage.Ratio)
 		publication.CoverageRatioPercent = &value
 	}
-	version, replayed, err = r.Publish(ctx, publication)
-	if err != nil {
-		return 0, false, err
-	}
-	if err := r.recordQuality(ctx, inputs, categoryCoverage); err != nil {
-		return 0, false, err
-	}
-	return version, replayed, nil
+	return publication
 }
 
 func (r *AnalyticsRepository) recordAggregationFailure(ctx context.Context) error {
@@ -848,11 +948,19 @@ func (r *AnalyticsRepository) recordAggregationFailure(ctx context.Context) erro
 			UpdatedAt:  pgTime(r.store.currentTime()),
 		},
 	)
-	if err != nil || uuidFromPG(result.ID) != id ||
-		result.AggregationFailures < 1 || result.CoverageCount < 0 {
+	if err != nil || !recordedFailure(result, id) {
 		return ErrUnavailable
 	}
 	return nil
+}
+
+func recordedFailure(
+	result generated.RecordAggregationFailureQualitySnapshotRow,
+	id uuid.UUID,
+) bool {
+	return uuidFromPG(result.ID) == id &&
+		result.AggregationFailures >= 1 &&
+		result.CoverageCount >= 0
 }
 
 func (r *AnalyticsRepository) loadPublicationInputs(
@@ -890,32 +998,11 @@ func (r *AnalyticsRepository) readPublicationInputs(
 	if err := r.validateMetricCatalog(ctx, queries); err != nil {
 		return publicationInputs{}, err
 	}
-	facts, err := queries.ListPresenceFactsForWindow(
-		ctx,
-		generated.ListPresenceFactsForWindowParams{
-			WindowStart: dateToPG(asOf.AddDays(-56).String()),
-			WindowEnd:   dateToPG(asOf.AddDays(31).String()),
-		},
-	)
+	windows, err := r.readPublicationWindows(ctx, queries, asOf)
 	if err != nil {
-		return publicationInputs{}, ErrUnavailable
+		return publicationInputs{}, err
 	}
-	coverage, err := queries.ListActiveAccommodationCoverage(
-		ctx,
-		generated.ListActiveAccommodationCoverageParams{
-			WindowStart: dateToPG(asOf.AddDays(-29).String()),
-			WindowEnd:   dateToPG(asOf.AddDays(1).String()),
-		},
-	)
-	if err != nil {
-		return publicationInputs{}, ErrUnavailable
-	}
-	preferences, err := queries.ListEligiblePreferenceCounts(
-		ctx, preferenceCountParams(r.phase4.PrivacyPolicyVersion, asOf),
-	)
-	if err != nil {
-		return publicationInputs{}, ErrUnavailable
-	}
+	facts, coverage, preferences := windows.facts, windows.coverage, windows.preferences
 	sources, err := queries.ListPresenceReconciliationStays(ctx)
 	if err != nil {
 		return publicationInputs{}, ErrUnavailable
@@ -950,11 +1037,23 @@ func (r *AnalyticsRepository) validateMetricCatalog(
 	if err != nil || len(rows) != 3 {
 		return ErrUnavailable
 	}
-	expected := map[string]string{
+	return r.matchMetricCatalog(rows, expectedMetricShapes())
+}
+
+func expectedMetricShapes() map[string]string {
+	return map[string]string{
 		"presence|recent_30_days":               "none|person_day",
 		"presence|next_30_days":                 "none|person_day",
 		"first_visit_share|last_complete_month": "visit_profile|survey_response",
 	}
+}
+
+// Every expected metric must appear exactly once with the expected shape; a
+// leftover expectation means the catalogue drifted from the contract.
+func (r *AnalyticsRepository) matchMetricCatalog(
+	rows []generated.AnalyticsMetricCatalog,
+	expected map[string]string,
+) error {
 	for _, row := range rows {
 		key := row.MetricCode + "|" + row.PeriodSelector
 		if !r.validMetricCatalogRow(row, expected[key]) {
@@ -973,9 +1072,15 @@ func (r *AnalyticsRepository) validMetricCatalogRow(
 	expectedShape string,
 ) bool {
 	shape := row.DimensionCode + "|" + row.Unit
-	return expectedShape != "" && expectedShape == shape && row.Active &&
-		row.PrivacyPolicyVersion == r.phase4.PrivacyPolicyVersion &&
-		row.MinimumPublicCell == int32(r.phase4.PrimaryCellThreshold) &&
+	return expectedShape != "" && expectedShape == shape &&
+		row.Active && row.PrivacyPolicyVersion == r.phase4.PrivacyPolicyVersion &&
+		r.matchesCellThresholds(row)
+}
+
+func (r *AnalyticsRepository) matchesCellThresholds(
+	row generated.AnalyticsMetricCatalog,
+) bool {
+	return row.MinimumPublicCell == int32(r.phase4.PrimaryCellThreshold) &&
 		row.MinimumReportingAccommodations ==
 			int32(r.phase4.MinimumReportingAccommodations)
 }
@@ -1001,22 +1106,72 @@ func incompleteStayCount(
 	return count, nil
 }
 
+type publicationWindows struct {
+	facts       []generated.ListPresenceFactsForWindowRow
+	coverage    []generated.ListActiveAccommodationCoverageRow
+	preferences []generated.ListEligiblePreferenceCountsRow
+}
+
+// The three windowed reads share one transaction so the publication observes a
+// single consistent snapshot.
+func (r *AnalyticsRepository) readPublicationWindows(
+	ctx context.Context,
+	queries generated.Querier,
+	asOf stay.CivilDate,
+) (publicationWindows, error) {
+	facts, err := queries.ListPresenceFactsForWindow(
+		ctx,
+		generated.ListPresenceFactsForWindowParams{
+			WindowStart: dateToPG(asOf.AddDays(-56).String()),
+			WindowEnd:   dateToPG(asOf.AddDays(31).String()),
+		},
+	)
+	if err != nil {
+		return publicationWindows{}, ErrUnavailable
+	}
+	coverage, err := queries.ListActiveAccommodationCoverage(
+		ctx,
+		generated.ListActiveAccommodationCoverageParams{
+			WindowStart: dateToPG(asOf.AddDays(-29).String()),
+			WindowEnd:   dateToPG(asOf.AddDays(1).String()),
+		},
+	)
+	if err != nil {
+		return publicationWindows{}, ErrUnavailable
+	}
+	preferences, err := queries.ListEligiblePreferenceCounts(
+		ctx, preferenceCountParams(r.phase4.PrivacyPolicyVersion, asOf),
+	)
+	if err != nil {
+		return publicationWindows{}, ErrUnavailable
+	}
+	return publicationWindows{facts: facts, coverage: coverage, preferences: preferences}, nil
+}
+
 func overdueStayCount(
 	sources []generated.ListPresenceReconciliationStaysRow,
 	asOf stay.CivilDate,
 ) int32 {
 	var count int32
 	for _, source := range sources {
-		status := stay.Status(source.Status)
-		if status != stay.StatusPreRegistered && status != stay.StatusCheckedIn {
-			continue
-		}
-		departure := civilDateFromPG(source.PlannedDepartureOn)
-		if departure.Before(asOf) || departure.Equal(asOf) {
+		if overdueStay(source, asOf) {
 			count++
 		}
 	}
 	return count
+}
+
+// A stay is overdue when it is still open past its planned departure.
+func overdueStay(
+	source generated.ListPresenceReconciliationStaysRow,
+	asOf stay.CivilDate,
+) bool {
+	status := stay.Status(source.Status)
+	if status != stay.StatusPreRegistered && status != stay.StatusCheckedIn {
+		return false
+	}
+	departure := civilDateFromPG(source.PlannedDepartureOn)
+	return departure.Before(asOf) || departure.Equal(asOf)
 }
 
 type factAggregate struct {
@@ -1078,16 +1233,33 @@ func addPresenceAggregate(
 	result map[string]*factAggregate,
 	row generated.ListPresenceFactsForWindowRow,
 ) error {
-	value, err := numericFloat(row.Weight)
-	if err != nil || value <= 0 || value > 1 {
-		return ErrUnavailable
+	value, err := presenceWeight(row.Weight)
+	if err != nil {
+		return err
 	}
 	visitorID := uuidFromPG(row.VisitorID)
 	accommodationID := uuidFromPG(row.AccommodationID)
 	if visitorID == uuid.Nil || accommodationID == uuid.Nil || !row.PresenceOn.Valid {
 		return ErrUnavailable
 	}
-	key := aggregateKey(dateString(row.PresenceOn), row.Kind)
+	aggregate := ensureAggregate(result, aggregateKey(dateString(row.PresenceOn), row.Kind))
+	aggregate.value += value
+	aggregate.visitors[visitorID] = struct{}{}
+	aggregate.accommodations[accommodationID] = struct{}{}
+	return nil
+}
+
+// A presence weight is a fraction of one person-day; anything outside (0,1] is
+// a corrupt fact rather than a value to clamp.
+func presenceWeight(raw pgtype.Numeric) (float64, error) {
+	value, err := numericFloat(raw)
+	if err != nil || value <= 0 || value > 1 {
+		return 0, ErrUnavailable
+	}
+	return value, nil
+}
+
+func ensureAggregate(result map[string]*factAggregate, key string) *factAggregate {
 	aggregate := result[key]
 	if aggregate == nil {
 		aggregate = &factAggregate{
@@ -1096,10 +1268,7 @@ func addPresenceAggregate(
 		}
 		result[key] = aggregate
 	}
-	aggregate.value += value
-	aggregate.visitors[visitorID] = struct{}{}
-	aggregate.accommodations[accommodationID] = struct{}{}
-	return nil
+	return aggregate
 }
 
 func aggregateKey(date, kind string) string {
@@ -1319,21 +1488,8 @@ func (r *AnalyticsRepository) buildPreferenceCells(
 	if err != nil {
 		return nil, err
 	}
-	total := counts["first_visit"].sample + counts["returning"].sample
 	categories := []string{"first_visit", "returning"}
-	source := make([]analytics.Cell, 0, len(categories))
-	for _, category := range categories {
-		count := counts[category]
-		share := 0.0
-		if total > 0 {
-			share = 100 * float64(count.sample) / float64(total)
-		}
-		source = append(source, analytics.Cell{
-			Key: category, Family: "first_visit_share",
-			RawValue: share, SampleSize: int(count.sample),
-			AccommodationCount: int(count.accommodations),
-		})
-	}
+	source := preferenceSourceCells(counts, categories)
 	protected, err := analytics.ProtectCells(source, analytics.Policy{
 		PrimaryThreshold:               threshold,
 		MinimumReportingAccommodations: r.phase4.MinimumReportingAccommodations,
@@ -1376,22 +1532,33 @@ func (r *AnalyticsRepository) preferenceCounts(
 	return result, nil
 }
 
+func preferenceSourceCells(
+	counts map[string]preferenceCount,
+	categories []string,
+) []analytics.Cell {
+	total := counts["first_visit"].sample + counts["returning"].sample
+	source := make([]analytics.Cell, 0, len(categories))
+	for _, category := range categories {
+		count := counts[category]
+		share := 0.0
+		if total > 0 {
+			share = 100 * float64(count.sample) / float64(total)
+		}
+		source = append(source, analytics.Cell{
+			Key: category, Family: "first_visit_share",
+			RawValue: share, SampleSize: int(count.sample),
+			AccommodationCount: int(count.accommodations),
+		})
+	}
+	return source
+}
+
 func (r *AnalyticsRepository) addPreferenceCount(
 	result map[string]preferenceCount,
 	seen map[string]struct{},
 	row generated.ListEligiblePreferenceCountsRow,
 ) error {
-	if row.PrivacyPolicyVersion != r.phase4.PrivacyPolicyVersion ||
-		row.MetricCode != "first_visit_share" {
-		return ErrUnavailable
-	}
-	if _, allowed := result[row.CategoryCode]; !allowed {
-		return ErrUnavailable
-	}
-	if _, duplicate := seen[row.CategoryCode]; duplicate {
-		return ErrUnavailable
-	}
-	if !validCount(row.SampleSize) || !validCount(row.AccommodationCount) {
+	if !r.acceptablePreferenceRow(row, result, seen) {
 		return ErrUnavailable
 	}
 	seen[row.CategoryCode] = struct{}{}
@@ -1402,21 +1569,54 @@ func (r *AnalyticsRepository) addPreferenceCount(
 	return nil
 }
 
+// A preference row must match the active policy, name a known category exactly
+// once, and carry counts inside the int32 range the schema stores.
+func (r *AnalyticsRepository) acceptablePreferenceRow(
+	row generated.ListEligiblePreferenceCountsRow,
+	result map[string]preferenceCount,
+	seen map[string]struct{},
+) bool {
+	if row.PrivacyPolicyVersion != r.phase4.PrivacyPolicyVersion ||
+		row.MetricCode != "first_visit_share" {
+		return false
+	}
+	if !knownOnce(row.CategoryCode, result, seen) {
+		return false
+	}
+	return validCount(row.SampleSize) && validCount(row.AccommodationCount)
+}
+
+func knownOnce(
+	category string,
+	result map[string]preferenceCount,
+	seen map[string]struct{},
+) bool {
+	if _, allowed := result[category]; !allowed {
+		return false
+	}
+	_, duplicate := seen[category]
+	return !duplicate
+}
+
 func (r *AnalyticsRepository) effectivePreferenceThreshold(
 	counts map[string]preferenceCount,
 ) (int, error) {
 	result := r.phase4.PrimaryCellThreshold
 	for _, category := range []string{"first_visit", "returning"} {
 		count, exists := counts[category]
-		if !exists || !count.present ||
-			count.minimum < int32(r.phase4.PrimaryCellThreshold) {
+		if !r.usableThreshold(count, exists) {
 			return 0, ErrUnavailable
 		}
-		if int(count.minimum) > result {
-			result = int(count.minimum)
-		}
+		result = max(result, int(count.minimum))
 	}
 	return result, nil
+}
+
+// The published threshold is never weaker than the configured one; a question
+// may only raise its own minimum cell.
+func (r *AnalyticsRepository) usableThreshold(count preferenceCount, exists bool) bool {
+	return exists && count.present &&
+		count.minimum >= int32(r.phase4.PrimaryCellThreshold)
 }
 
 func validCount(value int64) bool {
@@ -1567,6 +1767,19 @@ func silentAccommodationCount(
 	return count
 }
 
+// A withheld coverage is stored as "not_available" with no ratio, never as a
+// zero that a reader could mistake for a measurement.
+func coverageColumns(coverage analytics.Coverage) (string, pgtype.Numeric, error) {
+	if coverage.Status != analytics.CoveragePublished || coverage.Ratio == nil {
+		return "not_available", pgtype.Numeric{}, nil
+	}
+	ratio, err := numericFromFloat(float64(*coverage.Ratio) / 100)
+	if err != nil {
+		return "", pgtype.Numeric{}, ErrUnavailable
+	}
+	return "available", ratio, nil
+}
+
 func insertQualityCoverage(
 	ctx context.Context,
 	queries generated.Querier,
@@ -1576,16 +1789,9 @@ func insertQualityCoverage(
 	if !qualityCategoryCode.MatchString(category.category) {
 		return ErrUnavailable
 	}
-	status := "not_available"
-	ratio := pgtype.Numeric{}
-	if category.coverage.Status == analytics.CoveragePublished &&
-		category.coverage.Ratio != nil {
-		status = "available"
-		var err error
-		ratio, err = numericFromFloat(float64(*category.coverage.Ratio) / 100)
-		if err != nil {
-			return ErrUnavailable
-		}
+	status, ratio, err := coverageColumns(category.coverage)
+	if err != nil {
+		return err
 	}
 	if err := queries.InsertQualityCoverage(ctx, generated.InsertQualityCoverageParams{
 		QualitySnapshotID: idToPG(snapshotID), CategoryCode: category.category,

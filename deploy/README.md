@@ -29,8 +29,6 @@ deliberadamente locais e não podem ser reutilizadas em outro ambiente.
 - `scripts/test-phase4-full-stack.sh`: valida o overlay Compose e a separação
   entre o DSN transacional e o login PostgreSQL público, usando o bootstrap Go
   como fonte canônica da fixture;
-- `scripts/test-local-demo-build.sh`: rejeita configuração parcial ou identidade
-  fake no build padrão e prova o marcador explícito na variante local;
 - `scripts/test-local-demo.sh`: prova banco fresh, repetição, preservação,
   concorrência sob advisory lock de sessão, rollover de datas e colisão
   fail-closed sem sobrescrever linhas existentes; usa

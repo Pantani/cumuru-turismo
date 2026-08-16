@@ -1,0 +1,82 @@
+# Hot reload overlay: the same PostgreSQL, migrations and fixtures as the proven
+# local stack, with the API, the worker and the web served from the source tree
+# instead of from a published image. Applied on top of compose.yaml and
+# compose.local.yaml, so every environment value stays defined in one place.
+#
+# The static stack keeps answering on 4173; this one answers on 5173 through the
+# Vite dev server, which proxies /api/v1 straight to the API container.
+
+services:
+  # Own subnet and no published database port: the hot reload stack has to be
+  # able to run beside the static one, not instead of it.
+  postgres:
+    ports: !override []
+
+  api:
+    image: !reset null
+    build: !override
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    command: !override ["/bin/sh", "/usr/local/bin/dev.sh"]
+    environment:
+      CUMURU_DEV_TARGET: api
+      # The invite links and the CORS allowlist must name the port the operator
+      # actually has open, otherwise a link opened from the dev server lands on
+      # the static stack.
+      INVITE_BASE_URL: ${DEV_INVITE_BASE_URL:-http://127.0.0.1:5173/convites}
+      CORS_ALLOWED_ORIGINS: ${DEV_CORS_ALLOWED_ORIGINS:-http://127.0.0.1:5173}
+      TRUSTED_PROXY_CIDRS: ${DEV_TRUSTED_PROXY_CIDRS:-172.30.8.10/32}
+    read_only: !override false
+    volumes:
+      - ./apps/api:/src:ro
+      - api-go-build-cache:/home/cumuru/.cache
+      - api-go-module-cache:/go/pkg/mod
+
+  worker:
+    image: !reset null
+    build: !override
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    command: !override ["/bin/sh", "/usr/local/bin/dev.sh"]
+    environment:
+      CUMURU_DEV_TARGET: worker
+    read_only: !override false
+    volumes:
+      - ./apps/api:/src:ro
+      - worker-go-build-cache:/home/cumuru/.cache
+      - api-go-module-cache:/go/pkg/mod
+
+  web:
+    image: !reset null
+    build: !override
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    environment:
+      # Vite proxies to the API over the compose network, so the API keeps its
+      # port unpublished exactly as in the static stack.
+      CUMURU_VITE_PROXY_TARGET: http://api:8080
+      VITE_API_BASE_URL: /api/v1
+    ports: !override
+      - "127.0.0.1:5173:5173"
+    read_only: !override false
+    tmpfs: !override []
+    volumes:
+      - ./apps/web:/src/apps/web
+      - web-node-modules:/src/node_modules
+      - web-workspace-node-modules:/src/apps/web/node_modules
+    networks:
+      private:
+        ipv4_address: 172.30.8.10
+
+networks:
+  private:
+    ipam:
+      config: !override
+        - subnet: 172.30.8.0/24
+
+volumes:
+  api-go-build-cache:
+  api-go-module-cache:
+  worker-go-build-cache:
+  web-node-modules:
+  web-workspace-node-modules:

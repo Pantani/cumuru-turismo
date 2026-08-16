@@ -9,6 +9,21 @@ interface AppLinkProps
   navigate: (path: AppPath) => void;
 }
 
+/**
+ * A modified or non-primary click must keep the browser's own behaviour, so
+ * "open in a new tab" and friends keep working on in-app links.
+ */
+function hasModifier(event: MouseEvent<HTMLAnchorElement>) {
+  return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+}
+
+function isPlainLeftClick(event: MouseEvent<HTMLAnchorElement>) {
+  if (event.defaultPrevented || event.button !== 0) {
+    return false;
+  }
+  return !hasModifier(event);
+}
+
 export function AppLink({
   children,
   href,
@@ -18,18 +33,9 @@ export function AppLink({
 }: AppLinkProps) {
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
-
-    if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
+    if (!isPlainLeftClick(event)) {
       return;
     }
-
     event.preventDefault();
     navigate(href);
   };

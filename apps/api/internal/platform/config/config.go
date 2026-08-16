@@ -64,6 +64,7 @@ type Config struct {
 	ServiceName       string
 	TrustedProxyCIDRs []netip.Prefix
 	OIDC              OIDCConfig
+	Auth              AuthConfig
 	Telemetry         TelemetryConfig
 	Phase2            Phase2Config
 	Phase3            Phase3Config
@@ -72,24 +73,80 @@ type Config struct {
 
 type LookupEnv func(string) (string, bool)
 
-func Load(process Process, lookup LookupEnv) (Config, error) {
+// resolveLookup keeps "a nil lookup reads the process environment" in one place
+// so every loader shares the same default instead of restating it.
+func resolveLookup(lookup LookupEnv) LookupEnv {
 	if lookup == nil {
-		lookup = os.LookupEnv
+		return os.LookupEnv
 	}
-	if process != ProcessAPI && process != ProcessWorker {
+	return lookup
+}
+
+func knownProcess(process Process) bool {
+	return process == ProcessAPI || process == ProcessWorker
+}
+
+func Load(process Process, lookup LookupEnv) (Config, error) {
+	if !knownProcess(process) {
 		return Config{}, errors.New("invalid process")
 	}
-
-	trustedProxyCIDRs, err := loadTrustedProxyCIDRs(process, lookup)
+	lookup = resolveLookup(lookup)
+	cfg, err := loadConfig(process, lookup)
 	if err != nil {
 		return Config{}, err
+	}
+	return cfg, cfg.validate()
+}
+
+type loadedParts struct {
+	environment       Environment
+	trustedProxyCIDRs []netip.Prefix
+	auth              AuthConfig
+	phases            phaseConfigs
+}
+
+func loadParts(process Process, lookup LookupEnv) (loadedParts, error) {
+	trustedProxyCIDRs, err := loadTrustedProxyCIDRs(process, lookup)
+	if err != nil {
+		return loadedParts{}, err
 	}
 	environment := Environment(required(lookup, "APP_ENV"))
 	phases, err := loadPhases(environment, process, lookup)
 	if err != nil {
+		return loadedParts{}, err
+	}
+	auth, err := loadAuth(lookup)
+	if err != nil {
+		return loadedParts{}, err
+	}
+	return loadedParts{
+		environment: environment, trustedProxyCIDRs: trustedProxyCIDRs,
+		auth: auth, phases: phases,
+	}, nil
+}
+
+func loadConfig(process Process, lookup LookupEnv) (Config, error) {
+	parts, err := loadParts(process, lookup)
+	if err != nil {
 		return Config{}, err
 	}
-	cfg := Config{
+	cfg := baseConfig(
+		process, parts.environment, lookup,
+		parts.trustedProxyCIDRs, parts.auth, parts.phases,
+	)
+	applyProcessAddresses(&cfg, process, lookup)
+	return cfg, nil
+}
+
+func baseConfig(
+	process Process,
+	environment Environment,
+	lookup LookupEnv,
+	trustedProxyCIDRs []netip.Prefix,
+	auth AuthConfig,
+	phases phaseConfigs,
+) Config {
+	return Config{
 		Process:           process,
 		Environment:       environment,
 		DatabaseURL:       required(lookup, "DATABASE_URL"),
@@ -112,22 +169,23 @@ func Load(process Process, lookup LookupEnv) (Config, error) {
 			Endpoint: required(lookup, "OTEL_ENDPOINT"),
 			Timeout:  duration(lookup, "OTEL_TIMEOUT", 5*time.Second),
 		},
+		Auth:   auth,
 		Phase2: phases.phase2,
 		Phase3: phases.phase3,
 		Phase4: phases.phase4,
 	}
+}
+
+// The API serves a public listener; the worker only exposes operations.
+func applyProcessAddresses(cfg *Config, process Process, lookup LookupEnv) {
 	if process == ProcessAPI {
 		cfg.HTTPAddress = required(lookup, "HTTP_ADDRESS")
 		cfg.OperationsAddress = required(lookup, "OPERATIONS_ADDRESS")
 		cfg.ServiceName = "cumuru-api"
-	} else {
-		cfg.OperationsAddress = optional(lookup, "WORKER_OPERATIONS_ADDRESS", "127.0.0.1:9091")
-		cfg.ServiceName = "cumuru-worker"
+		return
 	}
-	if err := cfg.validate(); err != nil {
-		return Config{}, err
-	}
-	return cfg, nil
+	cfg.OperationsAddress = optional(lookup, "WORKER_OPERATIONS_ADDRESS", "127.0.0.1:9091")
+	cfg.ServiceName = "cumuru-worker"
 }
 
 type phaseConfigs struct {
@@ -240,15 +298,24 @@ func (c Config) validateLogLevel() error {
 	}
 }
 
-func (c Config) validateOIDC() error {
+// The fake verifier exists for local and test only; any other environment must
+// point at a real issuer.
+func (c Config) validateOIDCMode() error {
 	switch c.OIDC.Mode {
 	case OIDCModeFake:
-		if c.Environment != EnvironmentLocal && c.Environment != EnvironmentTest {
+		if !localOrTest(c.Environment) {
 			return invalid("OIDC_MODE")
 		}
 	case OIDCModeReal:
 	default:
 		return invalid("OIDC_MODE")
+	}
+	return nil
+}
+
+func (c Config) validateOIDC() error {
+	if err := c.validateOIDCMode(); err != nil {
+		return err
 	}
 	if err := validURL("OIDC_ISSUER", c.OIDC.Issuer, c.requiresHTTPS()); err != nil {
 		return err
@@ -262,18 +329,25 @@ func (c Config) validateOIDC() error {
 	return nil
 }
 
-func (c Config) validateTelemetry() error {
+// Telemetry may be disabled outside the deployed environments; staging and
+// production must export.
+func (c Config) validateExporter() error {
 	switch c.Telemetry.Exporter {
 	case "none":
-		if c.Environment == EnvironmentStaging || c.Environment == EnvironmentProduction {
+		if c.requiresHTTPS() {
 			return invalid("OTEL_EXPORTER")
 		}
+		return nil
 	case "otlp":
-		if err := validURL("OTEL_ENDPOINT", c.Telemetry.Endpoint, c.requiresHTTPS()); err != nil {
-			return err
-		}
+		return validURL("OTEL_ENDPOINT", c.Telemetry.Endpoint, c.requiresHTTPS())
 	default:
 		return invalid("OTEL_EXPORTER")
+	}
+}
+
+func (c Config) validateTelemetry() error {
+	if err := c.validateExporter(); err != nil {
+		return err
 	}
 	if c.Telemetry.Timeout <= 0 {
 		return invalid("OTEL_TIMEOUT")
@@ -289,23 +363,37 @@ func validDatabaseURL(value string, requireTLS bool) error {
 	return validDatabaseURLField("DATABASE_URL", value, requireTLS)
 }
 
+func postgresURL(parsed *url.URL) bool {
+	scheme := parsed.Scheme == "postgres" || parsed.Scheme == "postgresql"
+	return scheme && parsed.Host != ""
+}
+
+// A deployed database connection must authenticate the server hostname, so only
+// verify-full is accepted there.
+func verifyFullTLS(parsed *url.URL) bool {
+	modes, ok := parsed.Query()["sslmode"]
+	return ok && len(modes) == 1 && modes[0] == "verify-full"
+}
+
 func validDatabaseURLField(field, value string, requireTLS bool) error {
 	parsed, err := url.Parse(value)
-	if err != nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Host == "" {
+	if err != nil || !postgresURL(parsed) {
 		return invalid(field)
 	}
-	if requireTLS {
-		modes, ok := parsed.Query()["sslmode"]
-		if !ok || len(modes) != 1 || modes[0] != "verify-full" {
-			return invalid(field)
-		}
+	if requireTLS && !verifyFullTLS(parsed) {
+		return invalid(field)
 	}
 	return nil
 }
 
+func httpURL(parsed *url.URL) bool {
+	scheme := parsed.Scheme == "http" || parsed.Scheme == "https"
+	return scheme && parsed.Host != ""
+}
+
 func validURL(field, value string, requireHTTPS bool) error {
 	parsed, err := url.Parse(value)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+	if err != nil || !httpURL(parsed) {
 		return invalid(field)
 	}
 	if requireHTTPS && parsed.Scheme != "https" {
@@ -314,13 +402,14 @@ func validURL(field, value string, requireHTTPS bool) error {
 	return nil
 }
 
+func validPort(value string) bool {
+	number, err := strconv.Atoi(value)
+	return err == nil && number >= 1 && number <= 65535
+}
+
 func validAddress(field, value string) error {
 	host, port, err := net.SplitHostPort(value)
-	if err != nil || strings.TrimSpace(host) == "" {
-		return invalid(field)
-	}
-	number, err := strconv.Atoi(port)
-	if err != nil || number < 1 || number > 65535 {
+	if err != nil || strings.TrimSpace(host) == "" || !validPort(port) {
 		return invalid(field)
 	}
 	return nil

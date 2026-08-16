@@ -1,3 +1,5 @@
+import type { ReactElement } from "react";
+
 import type { components } from "../../generated/schema";
 
 import type { AnswerValue } from "./survey-logic";
@@ -53,16 +55,18 @@ function ChoiceInput({ disabled, question, value, onChange }: Props) {
   );
 }
 
+function structuredPlace(value: Props["value"]) {
+  return typeof value === "object" && !Array.isArray(value) ? value : undefined;
+}
+
 function StateCityInput({ disabled, value, onChange }: Props) {
-  const structured =
-    typeof value === "object" && !Array.isArray(value) ? value : undefined;
+  const structured = structuredPlace(value);
   const state = structured?.state ?? "";
   const cityCode = structured?.city_code ?? "";
   const update = (nextState: string, nextCityCode: string) => {
+    const empty = nextState.length === 0 && nextCityCode.length === 0;
     onChange(
-      nextState.length === 0 && nextCityCode.length === 0
-        ? undefined
-        : { state: nextState.toUpperCase(), city_code: nextCityCode },
+      empty ? undefined : { state: nextState.toUpperCase(), city_code: nextCityCode },
     );
   };
   return (
@@ -124,10 +128,20 @@ function inputType(question: Question) {
   return numericQuestion(question) ? "number" : "text";
 }
 
+function displayedScalar(value: Props["value"]) {
+  return typeof value === "string" || typeof value === "number" ? value : "";
+}
+
+function scalarAnswer(raw: string, numeric: boolean) {
+  if (raw === "") {
+    return undefined;
+  }
+  return numeric ? Number(raw) : raw;
+}
+
 function BasicInput({ disabled, question, value, onChange }: Props) {
   const numeric = numericQuestion(question);
-  const displayed =
-    typeof value === "string" || typeof value === "number" ? value : "";
+  const displayed = displayedScalar(value);
   return (
     <input
       id={`survey-${question.id}`}
@@ -139,45 +153,43 @@ function BasicInput({ disabled, question, value, onChange }: Props) {
       max={question.validation?.maximum}
       minLength={question.validation?.min_length}
       maxLength={question.validation?.max_length}
-      onChange={(event) => {
-        if (event.target.value === "") {
-          onChange(undefined);
-          return;
-        }
-        onChange(numeric ? Number(event.target.value) : event.target.value);
-      }}
+      onChange={(event) => onChange(scalarAnswer(event.target.value, numeric))}
     />
   );
 }
 
+function LongTextInput({ disabled, question, value, onChange }: Props) {
+  return (
+    <textarea
+      id={`survey-${question.id}`}
+      aria-labelledby={`survey-label-${question.id}`}
+      disabled={disabled}
+      value={typeof value === "string" ? value : ""}
+      rows={5}
+      maxLength={question.validation?.max_length}
+      onChange={(event) => onChange(event.target.value || undefined)}
+    />
+  );
+}
+
+/**
+ * One control per answer type. BasicInput covers the remaining scalar types,
+ * so a new answer type in the contract shows up here as a missing entry rather
+ * than as a silently wrong control.
+ */
+const controlsByAnswerType: Partial<
+  Record<Question["answer_type"], (props: Props) => ReactElement>
+> = {
+  single_choice: ChoiceInput,
+  multiple_choice: ChoiceInput,
+  state_city: StateCityInput,
+  long_text: LongTextInput,
+  boolean: BooleanInput,
+};
+
 function QuestionControl(props: Props) {
-  const { question } = props;
-  const choice =
-    question.answer_type === "single_choice" ||
-    question.answer_type === "multiple_choice";
-  if (choice) {
-    return <ChoiceInput {...props} />;
-  }
-  if (question.answer_type === "state_city") {
-    return <StateCityInput {...props} />;
-  }
-  if (question.answer_type === "long_text") {
-    return (
-      <textarea
-        id={`survey-${question.id}`}
-        aria-labelledby={`survey-label-${question.id}`}
-        disabled={props.disabled}
-        value={typeof props.value === "string" ? props.value : ""}
-        rows={5}
-        maxLength={question.validation?.max_length}
-        onChange={(event) => props.onChange(event.target.value || undefined)}
-      />
-    );
-  }
-  if (question.answer_type === "boolean") {
-    return <BooleanInput {...props} />;
-  }
-  return <BasicInput {...props} />;
+  const Control = controlsByAnswerType[props.question.answer_type] ?? BasicInput;
+  return <Control {...props} />;
 }
 
 function isFreeText(question: Question) {

@@ -11,7 +11,7 @@ export default function PublicFoundationPage({
 }) {
   return (
     <article className="page page-public">
-      <div className="eyebrow">Analytics e dashboard · Fase 4</div>
+      <div className="eyebrow">Turismo em números</div>
       <div className="hero-grid">
         <div>
           <h1 data-route-heading tabIndex={-1}>

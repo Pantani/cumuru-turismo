@@ -87,7 +87,7 @@ Serviços locais:
 - Grafana em `http://127.0.0.1:3000`;
 - Prometheus em `http://127.0.0.1:9092`;
 - Tempo em `http://127.0.0.1:3200`;
-- PostgreSQL em `127.0.0.1:5432`.
+- PostgreSQL em `127.0.0.1:5433`, ajustável por `POSTGRES_HOST_PORT`.
 
 Todos usam fixtures públicas de `local|test`. O fake OIDC continua local porque
 o frontend ainda não possui jornada institucional de login. O overlay não

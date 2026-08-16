@@ -44,6 +44,11 @@ background sync. Assets sob `/assets/` só entram no cache com query vazia. O
 registro desse asset pertence à feature frontend. Rascunhos offline usam
 IndexedDB; `localStorage` e persistência de token são proibidos.
 
+A sessão do operador vem de `POST /auth/login` e existe apenas em um `ref` do
+`AuthSessionProvider`: o token nunca entra em estado do React, `localStorage`,
+`sessionStorage` ou cache do service worker, e recarregar a página encerra a
+sessão por construção.
+
 O arquivo `src/generated/schema.ts` é produzido a partir do OpenAPI pelo owner
 de plataforma e nunca deve ser editado manualmente.
 

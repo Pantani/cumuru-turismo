@@ -11,7 +11,7 @@ export default function RegistrationPage() {
 
   return (
     <article className="page registration-page">
-      <div className="eyebrow">Registro por convite · Fase 2</div>
+      <div className="eyebrow">Convite da hospedagem</div>
       <h1 data-route-heading tabIndex={-1}>
         Registro de estadias
       </h1>

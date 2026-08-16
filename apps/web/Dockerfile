@@ -1,11 +1,7 @@
 FROM node:26.5.0-alpine3.23@sha256:0473b6671ff22c8eeb570c0e1e51408595d3171e73f8002c269b763f0a943149 AS build
 
 ARG VITE_API_BASE_URL=/api/v1
-ARG VITE_LOCAL_DEMO_MODE=false
-ARG VITE_LOCAL_DEMO_IDENTITY
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
-ENV VITE_LOCAL_DEMO_MODE=${VITE_LOCAL_DEMO_MODE}
-ENV VITE_LOCAL_DEMO_IDENTITY=${VITE_LOCAL_DEMO_IDENTITY}
 
 WORKDIR /src
 COPY package.json package-lock.json ./
@@ -19,7 +15,6 @@ FROM nginxinc/nginx-unprivileged:1.29.8-alpine3.23@sha256:0c79d56aee561a1d81c63f
 ARG BUILD_VERSION
 ARG BUILD_REVISION
 ARG BUILD_TIME
-ARG VITE_LOCAL_DEMO_MODE=false
 ARG LOCAL_DEMO_PROXY_LOOPBACK=false
 
 LABEL org.opencontainers.image.version="${BUILD_VERSION}" \
@@ -46,10 +41,13 @@ RUN echo "${BUILD_VERSION}" | grep -Eq \
       libxml2=2.13.9-r1
 
 COPY deploy/nginx/default.conf /tmp/cumuru-default.conf.template
-RUN case "${VITE_LOCAL_DEMO_MODE}:${LOCAL_DEMO_PROXY_LOOPBACK}" in \
-      false:false) proxy_client_address='$remote_addr' ;; \
-      true:true) proxy_client_address='127.0.0.1' ;; \
-      *) echo "local demo proxy and web build modes must match" >&2; exit 1 ;; \
+# The local demo pins the forwarded address to loopback so the fixture OIDC
+# credential stays reachable only from the host; any other build forwards the
+# real peer address.
+RUN case "${LOCAL_DEMO_PROXY_LOOPBACK}" in \
+      false) proxy_client_address='$remote_addr' ;; \
+      true) proxy_client_address='127.0.0.1' ;; \
+      *) echo "LOCAL_DEMO_PROXY_LOOPBACK must be true or false" >&2; exit 1 ;; \
     esac \
   && export CUMURU_PROXY_CLIENT_ADDRESS="${proxy_client_address}" \
   && envsubst '${CUMURU_PROXY_CLIENT_ADDRESS}' \

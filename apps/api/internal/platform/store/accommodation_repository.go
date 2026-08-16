@@ -68,19 +68,54 @@ func (r *AccommodationRepository) createAccommodation(
 	q generated.Querier,
 	command accommodation.CreateCommand,
 ) (storedMutation, error) {
+	scope, ids, err := prepareOnboarding(ctx, q, command)
+	if err != nil {
+		return storedMutation{}, err
+	}
+	row, err := insertOnboardingRecords(ctx, q, scope, ids, command)
+	if err != nil {
+		return storedMutation{}, err
+	}
+	created := accommodationFromOnboarding(row)
+	if err := r.store.recordAccommodationCreate(ctx, q, command, created); err != nil {
+		return storedMutation{}, err
+	}
+	return onboardingStoredMutation(created)
+}
+
+// The organization, the accommodation and the first manager membership are
+// written together: a participant is never left with an accommodation nobody
+// can operate.
+func prepareOnboarding(
+	ctx context.Context,
+	q generated.Querier,
+	command accommodation.CreateCommand,
+) (accommodationOnboardingScope, accommodationOnboardingIDs, error) {
+	var ids accommodationOnboardingIDs
 	scope, err := resolveAccommodationOnboardingScope(ctx, q, command.Actor)
 	if err != nil {
-		return storedMutation{}, err
+		return scope, ids, err
 	}
 	if err := ensureOnboardingSubmissionUnused(ctx, q, scope.organizationID, command); err != nil {
-		return storedMutation{}, err
+		return scope, ids, err
 	}
-	ids, err := newAccommodationOnboardingIDs(scope)
+	ids, err = newAccommodationOnboardingIDs(scope)
 	if err != nil {
-		return storedMutation{}, accommodation.ErrUnavailable
+		return scope, ids, accommodation.ErrUnavailable
 	}
+	return scope, ids, nil
+}
+
+func insertOnboardingRecords(
+	ctx context.Context,
+	q generated.Querier,
+	scope accommodationOnboardingScope,
+	ids accommodationOnboardingIDs,
+	command accommodation.CreateCommand,
+) (generated.InsertOnboardingAccommodationRow, error) {
+	var empty generated.InsertOnboardingAccommodationRow
 	if err := insertOnboardingOrganization(ctx, q, scope, ids, command.Name); err != nil {
-		return storedMutation{}, accommodationMutationError(err)
+		return empty, accommodationMutationError(err)
 	}
 	row, err := q.InsertOnboardingAccommodation(ctx, generated.InsertOnboardingAccommodationParams{
 		AccommodationID: pgUUID(ids.accommodationID), OrganizationID: pgUUID(ids.organizationID),
@@ -88,19 +123,15 @@ func (r *AccommodationRepository) createAccommodation(
 		OnboardingSubmissionID: pgUUID(command.ClientSubmissionID),
 	})
 	if err != nil {
-		return storedMutation{}, accommodationMutationError(err)
+		return empty, accommodationMutationError(err)
 	}
-	if _, err = q.InsertOnboardingManagerMembership(ctx, generated.InsertOnboardingManagerMembershipParams{
+	if _, err := q.InsertOnboardingManagerMembership(ctx, generated.InsertOnboardingManagerMembershipParams{
 		MembershipID: pgUUID(ids.membershipID), AccommodationID: pgUUID(ids.accommodationID),
 		OidcIssuer: command.Actor.Issuer, OidcSubject: command.Actor.Subject,
 	}); err != nil {
-		return storedMutation{}, accommodationMutationError(err)
+		return empty, accommodationMutationError(err)
 	}
-	created := accommodationFromOnboarding(row)
-	if err := r.store.recordAccommodationCreate(ctx, q, command, created); err != nil {
-		return storedMutation{}, err
-	}
-	return onboardingStoredMutation(created)
+	return row, nil
 }
 
 type accommodationOnboardingScope struct {
@@ -335,22 +366,35 @@ func (r *AccommodationRepository) CreateMembership(
 	return result, replayed, err
 }
 
+// Only an active manager of an accommodation whose status still allows it may
+// change its memberships.
+func managerAccommodation(
+	ctx context.Context,
+	q generated.Querier,
+	accommodationID uuid.UUID,
+	actor access.Principal,
+) (generated.GetAccessibleAccommodationRow, error) {
+	current, err := q.GetAccessibleAccommodation(ctx, accommodationKey(accommodationID, actor))
+	if err != nil || current.ActorRole != string(accommodation.RoleManager) {
+		return current, accommodationQueryError(err)
+	}
+	policyErr := accommodationMutationPolicy(
+		accommodation.Status(current.Status),
+		accommodation.Role(current.ActorRole),
+		accommodation.OperationManageMemberships,
+	)
+	return current, policyErr
+}
+
 func (r *AccommodationRepository) createMembership(
 	ctx context.Context,
 	q generated.Querier,
 	command accommodation.CreateMembershipCommand,
 	now time.Time,
 ) (storedMutation, error) {
-	current, err := q.GetAccessibleAccommodation(ctx, accommodationKey(command.AccommodationID, command.Actor))
-	if err != nil || current.ActorRole != string(accommodation.RoleManager) {
-		return storedMutation{}, accommodationQueryError(err)
-	}
-	if policyErr := accommodationMutationPolicy(
-		accommodation.Status(current.Status),
-		accommodation.Role(current.ActorRole),
-		accommodation.OperationManageMemberships,
-	); policyErr != nil {
-		return storedMutation{}, policyErr
+	current, err := managerAccommodation(ctx, q, command.AccommodationID, command.Actor)
+	if err != nil {
+		return storedMutation{}, err
 	}
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -369,6 +413,13 @@ func (r *AccommodationRepository) createMembership(
 	if err := r.store.recordMembershipCreate(ctx, q, command, current.OrganizationID, created, now); err != nil {
 		return storedMutation{}, err
 	}
+	return membershipStoredMutation(command.AccommodationID, created)
+}
+
+func membershipStoredMutation(
+	accommodationID uuid.UUID,
+	created accommodation.MembershipCreated,
+) (storedMutation, error) {
 	body, err := json.Marshal(created)
 	if err != nil {
 		return storedMutation{}, accommodation.ErrUnavailable
@@ -376,7 +427,7 @@ func (r *AccommodationRepository) createMembership(
 	return storedMutation{
 		status: 201, resourceID: created.ID, body: body,
 		headers: map[string]string{
-			"Location": "/api/v1/accommodations/" + command.AccommodationID.String() +
+			"Location": "/api/v1/accommodations/" + accommodationID.String() +
 				"/memberships/" + created.ID.String(),
 			"ETag": entityTag(created.Version),
 		},
@@ -399,18 +450,8 @@ func (r *AccommodationRepository) updateMembership(
 	q generated.Querier,
 	command accommodation.UpdateMembershipCommand,
 ) (result accommodation.Membership, err error) {
-	current, err := q.GetAccessibleAccommodation(
-		ctx,
-		accommodationKey(command.AccommodationID, command.Actor),
-	)
+	current, err := managerAccommodation(ctx, q, command.AccommodationID, command.Actor)
 	if err != nil {
-		return result, accommodationQueryError(err)
-	}
-	if err = accommodationMutationPolicy(
-		accommodation.Status(current.Status),
-		accommodation.Role(current.ActorRole),
-		accommodation.OperationManageMemberships,
-	); err != nil {
 		return result, err
 	}
 	rows, err := q.LockMembershipSetForManager(ctx, generated.LockMembershipSetForManagerParams{
@@ -420,20 +461,9 @@ func (r *AccommodationRepository) updateMembership(
 	if err != nil || len(rows) == 0 {
 		return result, accommodationQueryError(err)
 	}
-	target, activeManagers, found := membershipTarget(rows, command.MembershipID)
-	if !found {
-		return result, accommodation.ErrNotFound
-	}
-	if target.Version != command.ExpectedVersion {
-		return result, accommodation.ErrPreconditionFailed
-	}
-	nextRole, nextActive := nextMembership(target, command.Patch)
-	change := accommodation.MembershipChange{
-		CurrentRole: accommodation.Role(target.Role), CurrentActive: target.Active,
-		NextRole: nextRole, NextActive: nextActive,
-	}
-	if err = change.Validate(activeManagers); err != nil {
-		return result, accommodation.ErrConflict
+	nextRole, nextActive, err := plannedMembership(rows, command)
+	if err != nil {
+		return result, err
 	}
 	err = r.updateLockedMembership(
 		ctx, q, command, nextRole, nextActive, current.OrganizationID, &result,
@@ -559,6 +589,30 @@ func (s *Store) accommodationOnboardingLockKey(actor access.Principal) (string, 
 	return hex.EncodeToString(digest), nil
 }
 
+// The whole membership set is locked so the last active manager cannot be
+// demoted by two concurrent updates.
+func plannedMembership(
+	rows []generated.LockMembershipSetForManagerRow,
+	command accommodation.UpdateMembershipCommand,
+) (accommodation.Role, bool, error) {
+	target, activeManagers, found := membershipTarget(rows, command.MembershipID)
+	if !found {
+		return "", false, accommodation.ErrNotFound
+	}
+	if target.Version != command.ExpectedVersion {
+		return "", false, accommodation.ErrPreconditionFailed
+	}
+	nextRole, nextActive := nextMembership(target, command.Patch)
+	change := accommodation.MembershipChange{
+		CurrentRole: accommodation.Role(target.Role), CurrentActive: target.Active,
+		NextRole: nextRole, NextActive: nextActive,
+	}
+	if err := change.Validate(activeManagers); err != nil {
+		return "", false, accommodation.ErrConflict
+	}
+	return nextRole, nextActive, nil
+}
+
 func membershipTarget(
 	rows []generated.LockMembershipSetForManagerRow,
 	id uuid.UUID,
@@ -567,7 +621,7 @@ func membershipTarget(
 	var target generated.LockMembershipSetForManagerRow
 	found := false
 	for _, row := range rows {
-		if row.Active && row.Role == string(accommodation.RoleManager) {
+		if activeManager(row) {
 			activeManagers++
 		}
 		if row.ID.Valid && uuid.UUID(row.ID.Bytes) == id {
@@ -575,6 +629,10 @@ func membershipTarget(
 		}
 	}
 	return target, activeManagers, found
+}
+
+func activeManager(row generated.LockMembershipSetForManagerRow) bool {
+	return row.Active && row.Role == string(accommodation.RoleManager)
 }
 
 func nextMembership(
@@ -660,20 +718,25 @@ func accommodationCommandError(
 	return accommodation.ErrConflict
 }
 
+var knownAccommodationErrors = []error{
+	accommodation.ErrNotFound, accommodation.ErrForbidden,
+	accommodation.ErrPreconditionFailed, accommodation.ErrConflict,
+}
+
+func accommodationConflict(err error) bool {
+	return errors.Is(err, pgx.ErrNoRows) ||
+		errors.Is(err, errIdempotencyConflict) ||
+		isUniqueViolation(err)
+}
+
 func accommodationMutationError(err error) error {
 	if errors.Is(err, idempotency.ErrProcessing) {
 		return err
 	}
-	if errors.Is(err, pgx.ErrNoRows) {
+	if accommodationConflict(err) {
 		return accommodation.ErrConflict
 	}
-	if errors.Is(err, errIdempotencyConflict) || isUniqueViolation(err) {
-		return accommodation.ErrConflict
-	}
-	if errors.Is(err, accommodation.ErrNotFound) ||
-		errors.Is(err, accommodation.ErrForbidden) ||
-		errors.Is(err, accommodation.ErrPreconditionFailed) ||
-		errors.Is(err, accommodation.ErrConflict) {
+	if _, ok := firstKnownError(err, knownAccommodationErrors); ok {
 		return err
 	}
 	return accommodation.ErrUnavailable

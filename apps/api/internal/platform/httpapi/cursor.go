@@ -40,20 +40,28 @@ func newCursorCodec(keyring config.KeyringConfig) (cursorCodec, error) {
 	return cursorCodec{keyring: keyring}, nil
 }
 
-func parsePage(codec cursorCodec, requestLimit, cursorValue string) (int32, pageCursor, error) {
+func parseLimit(requestLimit string) (int32, error) {
 	limit := int64(25)
 	var err error
 	if requestLimit != "" {
 		limit, err = strconv.ParseInt(requestLimit, 10, 32)
 	}
 	if err != nil || limit < 1 || limit > 100 {
-		return 0, pageCursor{}, errInvalidCursor
+		return 0, errInvalidCursor
+	}
+	return int32(limit), nil
+}
+
+func parsePage(codec cursorCodec, requestLimit, cursorValue string) (int32, pageCursor, error) {
+	limit, err := parseLimit(requestLimit)
+	if err != nil {
+		return 0, pageCursor{}, err
 	}
 	if cursorValue == "" {
-		return int32(limit), pageCursor{}, nil
+		return limit, pageCursor{}, nil
 	}
 	cursor, err := codec.decode(cursorValue)
-	return int32(limit), cursor, err
+	return limit, cursor, err
 }
 
 func (c cursorCodec) encode(cursor pageCursor) *string {

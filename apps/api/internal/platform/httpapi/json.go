@@ -14,17 +14,35 @@ const maxRequestBodyBytes = 1 << 20
 var errInvalidJSON = errors.New("invalid JSON")
 
 func decodeStrict(request *http.Request, expectedMediaType string, target any) error {
-	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
-	if err != nil || mediaType != expectedMediaType {
-		return errInvalidJSON
-	}
-	content, err := io.ReadAll(io.LimitReader(request.Body, maxRequestBodyBytes+1))
-	if err != nil || len(content) == 0 || len(content) > maxRequestBodyBytes {
-		return errInvalidJSON
+	content, err := boundedBody(request, expectedMediaType)
+	if err != nil {
+		return err
 	}
 	if err := rejectDuplicateJSONKeys(content); err != nil {
 		return errInvalidJSON
 	}
+	return decodeExactlyOne(content, target)
+}
+
+// The body is read through a limit reader with one spare byte, so an oversized
+// payload is detected without ever buffering it.
+func matchesMediaType(request *http.Request, expected string) bool {
+	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	return err == nil && mediaType == expected
+}
+
+func boundedBody(request *http.Request, expectedMediaType string) ([]byte, error) {
+	if !matchesMediaType(request, expectedMediaType) {
+		return nil, errInvalidJSON
+	}
+	content, err := io.ReadAll(io.LimitReader(request.Body, maxRequestBodyBytes+1))
+	if err != nil || len(content) == 0 || len(content) > maxRequestBodyBytes {
+		return nil, errInvalidJSON
+	}
+	return content, nil
+}
+
+func decodeExactlyOne(content []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {

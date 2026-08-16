@@ -6,7 +6,7 @@ export default function AnalyticsQualityPage() {
 
   return (
     <article className="page operator-page">
-      <div className="eyebrow">Analytics interno · Fase 4</div>
+      <div className="eyebrow">Uso interno</div>
       <h1 data-route-heading tabIndex={-1}>
         Qualidade dos dados
       </h1>

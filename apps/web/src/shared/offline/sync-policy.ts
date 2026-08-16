@@ -1,16 +1,21 @@
 export type DraftDisposition = "preserve" | "purge";
 
-const preservedStatuses = new Set([0, 409, 412, 422, 429, 503]);
+function accepted(status: number) {
+  return status >= 200 && status < 300;
+}
 
+/**
+ * A draft is discarded only once the server has certainly consumed it: an
+ * accepted response, or a 404 on an invite already validated (the invite was
+ * spent). Everything else — including an unknown status — preserves the draft,
+ * because losing an operator's typing is worse than keeping a stale one.
+ */
 export function draftDispositionFor(
   status: number,
   inviteWasValidated: boolean,
 ): DraftDisposition {
-  if (status >= 200 && status < 300) {
+  if (accepted(status)) {
     return "purge";
   }
-  if (status === 404 && inviteWasValidated) {
-    return "purge";
-  }
-  return preservedStatuses.has(status) ? "preserve" : "preserve";
+  return status === 404 && inviteWasValidated ? "purge" : "preserve";
 }

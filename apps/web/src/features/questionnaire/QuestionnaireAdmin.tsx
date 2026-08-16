@@ -270,6 +270,10 @@ function Catalog({ client, onSelect, selectedId }: CatalogProps) {
   );
 }
 
+type VersionResult = Awaited<
+  ReturnType<Phase3Client["getQuestionnaireVersion"]>
+>;
+
 const versionStatusLabels: Record<
   Schemas["QuestionnaireVersionStatus"],
   string
@@ -320,19 +324,24 @@ function VersionCatalog({
     getNextPageParam: nextCursor,
   });
 
+  function applyResumed(result: VersionResult, generation: number) {
+    if (generation !== loadGeneration.current) {
+      return;
+    }
+    if (!onSelect(result.data, result.etag ?? "", questionnaireId)) {
+      return;
+    }
+    report(
+      `Versão ${result.data.version_number} carregada: ${versionStatusLabels[result.data.status]}.`,
+    );
+  }
+
   async function resume(versionId: string) {
     const generation = ++loadGeneration.current;
     setLoadingVersionId(versionId);
     report("Carregando versão…");
     try {
-      const result = await client.getQuestionnaireVersion(versionId);
-      if (generation !== loadGeneration.current) {
-        return;
-      }
-      if (!onSelect(result.data, result.etag ?? "", questionnaireId)) {
-        return;
-      }
-      report(`Versão ${result.data.version_number} carregada: ${versionStatusLabels[result.data.status]}.`);
+      applyResumed(await client.getQuestionnaireVersion(versionId), generation);
     } catch (error) {
       if (generation === loadGeneration.current) {
         report(errorMessage(error));
@@ -446,27 +455,36 @@ function VersionEditor({
     setEtag(nextEtag);
   }
 
+  const applyLoaded = useCallback(
+    (result: VersionResult, generation: number, expectedVersionId: string) => {
+      const stale =
+        !operationIsCurrent(generation, expectedVersionId) ||
+        result.data.id !== expectedVersionId;
+      if (stale) {
+        return;
+      }
+      setDefinition(JSON.stringify(definitionFrom(result.data), null, 2));
+      setEtag(result.etag ?? "");
+      report(
+        `Versão ${result.data.version_number} carregada: ${result.data.status}.`,
+      );
+    },
+    [report],
+  );
+
   const load = useCallback(async () => {
     const expectedVersionId = versionIdRef.current;
     const generation = ++operationGeneration.current;
     report("Carregando versão…");
     try {
       const result = await client.getQuestionnaireVersion(expectedVersionId);
-      if (
-        !operationIsCurrent(generation, expectedVersionId) ||
-        result.data.id !== expectedVersionId
-      ) {
-        return;
-      }
-      setDefinition(JSON.stringify(definitionFrom(result.data), null, 2));
-      setEtag(result.etag ?? "");
-      report(`Versão ${result.data.version_number} carregada: ${result.data.status}.`);
+      applyLoaded(result, generation, expectedVersionId);
     } catch (error) {
       if (operationIsCurrent(generation, expectedVersionId)) {
         report(errorMessage(error));
       }
     }
-  }, [client, report]);
+  }, [applyLoaded, client, report]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

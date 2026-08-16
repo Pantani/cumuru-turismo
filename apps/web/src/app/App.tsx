@@ -1,6 +1,7 @@
 import {
   Suspense,
   lazy,
+  type ComponentType,
   type ReactNode,
   useCallback,
   useEffect,
@@ -16,50 +17,43 @@ import { CAPABILITY_CHANGE_EVENT } from "../shared/security/capability-events";
 import { peekInviteCapability } from "../shared/security/invite-capability";
 import { peekSurveyCapability } from "../shared/security/survey-capability";
 
-const PublicFoundationPage = lazy(
-  () => import("../pages/PublicFoundationPage"),
-);
-const RegistrationPage = lazy(
-  () => import("../pages/RegistrationPage"),
-);
-const AuthenticatedPage = lazy(
-  () => import("../pages/AuthenticatedPage"),
-);
+const PublicFoundationPage = lazy(() => import("../pages/PublicFoundationPage"));
+const RegistrationPage = lazy(() => import("../pages/RegistrationPage"));
+const AuthenticatedPage = lazy(() => import("../pages/AuthenticatedPage"));
 const SurveyPage = lazy(() => import("../pages/SurveyPage"));
 const QuestionnaireAdminPage = lazy(
   () => import("../pages/QuestionnaireAdminPage"),
 );
-const AnalyticsQualityPage = lazy(
-  () => import("../pages/AnalyticsQualityPage"),
-);
+const AnalyticsQualityPage = lazy(() => import("../pages/AnalyticsQualityPage"));
 const NotFoundPage = lazy(() => import("../pages/NotFoundPage"));
 
+const routePages: Record<AppPath, ComponentType> = {
+  "/": PublicFoundationPage,
+  "/registro": RegistrationPage,
+  "/pesquisa": SurveyPage,
+  "/acesso": AuthenticatedPage,
+  "/questionarios": QuestionnaireAdminPage,
+  "/qualidade": AnalyticsQualityPage,
+};
+
 const routeTitles: Record<AppPath, string> = {
-  "/": "Fundação do observatório",
-  "/registro": "Registro de estadias",
-  "/pesquisa": "Pesquisa turística",
-  "/acesso": "Área autenticada",
+  "/": "Painel público do turismo",
+  "/registro": "Registro de visitantes",
+  "/pesquisa": "Pesquisa com o visitante",
+  "/acesso": "Área da hospedagem",
   "/questionarios": "Questionários",
   "/qualidade": "Qualidade dos dados",
 };
 
 function renderRoute(pathname: string) {
-  switch (pathname) {
-    case "/":
-      return <PublicFoundationPage />;
-    case "/registro":
-      return <RegistrationPage />;
-    case "/pesquisa":
-      return <SurveyPage />;
-    case "/acesso":
-      return <AuthenticatedPage />;
-    case "/questionarios":
-      return <QuestionnaireAdminPage />;
-    case "/qualidade":
-      return <AnalyticsQualityPage />;
-    default:
-      return <NotFoundPage />;
-  }
+  const Page = routePages[pathname as AppPath] ?? NotFoundPage;
+  return <Page />;
+}
+
+interface NavigationEntry {
+  href: AppPath;
+  label: string;
+  visible: boolean;
 }
 
 interface AppProps {
@@ -72,165 +66,49 @@ interface RouteContentProps {
   onFocused: () => void;
 }
 
-interface QualityNavigationItemProps {
-  authenticated: boolean;
-  navigate: (nextPath: AppPath) => void;
-  pathname: string;
-}
-
-function QualityNavigationItem({
-  authenticated,
-  navigate,
-  pathname,
-}: QualityNavigationItemProps) {
-  if (!authenticated) {
-    return null;
-  }
-  return (
-    <li>
-      <AppLink
-        href="/qualidade"
-        navigate={navigate}
-        aria-current={pathname === "/qualidade" ? "page" : undefined}
-      >
-        Qualidade
-      </AppLink>
-    </li>
-  );
-}
-
 interface PrimaryNavigationProps {
-  administrativeNavigation: boolean;
-  authenticated: boolean;
-  hasInviteCapability: boolean;
-  hasSurveyCapability: boolean;
+  entries: readonly NavigationEntry[];
   navigate: (nextPath: AppPath) => void;
   pathname: string;
-}
-
-function ContextualNavigationItems({
-  hasInviteCapability,
-  hasSurveyCapability,
-  navigate,
-  pathname,
-}: Pick<
-  PrimaryNavigationProps,
-  "hasInviteCapability" | "hasSurveyCapability" | "navigate" | "pathname"
->) {
-  return (
-    <>
-      {hasInviteCapability ? (
-        <li>
-          <AppLink
-            href="/registro"
-            navigate={navigate}
-            aria-current={pathname === "/registro" ? "page" : undefined}
-          >
-            Registro
-          </AppLink>
-        </li>
-      ) : null}
-      {hasSurveyCapability ? (
-        <li>
-          <AppLink
-            href="/pesquisa"
-            navigate={navigate}
-            aria-current={pathname === "/pesquisa" ? "page" : undefined}
-          >
-            Pesquisa
-          </AppLink>
-        </li>
-      ) : null}
-    </>
-  );
-}
-
-function InstitutionalNavigationItems({
-  administrativeNavigation,
-  authenticated,
-  navigate,
-  pathname,
-}: Pick<
-  PrimaryNavigationProps,
-  "administrativeNavigation" | "authenticated" | "navigate" | "pathname"
->) {
-  return (
-    <>
-      {authenticated ? (
-        <li>
-          <AppLink
-            href="/acesso"
-            navigate={navigate}
-            aria-current={pathname === "/acesso" ? "page" : undefined}
-          >
-            Área autenticada
-          </AppLink>
-        </li>
-      ) : null}
-      {administrativeNavigation ? (
-        <li>
-          <AppLink
-            href="/questionarios"
-            navigate={navigate}
-            aria-current={pathname === "/questionarios" ? "page" : undefined}
-          >
-            Questionários
-          </AppLink>
-        </li>
-      ) : null}
-      {administrativeNavigation ? (
-        <QualityNavigationItem
-          authenticated={authenticated}
-          navigate={navigate}
-          pathname={pathname}
-        />
-      ) : null}
-    </>
-  );
 }
 
 function PrimaryNavigation({
-  administrativeNavigation,
-  authenticated,
-  hasInviteCapability,
-  hasSurveyCapability,
+  entries,
   navigate,
   pathname,
 }: PrimaryNavigationProps) {
   return (
     <nav aria-label="Navegação principal">
       <ul className="navigation">
-        <li>
-          <AppLink
-            href="/"
-            navigate={navigate}
-            aria-current={pathname === "/" ? "page" : undefined}
-          >
-            Visão pública
-          </AppLink>
-        </li>
-        <ContextualNavigationItems
-          hasInviteCapability={hasInviteCapability}
-          hasSurveyCapability={hasSurveyCapability}
-          navigate={navigate}
-          pathname={pathname}
-        />
-        <InstitutionalNavigationItems
-          administrativeNavigation={administrativeNavigation}
-          authenticated={authenticated}
-          navigate={navigate}
-          pathname={pathname}
-        />
+        {entries
+          .filter((entry) => entry.visible)
+          .map((entry) => (
+            <li key={entry.href}>
+              <AppLink
+                href={entry.href}
+                navigate={navigate}
+                aria-current={pathname === entry.href ? "page" : undefined}
+              >
+                {entry.label}
+              </AppLink>
+            </li>
+          ))}
       </ul>
     </nav>
   );
 }
 
-function RouteContent({
-  children,
-  focusOnMount,
-  onFocused,
-}: RouteContentProps) {
+/** Moves focus to the new route heading so a keyboard user lands on the change. */
+function focusRouteHeading(container: HTMLDivElement | null) {
+  const heading = container?.querySelector<HTMLElement>("[data-route-heading]");
+  if (heading === undefined || heading === null) {
+    return false;
+  }
+  heading.focus();
+  return true;
+}
+
+function RouteContent({ children, focusOnMount, onFocused }: RouteContentProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const hasFocused = useRef(false);
 
@@ -238,14 +116,9 @@ function RouteContent({
     if (!focusOnMount || hasFocused.current) {
       return;
     }
-
-    const heading =
-      contentRef.current?.querySelector<HTMLElement>("[data-route-heading]");
-    if (heading === undefined || heading === null) {
+    if (!focusRouteHeading(contentRef.current)) {
       return;
     }
-
-    heading.focus();
     hasFocused.current = true;
     onFocused();
   }, [focusOnMount, onFocused]);
@@ -253,13 +126,19 @@ function RouteContent({
   return <div ref={contentRef}>{children}</div>;
 }
 
-export function App({ routeRenderer = renderRoute }: AppProps) {
-  const session = useAuthSession();
-  const [, setCapabilityRevision] = useState(0);
+function useCapabilityRevision() {
+  const [, setRevision] = useState(0);
+  useEffect(() => {
+    const handle = () => setRevision((current) => current + 1);
+    window.addEventListener(CAPABILITY_CHANGE_EVENT, handle);
+    return () => window.removeEventListener(CAPABILITY_CHANGE_EVENT, handle);
+  }, []);
+}
+
+function useRouting() {
   const [pathname, setPathname] = useState(() =>
     normalizePathname(window.location.pathname),
   );
-  const mainRef = useRef<HTMLElement>(null);
   const pendingRouteFocus = useRef(false);
 
   useEffect(() => {
@@ -267,28 +146,14 @@ export function App({ routeRenderer = renderRoute }: AppProps) {
       pendingRouteFocus.current = true;
       setPathname(normalizePathname(window.location.pathname));
     };
-
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  useEffect(() => {
-    const handleCapabilityChange = () => {
-      setCapabilityRevision((current) => current + 1);
-    };
-    window.addEventListener(CAPABILITY_CHANGE_EVENT, handleCapabilityChange);
-    return () =>
-      window.removeEventListener(
-        CAPABILITY_CHANGE_EVENT,
-        handleCapabilityChange,
-      );
   }, []);
 
   const navigate = useCallback((nextPath: AppPath) => {
     if (window.location.pathname === nextPath) {
       return;
     }
-
     pendingRouteFocus.current = true;
     window.history.pushState(null, "", nextPath);
     setPathname(nextPath);
@@ -297,6 +162,61 @@ export function App({ routeRenderer = renderRoute }: AppProps) {
   const completeRouteFocus = useCallback(() => {
     pendingRouteFocus.current = false;
   }, []);
+
+  return { completeRouteFocus, navigate, pathname, pendingRouteFocus };
+}
+
+function navigationEntries(
+  authenticated: boolean,
+  hasScope: (scope: string) => boolean,
+): NavigationEntry[] {
+  return [
+    { href: "/", label: "Painel público", visible: true },
+    {
+      href: "/registro",
+      label: "Registro",
+      visible: peekInviteCapability() !== null,
+    },
+    {
+      href: "/pesquisa",
+      label: "Pesquisa",
+      visible: peekSurveyCapability() !== null,
+    },
+    { href: "/acesso", label: "Área da hospedagem", visible: true },
+    {
+      href: "/questionarios",
+      label: "Questionários",
+      visible: authenticated && hasScope("questionnaires:manage"),
+    },
+    {
+      href: "/qualidade",
+      label: "Qualidade",
+      visible: authenticated && hasScope("analytics:read:internal"),
+    },
+  ];
+}
+
+function SessionBadge() {
+  const { account, authenticated, endSession } = useAuthSession();
+  if (!authenticated || account === null) {
+    return null;
+  }
+  return (
+    <div className="session-badge">
+      <span className="session-name">{account.display_name}</span>
+      <button type="button" className="quiet-action" onClick={() => void endSession()}>
+        Sair
+      </button>
+    </div>
+  );
+}
+
+export function App({ routeRenderer = renderRoute }: AppProps) {
+  const { authenticated, hasScope } = useAuthSession();
+  const { completeRouteFocus, navigate, pathname, pendingRouteFocus } =
+    useRouting();
+  const mainRef = useRef<HTMLElement>(null);
+  useCapabilityRevision();
 
   const currentTitle =
     routeTitles[pathname as AppPath] ?? "Página não encontrada";
@@ -323,29 +243,16 @@ export function App({ routeRenderer = renderRoute }: AppProps) {
             </span>
           </AppLink>
 
-          <PrimaryNavigation
-            administrativeNavigation={session.administrativeNavigation}
-            authenticated={session.authenticated}
-            hasInviteCapability={peekInviteCapability() !== null}
-            hasSurveyCapability={peekSurveyCapability() !== null}
-            navigate={navigate}
-            pathname={pathname}
-          />
+          <div className="header-actions">
+            <PrimaryNavigation
+              entries={navigationEntries(authenticated, hasScope)}
+              navigate={navigate}
+              pathname={pathname}
+            />
+            <SessionBadge />
+          </div>
         </div>
       </header>
-
-      {session.authenticated && session.localDemo ? (
-        <aside
-          className="local-session-banner"
-          aria-label="Sessão fictícia local"
-        >
-          <strong>Sessão fictícia local</strong>
-          <span>PROTOTYPE_ONLY</span>
-          <button type="button" onClick={() => void session.endSession()}>
-            Encerrar sessão fictícia
-          </button>
-        </aside>
-      ) : null}
 
       <p className="route-announcer" aria-live="polite" aria-atomic="true">
         Página atual: {currentTitle}

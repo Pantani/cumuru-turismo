@@ -48,6 +48,8 @@ type BuildInfo struct {
 type Dependencies struct {
 	Readiness                      ReadinessChecker
 	Verifier                       access.Verifier
+	Auth                           Authenticator
+	LockoutDuration                time.Duration
 	Accommodations                 *accommodation.Service
 	AccommodationOnboardingEnabled bool
 	Stays                          *stay.Service
@@ -99,38 +101,47 @@ func New(dependencies Dependencies) (http.Handler, http.Handler) {
 	dependencies.cursor, _ = newCursorCodec(dependencies.CursorKeys)
 	metrics := newHTTPMetrics(dependencies.Registry)
 	mux := http.NewServeMux()
+	dependencies.registerPlatformRoutes(mux, metrics)
+	dependencies.registerFeatureRoutes(mux, metrics)
+	return dependencies.withRequestID(dependencies.recoverPanic(mux)),
+		promhttp.HandlerFor(dependencies.Registry, promhttp.HandlerOpts{})
+}
+
+func (d Dependencies) registerPlatformRoutes(mux *http.ServeMux, metrics *httpMetrics) {
 	mux.Handle(
 		"GET /api/v1/platform/health",
-		dependencies.routeHandler(
-			"/api/v1/platform/health", metrics, http.HandlerFunc(dependencies.health),
-		),
+		d.routeHandler("/api/v1/platform/health", metrics, http.HandlerFunc(d.health)),
 	)
 	mux.Handle(
 		"GET /api/v1/platform/readiness",
-		dependencies.routeHandler(
-			"/api/v1/platform/readiness", metrics, http.HandlerFunc(dependencies.readiness),
-		),
+		d.routeHandler("/api/v1/platform/readiness", metrics, http.HandlerFunc(d.readiness)),
 	)
 	mux.Handle(
 		"GET /api/v1/platform/build",
-		dependencies.routeHandler(
+		d.routeHandler(
 			"/api/v1/platform/build",
 			metrics,
-			dependencies.requireScope("platform:read", http.HandlerFunc(dependencies.buildInfo)),
+			d.requireScope("platform:read", http.HandlerFunc(d.buildInfo)),
 		),
 	)
-	if dependencies.Accommodations != nil {
-		dependencies.registerAccommodationRoutes(mux, metrics)
+}
+
+// Each surface is registered only when its dependency is present, so an absent
+// feature returns 404 rather than a misleading error.
+func (d Dependencies) registerFeatureRoutes(mux *http.ServeMux, metrics *httpMetrics) {
+	if d.Auth != nil {
+		d.registerAuthRoutes(mux, metrics)
 	}
-	if dependencies.Stays != nil {
-		dependencies.registerStayRoutes(mux, metrics)
+	if d.Accommodations != nil {
+		d.registerAccommodationRoutes(mux, metrics)
 	}
-	if dependencies.Questionnaires != nil {
-		dependencies.registerQuestionnaireRoutes(mux, metrics)
+	if d.Stays != nil {
+		d.registerStayRoutes(mux, metrics)
 	}
-	dependencies.registerAnalyticsRoutes(mux, metrics)
-	return dependencies.withRequestID(dependencies.recoverPanic(mux)),
-		promhttp.HandlerFor(dependencies.Registry, promhttp.HandlerOpts{})
+	if d.Questionnaires != nil {
+		d.registerQuestionnaireRoutes(mux, metrics)
+	}
+	d.registerAnalyticsRoutes(mux, metrics)
 }
 
 func (d Dependencies) health(writer http.ResponseWriter, _ *http.Request) {
@@ -440,23 +451,65 @@ func (d Dependencies) writeServiceError(
 	request *http.Request,
 	err error,
 ) {
+	if d.writeRetryableError(writer, request, err) {
+		return
+	}
+	status, code, title := serviceProblem(err)
+	writeProblem(writer, request, status, code, title)
+}
+
+type problemMapping struct {
+	status int
+	code   string
+	title  string
+	errs   []error
+}
+
+// One entry per contract problem type. The order is the resolution order, so a
+// more specific mapping always precedes a broader one.
+var serviceProblems = []problemMapping{
+	{http.StatusForbidden, "forbidden", "Operação não permitida",
+		[]error{accommodation.ErrForbidden}},
+	{http.StatusUnprocessableEntity, "validation-failed", "Dados inválidos",
+		[]error{accommodation.ErrInvalidInput, stay.ErrInvalidInput, questionnaire.ErrInvalidInput}},
+	{http.StatusNotFound, "not-found", "Recurso não encontrado",
+		[]error{accommodation.ErrNotFound, stay.ErrNotFound, questionnaire.ErrNotFound, questionnaire.ErrCapabilityInvalid}},
+	{http.StatusPreconditionFailed, "precondition-failed", "Versão desatualizada",
+		[]error{accommodation.ErrPreconditionFailed, stay.ErrPreconditionFailed, questionnaire.ErrPreconditionFailed}},
+	{http.StatusConflict, "invite-consumed", "Convite já consumido",
+		[]error{stay.ErrInviteConsumed}},
+	{http.StatusConflict, "conflict", "Conflito de estado",
+		[]error{accommodation.ErrConflict, stay.ErrConflict, questionnaire.ErrConflict}},
+}
+
+func serviceProblem(err error) (int, string, string) {
+	for _, mapping := range serviceProblems {
+		if matchesAny(err, mapping.errs) {
+			return mapping.status, mapping.code, mapping.title
+		}
+	}
+	return http.StatusServiceUnavailable, "dependency-unavailable",
+		"Serviço temporariamente indisponível"
+}
+
+func matchesAny(err error, candidates []error) bool {
+	for _, candidate := range candidates {
+		if errors.Is(err, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+// The two retryable outcomes carry a Retry-After header, so they are answered
+// here instead of through the table.
+func (d Dependencies) writeRetryableError(
+	writer http.ResponseWriter,
+	request *http.Request,
+	err error,
+) bool {
 	var processing *idempotency.ProcessingError
 	switch {
-	case errors.Is(err, accommodation.ErrForbidden):
-		writeProblem(writer, request, http.StatusForbidden, "forbidden", "Operação não permitida")
-	case errors.Is(err, accommodation.ErrInvalidInput),
-		errors.Is(err, stay.ErrInvalidInput),
-		errors.Is(err, questionnaire.ErrInvalidInput):
-		writeProblem(writer, request, http.StatusUnprocessableEntity, "validation-failed", "Dados inválidos")
-	case errors.Is(err, accommodation.ErrNotFound),
-		errors.Is(err, stay.ErrNotFound),
-		errors.Is(err, questionnaire.ErrNotFound),
-		errors.Is(err, questionnaire.ErrCapabilityInvalid):
-		writeProblem(writer, request, http.StatusNotFound, "not-found", "Recurso não encontrado")
-	case errors.Is(err, accommodation.ErrPreconditionFailed),
-		errors.Is(err, stay.ErrPreconditionFailed),
-		errors.Is(err, questionnaire.ErrPreconditionFailed):
-		writeProblem(writer, request, http.StatusPreconditionFailed, "precondition-failed", "Versão desatualizada")
 	case errors.Is(err, stay.ErrRateLimited), errors.Is(err, questionnaire.ErrRateLimited):
 		writer.Header().Set("Retry-After", "60")
 		writeProblem(writer, request, http.StatusTooManyRequests, "rate-limited", "Muitas tentativas")
@@ -464,15 +517,10 @@ func (d Dependencies) writeServiceError(
 		seconds := int64((processing.RetryAfter + time.Second - 1) / time.Second)
 		writer.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
 		writeProblem(writer, request, http.StatusConflict, "idempotency-in-progress", "Requisição em processamento")
-	case errors.Is(err, stay.ErrInviteConsumed):
-		writeProblem(writer, request, http.StatusConflict, "invite-consumed", "Convite já consumido")
-	case errors.Is(err, accommodation.ErrConflict),
-		errors.Is(err, stay.ErrConflict),
-		errors.Is(err, questionnaire.ErrConflict):
-		writeProblem(writer, request, http.StatusConflict, "conflict", "Conflito de estado")
 	default:
-		writeProblem(writer, request, http.StatusServiceUnavailable, "dependency-unavailable", "Serviço temporariamente indisponível")
+		return false
 	}
+	return true
 }
 
 type statusWriter struct {

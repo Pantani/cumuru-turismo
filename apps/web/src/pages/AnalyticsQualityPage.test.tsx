@@ -1,21 +1,11 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import {cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AuthSessionProvider } from "../shared/auth/AuthSession";
+import { renderWithSession } from "../test/session";
 import AnalyticsQualityPage from "./AnalyticsQualityPage";
 
-function renderPage(token: string | null = null) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <AuthSessionProvider accessToken={token}>
-        <AnalyticsQualityPage />
-      </AuthSessionProvider>
-    </QueryClientProvider>,
-  );
+function renderPage(signedIn = false) {
+  return renderWithSession(<AnalyticsQualityPage />, { signedIn });
 }
 
 describe("rota interna de qualidade", () => {
@@ -39,7 +29,7 @@ describe("rota interna de qualidade", () => {
   it("usa a sessão existente para consultar a rota protegida", async () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       const request = input as Request;
-      expect(request.headers.get("Authorization")).toBe("Bearer opaque-token");
+      expect(request.headers.get("Authorization")).toBe("Bearer cms_test-session-token");
       return Response.json(
         {
           window: "last_30_days",
@@ -68,7 +58,7 @@ describe("rota interna de qualidade", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    renderPage("opaque-token");
+    renderPage(true);
 
     expect(
       await screen.findByRole("heading", {
@@ -76,6 +66,6 @@ describe("rota interna de qualidade", () => {
       }),
     ).toBeInTheDocument();
     expect(fetcher).toHaveBeenCalledOnce();
-    expect(document.body.textContent).not.toContain("opaque-token");
+    expect(document.body.textContent).not.toContain("cms_test-session-token");
   });
 });

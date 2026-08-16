@@ -100,23 +100,58 @@ func (s *Store) runIdempotent(
 	if err != nil {
 		return idempotencyResult{}, errIdempotencyConflict
 	}
-	result, found, err := s.findIdempotency(ctx, q, spec, requestHash[:])
+	return s.replayOrExecute(ctx, q, spec, requestHash[:], work)
+}
+
+func (s *Store) replayOrExecute(
+	ctx context.Context,
+	q generated.Querier,
+	spec idempotencySpec,
+	requestHash []byte,
+	work mutationWork,
+) (idempotencyResult, error) {
+	result, found, err := s.findIdempotency(ctx, q, spec, requestHash)
 	if err != nil || found {
 		return result, err
 	}
-	claimed, err := s.claimIdempotency(ctx, q, spec, requestHash[:])
+	replay, claimed, err := s.claimOrReplay(ctx, q, spec, requestHash)
+	if err != nil || !claimed {
+		return replay, err
+	}
+	return s.executeClaimed(ctx, q, spec, requestHash, work)
+}
+
+// claimOrReplay races for the claim. Losing the race is not an error: the
+// winner's record is replayed instead.
+func (s *Store) claimOrReplay(
+	ctx context.Context,
+	q generated.Querier,
+	spec idempotencySpec,
+	requestHash []byte,
+) (idempotencyResult, bool, error) {
+	claimed, err := s.claimIdempotency(ctx, q, spec, requestHash)
 	if errors.Is(err, pgx.ErrNoRows) {
-		result, _, err = s.findIdempotency(ctx, q, spec, requestHash[:])
-		return result, err
+		result, _, findErr := s.findIdempotency(ctx, q, spec, requestHash)
+		return result, false, findErr
 	}
 	if err != nil || claimed.State != "processing" {
-		return idempotencyResult{}, ErrUnavailable
+		return idempotencyResult{}, false, ErrUnavailable
 	}
+	return idempotencyResult{}, true, nil
+}
+
+func (s *Store) executeClaimed(
+	ctx context.Context,
+	q generated.Querier,
+	spec idempotencySpec,
+	requestHash []byte,
+	work mutationWork,
+) (idempotencyResult, error) {
 	response, err := work()
 	if err != nil {
 		return idempotencyResult{}, err
 	}
-	if err := s.completeIdempotency(ctx, q, spec, requestHash[:], response); err != nil {
+	if err := s.completeIdempotency(ctx, q, spec, requestHash, response); err != nil {
 		return idempotencyResult{}, err
 	}
 	return idempotencyResult{response: response}, nil
@@ -131,20 +166,37 @@ func (s *Store) findIdempotency(
 	actors := digests(s.phase2.ActorKeys, "actor", spec.actorValue)
 	keys := digests(s.phase2.IdempotencyKeys, "idempotency-key", spec.key)
 	for _, actor := range actors {
-		for _, key := range keys {
-			row, err := q.LockIdempotencyKey(ctx, generated.LockIdempotencyKeyParams{
-				ActorKeyHmac: actor.sum, OperationKey: string(spec.operation),
-				ResourceID: pgUUID(spec.resourceID), IdempotencyKeyHmac: key.sum,
-			})
-			if errors.Is(err, pgx.ErrNoRows) {
-				continue
-			}
-			if err != nil {
-				return idempotencyResult{}, false, ErrUnavailable
-			}
-			result, err := existingIdempotency(row, requestHash, spec.now)
-			return result, true, err
+		result, found, err := s.lockUnderActor(ctx, q, spec, requestHash, actor, keys)
+		if found || err != nil {
+			return result, found, err
 		}
+	}
+	return idempotencyResult{}, false, nil
+}
+
+// Every key version is probed so a key rotation does not turn a replay into a
+// second execution.
+func (s *Store) lockUnderActor(
+	ctx context.Context,
+	q generated.Querier,
+	spec idempotencySpec,
+	requestHash []byte,
+	actor versionedDigest,
+	keys []versionedDigest,
+) (idempotencyResult, bool, error) {
+	for _, key := range keys {
+		row, err := q.LockIdempotencyKey(ctx, generated.LockIdempotencyKeyParams{
+			ActorKeyHmac: actor.sum, OperationKey: string(spec.operation),
+			ResourceID: pgUUID(spec.resourceID), IdempotencyKeyHmac: key.sum,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return idempotencyResult{}, false, ErrUnavailable
+		}
+		result, err := existingIdempotency(row, requestHash, spec.now)
+		return result, true, err
 	}
 	return idempotencyResult{}, false, nil
 }
@@ -165,15 +217,21 @@ func (s *Store) claimIdempotency(
 	})
 }
 
+// A replay is only honoured for the same request body within the retention
+// window; a divergent body under the same key is a conflict, never a replay.
+func replayable(row generated.PlatformIdempotencyRecord, requestHash []byte, now time.Time) bool {
+	if !bytes.Equal(row.RequestHash, requestHash) {
+		return false
+	}
+	return row.ExpiresAt.Valid && row.ExpiresAt.Time.After(now)
+}
+
 func existingIdempotency(
 	row generated.PlatformIdempotencyRecord,
 	requestHash []byte,
 	now time.Time,
 ) (idempotencyResult, error) {
-	if !bytes.Equal(row.RequestHash, requestHash) {
-		return idempotencyResult{}, errIdempotencyConflict
-	}
-	if !row.ExpiresAt.Valid || !row.ExpiresAt.Time.After(now) {
+	if !replayable(row, requestHash, now) {
 		return idempotencyResult{}, errIdempotencyConflict
 	}
 	if row.State == "processing" {
@@ -324,16 +382,20 @@ func (s *Store) recordEvents(
 	return nil
 }
 
-func (s *Store) newAuditEvent(spec eventSpec) (audit.Event, error) {
+func (s *Store) pseudonymizeActor(issuer, subject string) (audit.ActorDigest, error) {
 	key, ok := s.phase2.ActorKeys.Key(s.phase2.ActorKeys.CurrentVersion)
 	if !ok {
-		return audit.Event{}, audit.ErrInvalidActor
+		return audit.ActorDigest{}, audit.ErrInvalidActor
 	}
 	hasher, err := audit.NewActorHasher(s.phase2.ActorKeys.CurrentVersion, key)
 	if err != nil {
-		return audit.Event{}, err
+		return audit.ActorDigest{}, err
 	}
-	actor, err := hasher.Pseudonymize(spec.actorIssuer, spec.actorSubject)
+	return hasher.Pseudonymize(issuer, subject)
+}
+
+func (s *Store) newAuditEvent(spec eventSpec) (audit.Event, error) {
+	actor, err := s.pseudonymizeActor(spec.actorIssuer, spec.actorSubject)
 	if err != nil {
 		return audit.Event{}, err
 	}

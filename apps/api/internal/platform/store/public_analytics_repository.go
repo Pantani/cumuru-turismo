@@ -56,25 +56,41 @@ func (r *PublicAnalyticsRepository) Presence(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 	rows, err := r.queries.ListCurrentPresenceCells(ctx, window)
-	if err != nil || len(rows) == 0 || len(rows) > 30 {
+	if err != nil || !presenceRowCount(len(rows)) {
 		return analytics.PublicPresence{}, analytics.ErrPublicUnavailable
 	}
 	metadata, err := presenceMetadata(rows)
 	if err != nil {
 		return analytics.PublicPresence{}, err
 	}
+	series, err := presenceSeries(rows, window)
+	if err != nil {
+		return analytics.PublicPresence{}, err
+	}
+	return analytics.PublicPresence{Metadata: metadata, Window: window, Series: series}, nil
+}
+
+// The public presence window is bounded to thirty civil days by contract.
+func presenceRowCount(count int) bool {
+	return count > 0 && count <= 30
+}
+
+func presenceSeries(
+	rows []generated.PublicDataCurrentPresence,
+	window string,
+) ([]analytics.PresencePoint, error) {
 	series := make([]analytics.PresencePoint, 0, len(rows))
 	for _, row := range rows {
 		if row.PeriodSelector != window ||
 			!validPresenceCell(window, row.Status, row.Kind) {
-			return analytics.PublicPresence{}, analytics.ErrPublicUnavailable
+			return nil, analytics.ErrPublicUnavailable
 		}
 		series = append(series, presencePoint(
 			dateString(row.PeriodStart), row.Kind, row.Status,
 			row.PublishedValue, row.PublishedLower, row.PublishedCentral, row.PublishedUpper,
 		))
 	}
-	return analytics.PublicPresence{Metadata: metadata, Window: window, Series: series}, nil
+	return series, nil
 }
 
 func (r *PublicAnalyticsRepository) Preferences(
@@ -91,17 +107,9 @@ func (r *PublicAnalyticsRepository) Preferences(
 	if err != nil {
 		return analytics.PublicPreferences{}, err
 	}
-	categories := make([]analytics.PreferenceCategory, 0, len(rows))
-	for _, row := range rows {
-		if row.PeriodSelector != period || row.DimensionCode != "visit_profile" {
-			return analytics.PublicPreferences{}, analytics.ErrPublicUnavailable
-		}
-		if !validPreference(row.CategoryCode, row.Status, row.SharePercent) {
-			return analytics.PublicPreferences{}, analytics.ErrPublicUnavailable
-		}
-		categories = append(categories, analytics.PreferenceCategory{
-			CategoryCode: row.CategoryCode, Status: row.Status, SharePercent: row.SharePercent,
-		})
+	categories, err := preferenceCategories(rows, period)
+	if err != nil {
+		return analytics.PublicPreferences{}, err
 	}
 	return analytics.PublicPreferences{
 		Metadata: metadata,
@@ -148,6 +156,25 @@ func (r *PublicAnalyticsRepository) Methodology(
 	}, nil
 }
 
+func preferenceCategories(
+	rows []generated.PublicDataCurrentPreference,
+	period string,
+) ([]analytics.PreferenceCategory, error) {
+	categories := make([]analytics.PreferenceCategory, 0, len(rows))
+	for _, row := range rows {
+		if row.PeriodSelector != period || row.DimensionCode != "visit_profile" {
+			return nil, analytics.ErrPublicUnavailable
+		}
+		if !validPreference(row.CategoryCode, row.Status, row.SharePercent) {
+			return nil, analytics.ErrPublicUnavailable
+		}
+		categories = append(categories, analytics.PreferenceCategory{
+			CategoryCode: row.CategoryCode, Status: row.Status, SharePercent: row.SharePercent,
+		})
+	}
+	return categories, nil
+}
+
 func validForecastBounds(row generated.GetCurrentMethodologyRow) bool {
 	return row.ForecastLowerPercent == 85 &&
 		row.ForecastUpperPercent == 115 &&
@@ -158,20 +185,9 @@ func validForecastBounds(row generated.GetCurrentMethodologyRow) bool {
 func summaryPoints(
 	rows []generated.PublicDataCurrentSummary,
 ) (analytics.PresencePoint, analytics.ForecastPeak, error) {
-	var today analytics.PresencePoint
-	forecasts := make([]generated.PublicDataCurrentSummary, 0, 30)
 	asOf := dateString(rows[0].AsOfOn)
-	for _, row := range rows {
-		if row.Kind == "observed" && dateString(row.PeriodStart) == asOf {
-			today = presencePoint(
-				asOf, row.Kind, row.Status, row.PublishedValue,
-				row.PublishedLower, row.PublishedCentral, row.PublishedUpper,
-			)
-		}
-		if row.Kind == "forecast" && row.PeriodSelector == "next_30_days" {
-			forecasts = append(forecasts, row)
-		}
-	}
+	today := todayPoint(rows, asOf)
+	forecasts := forecastRows(rows)
 	if today.Date == "" || len(forecasts) == 0 {
 		return today, analytics.ForecastPeak{}, analytics.ErrPublicUnavailable
 	}
@@ -233,29 +249,59 @@ func validForecastHorizon(
 	return true
 }
 
+func todayPoint(
+	rows []generated.PublicDataCurrentSummary,
+	asOf string,
+) analytics.PresencePoint {
+	for _, row := range rows {
+		if row.Kind == "observed" && dateString(row.PeriodStart) == asOf {
+			return presencePoint(
+				asOf, row.Kind, row.Status, row.PublishedValue,
+				row.PublishedLower, row.PublishedCentral, row.PublishedUpper,
+			)
+		}
+	}
+	return analytics.PresencePoint{}
+}
+
+func forecastRows(
+	rows []generated.PublicDataCurrentSummary,
+) []generated.PublicDataCurrentSummary {
+	forecasts := make([]generated.PublicDataCurrentSummary, 0, 30)
+	for _, row := range rows {
+		if row.Kind == "forecast" && row.PeriodSelector == "next_30_days" {
+			forecasts = append(forecasts, row)
+		}
+	}
+	return forecasts
+}
+
+func forecastRowShape(row generated.PublicDataCurrentSummary) bool {
+	return row.PeriodSelector == "next_30_days" &&
+		row.Kind == "forecast" &&
+		row.Status == "published"
+}
+
 func validForecastRow(
 	row generated.PublicDataCurrentSummary,
 	expected time.Time,
 ) bool {
-	if row.PeriodSelector != "next_30_days" || row.Kind != "forecast" ||
-		row.Status != "published" || !row.PeriodStart.Valid ||
-		!row.PeriodStart.Time.Equal(expected) {
+	if !forecastRowShape(row) || !row.PeriodStart.Valid {
 		return false
 	}
-	if !validForecastInterval(row) {
-		return false
-	}
-	return true
+	return row.PeriodStart.Time.Equal(expected) && validForecastInterval(row)
+}
+
+func orderedInterval(lower, central, upper *int32) bool {
+	return *lower >= 0 && *lower <= *central && *central <= *upper
 }
 
 func validForecastInterval(row generated.PublicDataCurrentSummary) bool {
-	if row.PublishedLower == nil || row.PublishedCentral == nil ||
-		row.PublishedUpper == nil {
+	lower, central, upper := row.PublishedLower, row.PublishedCentral, row.PublishedUpper
+	if lower == nil || central == nil || upper == nil {
 		return false
 	}
-	return *row.PublishedLower >= 0 &&
-		*row.PublishedLower <= *row.PublishedCentral &&
-		*row.PublishedCentral <= *row.PublishedUpper
+	return orderedInterval(lower, central, upper)
 }
 
 func summaryMetadata(
@@ -321,30 +367,48 @@ func publicMetadata(
 	}, nil
 }
 
+func validMetadataPeriod(start, end pgtype.Date, publishedAt pgtype.Timestamptz) bool {
+	return start.Valid && end.Valid && end.Time.After(start.Time) && publishedAt.Valid
+}
+
+func validMetadataPolicy(unit, dataMode, policyVersion, methodologyVersion string) bool {
+	validUnit := unit == "person_day" || unit == "survey_response"
+	return validUnit && dataMode == "prototype_fixtures" &&
+		policyVersion == "prototype-v1" &&
+		methodologyVersion == "explainable-baseline-v1"
+}
+
 func validMetadata(
 	start, end pgtype.Date,
 	publishedAt pgtype.Timestamptz,
 	unit, dataMode, policyVersion, methodologyVersion string,
 ) bool {
-	validUnit := unit == "person_day" || unit == "survey_response"
-	return start.Valid && end.Valid && end.Time.After(start.Time) && publishedAt.Valid &&
-		validUnit && dataMode == "prototype_fixtures" &&
-		policyVersion == "prototype-v1" &&
-		methodologyVersion == "explainable-baseline-v1"
+	return validMetadataPeriod(start, end, publishedAt) &&
+		validMetadataPolicy(unit, dataMode, policyVersion, methodologyVersion)
+}
+
+// A published share is rounded to a multiple of five; a withheld one carries no
+// value at all, never a substitute.
+func publishedShare(value *int32) bool {
+	return value != nil && *value >= 0 && *value <= 100 && *value%5 == 0
+}
+
+func withheldStatus(status string) bool {
+	return status == "protected" || status == "unavailable"
 }
 
 func validCoverage(status string, ratio *int32) bool {
 	if status == "published" {
-		return ratio != nil && *ratio >= 0 && *ratio <= 100 && *ratio%5 == 0
+		return publishedShare(ratio)
 	}
-	return (status == "protected" || status == "unavailable") && ratio == nil
+	return withheldStatus(status) && ratio == nil
 }
 
 func validPublicCell(status, kind string) bool {
 	if kind != "observed" && kind != "forecast" {
 		return false
 	}
-	return status == "published" || status == "protected" || status == "unavailable"
+	return status == "published" || withheldStatus(status)
 }
 
 func validPresenceCell(window, status, kind string) bool {
@@ -362,9 +426,9 @@ func validPreference(category, status string, share *int32) bool {
 		return false
 	}
 	if status == "published" {
-		return share != nil && *share >= 0 && *share <= 100 && *share%5 == 0
+		return publishedShare(share)
 	}
-	return (status == "protected" || status == "unavailable") && share == nil
+	return withheldStatus(status) && share == nil
 }
 
 func presencePoint(

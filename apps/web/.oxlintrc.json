@@ -11,11 +11,11 @@
   "rules": {
     "complexity": [
       "error",
-      9
+      5
     ],
     "sonarjs/cognitive-complexity": [
       "error",
-      9
+      8
     ]
   }
 }

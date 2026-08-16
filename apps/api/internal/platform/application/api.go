@@ -40,7 +40,16 @@ func RunAPI(ctx context.Context, cfg config.Config, build Build, output io.Write
 		return err
 	}
 	defer shutdownTelemetry(tracing, cfg.ShutdownTimeout, logger)
+	return runAPIWithTelemetry(ctx, cfg, build, logger, tracing)
+}
 
+func runAPIWithTelemetry(
+	ctx context.Context,
+	cfg config.Config,
+	build Build,
+	logger *slog.Logger,
+	tracing *telemetry.Provider,
+) error {
 	platformStore, accommodationService, stayService, questionnaireService,
 		publicAnalytics, analyticsQuality, closeDatabase, err := openServices(ctx, cfg)
 	if err != nil {
@@ -48,14 +57,82 @@ func RunAPI(ctx context.Context, cfg config.Config, build Build, output io.Write
 	}
 	defer closeDatabase()
 
-	verifier, err := verifierFor(ctx, cfg)
+	verifier, err := verifierFor(ctx, cfg, platformStore)
 	if err != nil {
 		return err
 	}
-	registry := prometheus.NewRegistry()
-	publicHandler, operationsHandler := httpapi.New(httpapi.Dependencies{
+	publicHandler, operationsHandler := httpapi.New(apiDependencies(
+		cfg, build, logger, tracing, verifier,
+		platformStore, accommodationService, stayService, questionnaireService,
+		publicAnalytics, analyticsQuality,
+	))
+	publicListener, operationsListener, err := apiListeners(cfg)
+	if err != nil {
+		return err
+	}
+	return serveBoth(
+		ctx, cfg, logger,
+		listenerHandler{publicListener, publicHandler},
+		listenerHandler{operationsListener, operationsHandler},
+	)
+}
+
+type listenerHandler struct {
+	listener net.Listener
+	handler  http.Handler
+}
+
+// Either listener stopping takes the other down with it: a half-serving API is
+// worse than one that exits and is restarted.
+func serveBoth(
+	ctx context.Context,
+	cfg config.Config,
+	logger *slog.Logger,
+	public listenerHandler,
+	operations listenerHandler,
+) error {
+	runContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+	results := make(chan error, 2)
+	for _, target := range []listenerHandler{public, operations} {
+		go func() {
+			results <- server.Serve(
+				runContext,
+				target.listener,
+				configuredHTTPServer(target.handler, cfg),
+				cfg.ShutdownTimeout,
+				logger,
+			)
+		}()
+	}
+	logger.Info("api started", "component", "api")
+	first := <-results
+	cancel()
+	second := <-results
+	if first != nil || second != nil {
+		return errors.New("HTTP server stopped unexpectedly")
+	}
+	return nil
+}
+
+func apiDependencies(
+	cfg config.Config,
+	build Build,
+	logger *slog.Logger,
+	tracing *telemetry.Provider,
+	verifier access.Verifier,
+	platformStore *store.Store,
+	accommodationService *accommodation.Service,
+	stayService *stay.Service,
+	questionnaireService *questionnaire.Service,
+	publicAnalytics analytics.PublicReader,
+	analyticsQuality analytics.QualityReader,
+) httpapi.Dependencies {
+	return httpapi.Dependencies{
 		Readiness:                      platformStore,
 		Verifier:                       verifier,
+		Auth:                           localAuthenticator(cfg, platformStore),
+		LockoutDuration:                cfg.Auth.LockoutDuration,
 		Accommodations:                 accommodationService,
 		AccommodationOnboardingEnabled: cfg.Phase2.AccommodationOnboardingEnabled,
 		Stays:                          stayService,
@@ -66,54 +143,29 @@ func RunAPI(ctx context.Context, cfg config.Config, build Build, output io.Write
 		TrustedProxyCIDRs:              cfg.TrustedProxyCIDRs,
 		CursorKeys:                     cfg.Phase2.CursorKeys,
 		Logger:                         logger,
-		Registry:                       registry,
+		Registry:                       prometheus.NewRegistry(),
 		Tracer:                         tracing.Tracer("cumuru-api-http"),
 		Build: httpapi.BuildInfo{
 			Version:  build.Version,
 			Revision: build.Revision,
 			BuiltAt:  build.BuiltAt,
 		},
-	})
+	}
+}
+
+// The public and operations listeners are opened together so a partially bound
+// process never starts serving.
+func apiListeners(cfg config.Config) (net.Listener, net.Listener, error) {
 	publicListener, err := net.Listen("tcp", cfg.HTTPAddress)
 	if err != nil {
-		return errors.New("public HTTP listener failed")
+		return nil, nil, errors.New("public HTTP listener failed")
 	}
 	operationsListener, err := net.Listen("tcp", cfg.OperationsAddress)
 	if err != nil {
 		_ = publicListener.Close()
-		return errors.New("operations HTTP listener failed")
+		return nil, nil, errors.New("operations HTTP listener failed")
 	}
-
-	runContext, cancel := context.WithCancel(ctx)
-	defer cancel()
-	results := make(chan error, 2)
-	go func() {
-		results <- server.Serve(
-			runContext,
-			publicListener,
-			configuredHTTPServer(publicHandler, cfg),
-			cfg.ShutdownTimeout,
-			logger,
-		)
-	}()
-	go func() {
-		results <- server.Serve(
-			runContext,
-			operationsListener,
-			configuredHTTPServer(operationsHandler, cfg),
-			cfg.ShutdownTimeout,
-			logger,
-		)
-	}()
-	logger.Info("api started", "component", "api")
-
-	first := <-results
-	cancel()
-	second := <-results
-	if first != nil || second != nil {
-		return errors.New("HTTP server stopped unexpectedly")
-	}
-	return nil
+	return publicListener, operationsListener, nil
 }
 
 func services(
@@ -149,6 +201,7 @@ func openServices(
 	}
 	platformStore, err := store.NewPhase3(
 		pool, cfg.DatabaseTimeout, cfg.Phase2, cfg.Phase3,
+		store.WithAuthConfig(cfg.Auth),
 	)
 	if err != nil {
 		pool.Close()
@@ -200,7 +253,29 @@ func openAnalyticsServices(
 	return publicRepository, qualityRepository, publicPool.Close, nil
 }
 
-func verifierFor(ctx context.Context, cfg config.Config) (access.Verifier, error) {
+// verifierFor chains the local session verifier ahead of the OIDC one. The two
+// tracks coexist: a prefixed session token never reaches OIDC discovery, and an
+// OIDC token never touches the session store.
+func verifierFor(
+	ctx context.Context,
+	cfg config.Config,
+	platformStore *store.Store,
+) (access.Verifier, error) {
+	federated, err := federatedVerifier(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if !cfg.Auth.Enabled {
+		return federated, nil
+	}
+	session, err := access.NewSessionVerifier(platformStore)
+	if err != nil {
+		return nil, err
+	}
+	return access.NewChainVerifier(session, federated)
+}
+
+func federatedVerifier(ctx context.Context, cfg config.Config) (access.Verifier, error) {
 	if cfg.OIDC.Mode == config.OIDCModeFake {
 		return access.NewDevelopmentFake(string(cfg.Environment), cfg.OIDC.Issuer)
 	}
@@ -213,6 +288,13 @@ func verifierFor(ctx context.Context, cfg config.Config) (access.Verifier, error
 			Timeout: cfg.OIDC.HTTPTimeout,
 		},
 	})
+}
+
+func localAuthenticator(cfg config.Config, platformStore *store.Store) httpapi.Authenticator {
+	if !cfg.Auth.Enabled {
+		return nil
+	}
+	return platformStore
 }
 
 func configuredHTTPServer(handler http.Handler, cfg config.Config) *http.Server {

@@ -26,37 +26,50 @@ function includesValue(answer: AnswerValue | undefined, value: unknown) {
   return Array.isArray(answer) && answer.some((item) => sameValue(item, value));
 }
 
-function evaluateCondition(
-  condition: Condition,
-  answers: Record<string, AnswerValue | undefined>,
-) {
-  const answer = answers[condition.question];
-  switch (condition.operator) {
-    case "answered":
-      return answer !== undefined;
-    case "equals":
-      return sameValue(answer, condition.value);
-    case "not_equals":
-      return !sameValue(answer, condition.value);
-    case "in":
-      return Array.isArray(condition.value) && condition.value.some((value) => sameValue(answer, value));
-    case "contains":
-      return includesValue(answer, condition.value);
-  }
+type Answers = Record<string, AnswerValue | undefined>;
+
+/**
+ * One entry per operator of the allowed DSL. A table keeps every operator
+ * visible side by side and makes an unhandled operator a type error rather than
+ * a silently falsy branch.
+ */
+const conditionOperators: Record<
+  Condition["operator"],
+  (answer: AnswerValue | undefined, value: unknown) => boolean
+> = {
+  answered: (answer) => answer !== undefined,
+  equals: (answer, value) => sameValue(answer, value),
+  not_equals: (answer, value) => !sameValue(answer, value),
+  in: (answer, value) =>
+    Array.isArray(value) && value.some((item) => sameValue(answer, item)),
+  contains: (answer, value) => includesValue(answer, value),
+};
+
+function evaluateCondition(condition: Condition, answers: Answers) {
+  return conditionOperators[condition.operator](
+    answers[condition.question],
+    condition.value,
+  );
 }
 
-function visible(
-  question: Question,
-  answers: Record<string, AnswerValue | undefined>,
+function matchesRule(
+  rule: NonNullable<Question["visibility_rule"]>,
+  answers: Answers,
 ) {
+  if (rule.all !== undefined) {
+    return rule.all.every((condition) => evaluateCondition(condition, answers));
+  }
+  return (
+    rule.any?.some((condition) => evaluateCondition(condition, answers)) ?? false
+  );
+}
+
+function visible(question: Question, answers: Answers) {
   const rule = question.visibility_rule;
   if (rule === null || rule === undefined) {
     return true;
   }
-  if (rule.all !== undefined) {
-    return rule.all.every((condition) => evaluateCondition(condition, answers));
-  }
-  return rule.any?.some((condition) => evaluateCondition(condition, answers)) ?? false;
+  return matchesRule(rule, answers);
 }
 
 export function visibleQuestions(questions: Question[], answers: AnswerState) {

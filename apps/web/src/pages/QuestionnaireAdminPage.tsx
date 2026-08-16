@@ -6,7 +6,7 @@ export default function QuestionnaireAdminPage() {
 
   return (
     <article className="page operator-page">
-      <div className="eyebrow">Questionários · Fase 3</div>
+      <div className="eyebrow">Uso interno</div>
       <h1 data-route-heading tabIndex={-1}>
         Questionários
       </h1>

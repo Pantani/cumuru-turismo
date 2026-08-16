@@ -75,8 +75,12 @@ func validPresenceSource(source PresenceSource, preRegisteredWeight float64) boo
 	if preRegisteredWeight <= 0 || preRegisteredWeight > 1 {
 		return false
 	}
-	seen := make(map[uuid.UUID]struct{}, len(source.VisitorIDs))
-	for _, visitorID := range source.VisitorIDs {
+	return distinctVisitors(source.VisitorIDs)
+}
+
+func distinctVisitors(visitorIDs []uuid.UUID) bool {
+	seen := make(map[uuid.UUID]struct{}, len(visitorIDs))
+	for _, visitorID := range visitorIDs {
 		if visitorID == uuid.Nil {
 			return false
 		}

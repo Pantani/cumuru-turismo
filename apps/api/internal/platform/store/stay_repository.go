@@ -62,6 +62,19 @@ func (r *StayRepository) Create(
 	return result, replayed, err
 }
 
+// A stay may only be created against an accommodation whose status still
+// allows it, so the identifier is minted only after that check passes.
+func newStayID(property generated.GetAccessibleAccommodationRow) (uuid.UUID, error) {
+	if !accommodation.Status(property.Status).Allows(accommodation.OperationCreateStay) {
+		return uuid.Nil, stay.ErrConflict
+	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return uuid.Nil, stay.ErrUnavailable
+	}
+	return id, nil
+}
+
 func (r *StayRepository) createStay(
 	ctx context.Context,
 	q generated.Querier,
@@ -72,12 +85,9 @@ func (r *StayRepository) createStay(
 	if err != nil {
 		return storedMutation{}, stayQueryError(err)
 	}
-	if !accommodation.Status(property.Status).Allows(accommodation.OperationCreateStay) {
-		return storedMutation{}, stay.ErrConflict
-	}
-	id, err := uuid.NewV7()
+	id, err := newStayID(property)
 	if err != nil {
-		return storedMutation{}, stay.ErrUnavailable
+		return storedMutation{}, err
 	}
 	row, err := q.CreateStay(ctx, generated.CreateStayParams{
 		StayID: idToPG(id), ClientSubmissionID: idToPG(command.ClientSubmissionID),
@@ -150,6 +160,12 @@ func (r *StayRepository) Update(
 	return result, err
 }
 
+func updatableStay(current generated.GetAccessibleStayRow, patch stay.UpdatePatch) bool {
+	return accommodation.Status(current.AccommodationStatus).
+		Allows(accommodation.OperationUpdateStay) &&
+		validMergedStay(current, patch)
+}
+
 func (r *StayRepository) updateStay(
 	ctx context.Context,
 	q generated.Querier,
@@ -162,10 +178,7 @@ func (r *StayRepository) updateStay(
 	if current.Version != command.ExpectedVersion {
 		return result, stay.ErrPreconditionFailed
 	}
-	if !accommodation.Status(current.AccommodationStatus).Allows(accommodation.OperationUpdateStay) {
-		return result, stay.ErrConflict
-	}
-	if !validMergedStay(current, command.Patch) {
+	if !updatableStay(current, command.Patch) {
 		return result, stay.ErrConflict
 	}
 	updated, err := q.UpdateStay(ctx, updateStayParams(command, r.store.currentTime()))
@@ -252,6 +265,53 @@ func (r *StayRepository) SubmitAssistedGroup(
 	return result, replayed, err
 }
 
+// Revoking outstanding invites first makes the assisted path authoritative:
+// a pending invite must not be able to overwrite what the operator typed.
+func writeAssistedGroup(
+	ctx context.Context,
+	q generated.Querier,
+	command stay.GroupCommand,
+	locked generated.LockStayForCommandRow,
+	now time.Time,
+) (int64, error) {
+	if _, err := q.RevokeActiveInvites(ctx, generated.RevokeActiveInvitesParams{
+		RevokedAt: timeToPG(now), StayID: idToPG(command.StayID),
+		OidcIssuer: command.Actor.Issuer, OidcSubject: command.Actor.Subject,
+	}); err != nil {
+		return 0, stay.ErrUnavailable
+	}
+	if _, err := insertAssistedGroup(ctx, q, command, now); err != nil {
+		return 0, err
+	}
+	if err := insertAssistedVisitors(ctx, q, command); err != nil {
+		return 0, err
+	}
+	return updateAssistedStay(ctx, q, command, locked, now)
+}
+
+func (r *StayRepository) recordAssistedGroupEvents(
+	ctx context.Context,
+	q generated.Querier,
+	command stay.GroupCommand,
+	locked generated.LockStayForCommandRow,
+	version int64,
+	now time.Time,
+) error {
+	event := stayEventSpec{
+		actor: command.Actor, organizationID: idFromPG(locked.OrganizationID),
+		action: audit.ActionStayGroupSubmitted, eventType: outbox.EventStayGroupSubmitted,
+		stayID: command.StayID, version: version, requestID: command.RequestID,
+		fields: []audit.ChangedField{audit.FieldExpectedGuests, audit.FieldStatus}, now: now,
+	}
+	if err := r.store.recordStayEvents(ctx, q, event); err != nil {
+		return err
+	}
+	if err := insertPresenceEvent(ctx, q, command.StayID, version); err != nil {
+		return stay.ErrUnavailable
+	}
+	return nil
+}
+
 func (r *StayRepository) submitAssistedGroup(
 	ctx context.Context,
 	q generated.Querier,
@@ -262,20 +322,7 @@ func (r *StayRepository) submitAssistedGroup(
 	if err != nil {
 		return storedMutation{}, err
 	}
-	if _, err = q.RevokeActiveInvites(ctx, generated.RevokeActiveInvitesParams{
-		RevokedAt: timeToPG(now), StayID: idToPG(command.StayID),
-		OidcIssuer: command.Actor.Issuer, OidcSubject: command.Actor.Subject,
-	}); err != nil {
-		return storedMutation{}, stay.ErrUnavailable
-	}
-	_, err = insertAssistedGroup(ctx, q, command, now)
-	if err != nil {
-		return storedMutation{}, err
-	}
-	if err := insertAssistedVisitors(ctx, q, command); err != nil {
-		return storedMutation{}, err
-	}
-	version, err := updateAssistedStay(ctx, q, command, locked, now)
+	version, err := writeAssistedGroup(ctx, q, command, locked, now)
 	if err != nil {
 		return storedMutation{}, err
 	}
@@ -284,17 +331,8 @@ func (r *StayRepository) submitAssistedGroup(
 	if err != nil {
 		return storedMutation{}, stay.ErrUnavailable
 	}
-	event := stayEventSpec{
-		actor: command.Actor, organizationID: idFromPG(locked.OrganizationID),
-		action: audit.ActionStayGroupSubmitted, eventType: outbox.EventStayGroupSubmitted,
-		stayID: command.StayID, version: version, requestID: command.RequestID,
-		fields: []audit.ChangedField{audit.FieldExpectedGuests, audit.FieldStatus}, now: now,
-	}
-	if err := r.store.recordStayEvents(ctx, q, event); err != nil {
+	if err := r.recordAssistedGroupEvents(ctx, q, command, locked, version, now); err != nil {
 		return storedMutation{}, err
-	}
-	if err := insertPresenceEvent(ctx, q, command.StayID, version); err != nil {
-		return storedMutation{}, stay.ErrUnavailable
 	}
 	return jsonMutation(
 		200,
@@ -356,6 +394,47 @@ type inviteReplayPayload struct {
 	Version    int64     `json:"version"`
 }
 
+func invitable(locked generated.LockStayForCommandRow) bool {
+	next, err := stay.Status(locked.Status).Transition(stay.EventInvite)
+	if err != nil || next != stay.StatusInvited {
+		return false
+	}
+	return accommodation.Status(locked.AccommodationStatus).
+		Allows(accommodation.OperationIssueInvite)
+}
+
+// Issuing a new invite revokes any outstanding one first, so a stay never has
+// two live capabilities at the same time.
+func (r *StayRepository) replaceInvite(
+	ctx context.Context,
+	q generated.Querier,
+	command stay.InviteCommand,
+	locked generated.LockStayForCommandRow,
+	now time.Time,
+) (inviteReplayPayload, error) {
+	if !invitable(locked) {
+		return inviteReplayPayload{}, stay.ErrConflict
+	}
+	if _, err := q.RevokeActiveInvites(ctx, generated.RevokeActiveInvitesParams{
+		RevokedAt: timeToPG(now), StayID: idToPG(command.StayID),
+		OidcIssuer: command.Actor.Issuer, OidcSubject: command.Actor.Subject,
+	}); err != nil {
+		return inviteReplayPayload{}, stay.ErrUnavailable
+	}
+	payload, err := r.insertInvite(ctx, q, command, now)
+	if err != nil {
+		return inviteReplayPayload{}, err
+	}
+	transitioned, err := q.ApplyStayTransition(ctx, transitionParams(
+		locked, command.Actor, stay.StatusInvited, now, "", "",
+	))
+	if err != nil {
+		return inviteReplayPayload{}, stayUpdateError(err)
+	}
+	payload.Version = transitioned.Version
+	return payload, nil
+}
+
 func (r *StayRepository) createInvite(
 	ctx context.Context,
 	q generated.Querier,
@@ -366,34 +445,14 @@ func (r *StayRepository) createInvite(
 	if err != nil {
 		return storedMutation{}, stayCommandError(ctx, q, command.Actor, command.StayID, command.ExpectedVersion, err)
 	}
-	next, err := stay.Status(locked.Status).Transition(stay.EventInvite)
-	if err != nil || next != stay.StatusInvited {
-		return storedMutation{}, stay.ErrConflict
-	}
-	if !accommodation.Status(locked.AccommodationStatus).Allows(accommodation.OperationIssueInvite) {
-		return storedMutation{}, stay.ErrConflict
-	}
-	if _, err := q.RevokeActiveInvites(ctx, generated.RevokeActiveInvitesParams{
-		RevokedAt: timeToPG(now), StayID: idToPG(command.StayID),
-		OidcIssuer: command.Actor.Issuer, OidcSubject: command.Actor.Subject,
-	}); err != nil {
-		return storedMutation{}, stay.ErrUnavailable
-	}
-	payload, err := r.insertInvite(ctx, q, command, now)
+	payload, err := r.replaceInvite(ctx, q, command, locked, now)
 	if err != nil {
 		return storedMutation{}, err
 	}
-	transitioned, err := q.ApplyStayTransition(ctx, transitionParams(
-		locked, command.Actor, stay.StatusInvited, now, "", "",
-	))
-	if err != nil {
-		return storedMutation{}, stayUpdateError(err)
-	}
-	payload.Version = transitioned.Version
 	event := stayEventSpec{
 		actor: command.Actor, organizationID: idFromPG(locked.OrganizationID),
 		action: audit.ActionStayInvited, eventType: outbox.EventStayInvited,
-		stayID: command.StayID, version: transitioned.Version,
+		stayID: command.StayID, version: payload.Version,
 		requestID: command.RequestID, fields: []audit.ChangedField{audit.FieldStatus}, now: now,
 	}
 	if err := r.store.recordStayEvents(ctx, q, event); err != nil {
@@ -473,6 +532,55 @@ func (r *StayRepository) Transition(
 	return result, replayed, err
 }
 
+func allowedTransition(
+	command stay.TransitionCommand,
+	locked generated.LockStayForCommandRow,
+	occurredAt time.Time,
+) (stay.Status, error) {
+	next, err := validateTransition(command, locked, occurredAt)
+	if err != nil {
+		return "", stay.ErrConflict
+	}
+	if !accommodation.Status(locked.AccommodationStatus).
+		Allows(operationForTransition(command.Kind)) {
+		return "", stay.ErrConflict
+	}
+	return next, nil
+}
+
+// An unset occurrence time means "now"; a supplied one is normalized to UTC.
+func transitionTime(occurredAt, now time.Time) time.Time {
+	value := occurredAt.UTC()
+	if value.IsZero() {
+		return now
+	}
+	return value
+}
+
+func (r *StayRepository) recordTransitionEvents(
+	ctx context.Context,
+	q generated.Querier,
+	command stay.TransitionCommand,
+	locked generated.LockStayForCommandRow,
+	result stay.Record,
+	occurredAt time.Time,
+) error {
+	action, eventType := transitionEvents(command.Kind)
+	event := stayEventSpec{
+		actor: command.Actor, organizationID: idFromPG(locked.OrganizationID),
+		action: action, eventType: eventType, stayID: command.StayID,
+		version: result.Version, requestID: command.RequestID,
+		fields: []audit.ChangedField{audit.FieldStatus}, now: occurredAt,
+	}
+	if err := r.store.recordStayEvents(ctx, q, event); err != nil {
+		return err
+	}
+	if err := insertPresenceEvent(ctx, q, command.StayID, result.Version); err != nil {
+		return stay.ErrUnavailable
+	}
+	return nil
+}
+
 func (r *StayRepository) transition(
 	ctx context.Context,
 	q generated.Querier,
@@ -483,16 +591,10 @@ func (r *StayRepository) transition(
 	if err != nil {
 		return storedMutation{}, stayCommandError(ctx, q, command.Actor, command.StayID, command.ExpectedVersion, err)
 	}
-	occurredAt := command.OccurredAt.UTC()
-	if occurredAt.IsZero() {
-		occurredAt = now
-	}
-	next, err := validateTransition(command, locked, occurredAt)
+	occurredAt := transitionTime(command.OccurredAt, now)
+	next, err := allowedTransition(command, locked, occurredAt)
 	if err != nil {
-		return storedMutation{}, stay.ErrConflict
-	}
-	if !accommodation.Status(locked.AccommodationStatus).Allows(operationForTransition(command.Kind)) {
-		return storedMutation{}, stay.ErrConflict
+		return storedMutation{}, err
 	}
 	updated, err := q.ApplyStayTransition(ctx, transitionParams(
 		locked, command.Actor, next, occurredAt, command.ReasonCode, command.Kind,
@@ -501,18 +603,8 @@ func (r *StayRepository) transition(
 		return storedMutation{}, stayUpdateError(err)
 	}
 	result := stayFromTransition(updated, locked.VisitorCount)
-	action, eventType := transitionEvents(command.Kind)
-	event := stayEventSpec{
-		actor: command.Actor, organizationID: idFromPG(locked.OrganizationID),
-		action: action, eventType: eventType, stayID: command.StayID,
-		version: result.Version, requestID: command.RequestID,
-		fields: []audit.ChangedField{audit.FieldStatus}, now: occurredAt,
-	}
-	if err := r.store.recordStayEvents(ctx, q, event); err != nil {
+	if err := r.recordTransitionEvents(ctx, q, command, locked, result, occurredAt); err != nil {
 		return storedMutation{}, err
-	}
-	if err := insertPresenceEvent(ctx, q, command.StayID, result.Version); err != nil {
-		return storedMutation{}, stay.ErrUnavailable
 	}
 	return jsonMutation(200, command.StayID, mutationResult(result), map[string]string{
 		"ETag": entityTag(result.Version),
@@ -564,16 +656,9 @@ func (r *StayRepository) SubmitInviteGroup(
 		if runErr != nil {
 			return stayMutationError(runErr)
 		}
-		var payload groupReplayPayload
-		if decodeErr := json.Unmarshal(idempotent.response.body, &payload); decodeErr != nil {
-			return stay.ErrUnavailable
-		}
-		result, runErr = r.reconstructGroupSubmission(payload)
-		if runErr != nil {
-			return runErr
-		}
+		result, runErr = r.decodeGroupSubmission(idempotent.response.body)
 		replayed = idempotent.replayed
-		return nil
+		return runErr
 	})
 	return result, replayed, err
 }
@@ -582,6 +667,16 @@ type resolvedCapability struct {
 	inviteID uuid.UUID
 	digest   []byte
 	row      generated.GetInviteForCapabilityRow
+}
+
+func (r *StayRepository) decodeGroupSubmission(
+	body []byte,
+) (stay.SubmissionAccepted, error) {
+	var payload groupReplayPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return stay.SubmissionAccepted{}, stay.ErrUnavailable
+	}
+	return r.reconstructGroupSubmission(payload)
 }
 
 func (r *StayRepository) resolveCapability(
@@ -599,18 +694,84 @@ func (r *StayRepository) resolveCapability(
 	if err != nil {
 		return resolvedCapability{}, stayQueryError(err)
 	}
-	verifiedID, err := r.codec.Verify(token, row.TokenKeyVersion)
-	if err != nil || verifiedID != inviteID {
-		return resolvedCapability{}, stay.ErrNotFound
-	}
-	digest, err := r.codec.StorageDigest(token, row.TokenKeyVersion)
-	if err != nil || !hmac.Equal(digest, row.TokenHmac) {
-		return resolvedCapability{}, stay.ErrNotFound
+	digest, err := r.verifiedDigest(token, inviteID, row)
+	if err != nil {
+		return resolvedCapability{}, err
 	}
 	if !validCapabilityRow(row, now, allowConsumed) {
 		return resolvedCapability{}, stay.ErrNotFound
 	}
 	return resolvedCapability{inviteID: inviteID, digest: digest, row: row}, nil
+}
+
+// Both the signature and the stored digest must match; a mismatch is reported
+// as not-found so a probe cannot distinguish a bad token from a missing invite.
+func (r *StayRepository) verifiedDigest(
+	token string,
+	inviteID uuid.UUID,
+	row generated.GetInviteForCapabilityRow,
+) ([]byte, error) {
+	verifiedID, err := r.codec.Verify(token, row.TokenKeyVersion)
+	if err != nil || verifiedID != inviteID {
+		return nil, stay.ErrNotFound
+	}
+	digest, err := r.codec.StorageDigest(token, row.TokenKeyVersion)
+	if err != nil || !hmac.Equal(digest, row.TokenHmac) {
+		return nil, stay.ErrNotFound
+	}
+	return digest, nil
+}
+
+// Consuming the invite is the serialization point: a second submission finds
+// no consumable row and is reported as already consumed.
+func consumeInvite(
+	ctx context.Context,
+	q generated.Querier,
+	capability resolvedCapability,
+	now time.Time,
+) (generated.ConsumeInviteRow, error) {
+	consumed, err := q.ConsumeInvite(ctx, generated.ConsumeInviteParams{
+		ConsumedAt: timeToPG(now), InviteID: idToPG(capability.inviteID),
+		TokenHmac: capability.digest,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return generated.ConsumeInviteRow{}, stay.ErrInviteConsumed
+	}
+	if err != nil {
+		return generated.ConsumeInviteRow{}, stay.ErrUnavailable
+	}
+	return consumed, nil
+}
+
+// writeInviteGroup consumes the capability, stores the group and finalizes the
+// stay in one transaction, so a partial submission can never survive.
+func writeInviteGroup(
+	ctx context.Context,
+	q generated.Querier,
+	command stay.InviteGroupCommand,
+	capability resolvedCapability,
+	now time.Time,
+) (generated.ConsumeInviteRow, generated.FinalizeInviteSubmissionRow, error) {
+	var finalized generated.FinalizeInviteSubmissionRow
+	consumed, err := consumeInvite(ctx, q, capability, now)
+	if err != nil {
+		return consumed, finalized, err
+	}
+	if _, err := insertInviteGroup(ctx, q, command, capability, now); err != nil {
+		return consumed, finalized, err
+	}
+	if err := insertInviteVisitors(ctx, q, command, capability, now); err != nil {
+		return consumed, finalized, err
+	}
+	finalized, err = q.FinalizeInviteSubmission(ctx, generated.FinalizeInviteSubmissionParams{
+		ExpectedGuestCount: int32(len(command.Visitors)), FinalizedAt: timeToPG(now),
+		InviteID: idToPG(capability.inviteID), TokenHmac: capability.digest,
+		StayID: consumed.StayID, ExpectedVersion: capability.row.StayVersion,
+	})
+	if err != nil {
+		return consumed, finalized, stayUpdateError(err)
+	}
+	return consumed, finalized, nil
 }
 
 func (r *StayRepository) submitInviteGroup(
@@ -623,30 +784,9 @@ func (r *StayRepository) submitInviteGroup(
 	if command.PrivacyNoticeVersion != capability.row.PrivacyNoticeVersion {
 		return storedMutation{}, stay.ErrConflict
 	}
-	consumed, err := q.ConsumeInvite(ctx, generated.ConsumeInviteParams{
-		ConsumedAt: timeToPG(now), InviteID: idToPG(capability.inviteID),
-		TokenHmac: capability.digest,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return storedMutation{}, stay.ErrInviteConsumed
-	}
-	if err != nil {
-		return storedMutation{}, stay.ErrUnavailable
-	}
-	_, err = insertInviteGroup(ctx, q, command, capability, now)
+	consumed, finalized, err := writeInviteGroup(ctx, q, command, capability, now)
 	if err != nil {
 		return storedMutation{}, err
-	}
-	if err := insertInviteVisitors(ctx, q, command, capability, now); err != nil {
-		return storedMutation{}, err
-	}
-	finalized, err := q.FinalizeInviteSubmission(ctx, generated.FinalizeInviteSubmissionParams{
-		ExpectedGuestCount: int32(len(command.Visitors)), FinalizedAt: timeToPG(now),
-		InviteID: idToPG(capability.inviteID), TokenHmac: capability.digest,
-		StayID: consumed.StayID, ExpectedVersion: capability.row.StayVersion,
-	})
-	if err != nil {
-		return storedMutation{}, stayUpdateError(err)
 	}
 	result := acceptedSubmission(command.ClientSubmissionID, finalized.Version)
 	grant, err := r.store.issueSurveyCapability(ctx, q, idFromPG(consumed.StayID), now)
@@ -864,7 +1004,10 @@ func updateStayParams(command stay.UpdateCommand, now time.Time) generated.Updat
 	}
 }
 
-func validMergedStay(current generated.GetAccessibleStayRow, patch stay.UpdatePatch) bool {
+func mergedStayDates(
+	current generated.GetAccessibleStayRow,
+	patch stay.UpdatePatch,
+) (string, string) {
 	arrival := dateString(current.PlannedArrivalOn)
 	departure := dateString(current.PlannedDepartureOn)
 	if patch.SetPlannedArrival {
@@ -873,6 +1016,11 @@ func validMergedStay(current generated.GetAccessibleStayRow, patch stay.UpdatePa
 	if patch.SetPlannedDeparture {
 		departure = patch.PlannedDepartureOn
 	}
+	return arrival, departure
+}
+
+func validMergedStay(current generated.GetAccessibleStayRow, patch stay.UpdatePatch) bool {
+	arrival, departure := mergedStayDates(current, patch)
 	arrivalDate, firstErr := stay.ParseCivilDate(arrival)
 	departureDate, secondErr := stay.ParseCivilDate(departure)
 	if firstErr != nil || secondErr != nil || !arrivalDate.Before(departureDate) {
@@ -1235,6 +1383,19 @@ func transitionParams(
 	return params
 }
 
+func applyNoShowOccurrence(
+	params *generated.ApplyStayTransitionParams,
+	occurredAt time.Time,
+	reason string,
+) {
+	params.NoShowAt = timeToPG(occurredAt)
+	if reason != "" {
+		params.NoShowReasonCode = &reason
+	}
+}
+
+// Each transition stamps its own column; the reason code only accompanies the
+// two transitions the contract declares one for.
 func applyTransitionOccurrence(
 	params *generated.ApplyStayTransitionParams,
 	kind stay.TransitionKind,
@@ -1250,10 +1411,7 @@ func applyTransitionOccurrence(
 		params.CancelledAt = timeToPG(occurredAt)
 		params.CancellationReasonCode = &reason
 	case stay.TransitionNoShow:
-		params.NoShowAt = timeToPG(occurredAt)
-		if reason != "" {
-			params.NoShowReasonCode = &reason
-		}
+		applyNoShowOccurrence(params, occurredAt, reason)
 	}
 }
 
@@ -1327,15 +1485,21 @@ func validCapabilityLifetime(row generated.GetInviteForCapabilityRow, now time.T
 	return row.ExpiresAt.Valid && row.ExpiresAt.Time.After(now) && !row.RevokedAt.Valid
 }
 
+// A pre-registered stay may only be revisited as an already spent capability;
+// an open stay may still be used while uses remain.
 func validCapabilityUse(row generated.GetInviteForCapabilityRow, allowConsumed bool) bool {
 	status := stay.Status(row.StayStatus)
 	if status == stay.StatusPreRegistered {
 		return allowConsumed && row.UseCount >= row.MaxUses
 	}
-	if status != stay.StatusDraft && status != stay.StatusInvited {
+	if !openStayStatus(status) {
 		return false
 	}
 	return allowConsumed || row.UseCount < row.MaxUses
+}
+
+func openStayStatus(status stay.Status) bool {
+	return status == stay.StatusDraft || status == stay.StatusInvited
 }
 
 func inviteContext(row generated.GetInviteForCapabilityRow) stay.InviteContext {
@@ -1497,6 +1661,20 @@ func stayUpdateError(err error) error {
 	return stayMutationError(err)
 }
 
+var knownStayErrors = []error{
+	stay.ErrNotFound, stay.ErrConflict, stay.ErrPreconditionFailed,
+	stay.ErrInviteConsumed, stay.ErrRateLimited,
+}
+
+func firstKnownError(err error, known []error) (error, bool) {
+	for _, candidate := range known {
+		if errors.Is(err, candidate) {
+			return candidate, true
+		}
+	}
+	return nil, false
+}
+
 func stayMutationError(err error) error {
 	if errors.Is(err, idempotency.ErrProcessing) {
 		return err
@@ -1504,14 +1682,8 @@ func stayMutationError(err error) error {
 	if errors.Is(err, errIdempotencyConflict) || isUniqueViolation(err) {
 		return stay.ErrConflict
 	}
-	known := []error{
-		stay.ErrNotFound, stay.ErrConflict, stay.ErrPreconditionFailed,
-		stay.ErrInviteConsumed, stay.ErrRateLimited,
-	}
-	for _, candidate := range known {
-		if errors.Is(err, candidate) {
-			return candidate
-		}
+	if known, ok := firstKnownError(err, knownStayErrors); ok {
+		return known
 	}
 	return stay.ErrUnavailable
 }

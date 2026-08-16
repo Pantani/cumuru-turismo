@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1.7
+
+# Development image only. It carries the Go toolchain and the source tree so a
+# change on the host is recompiled inside the container; it is never published
+# and never used by staging or production, which run the distroless-style
+# runtime image built by apps/api/Dockerfile.
+FROM golang:1.26.5-alpine3.23@sha256:622e56dbc11a8cfe87cafa2331e9a201877271cbff918af53d3be315f3da88cc
+
+WORKDIR /src
+
+COPY apps/api/go.mod apps/api/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY apps/api/ ./
+COPY apps/api/scripts/dev.sh /usr/local/bin/dev.sh
+RUN chmod +x /usr/local/bin/dev.sh
+
+# uid 10001 matches the runtime image, so a bind-mounted source tree keeps the
+# same ownership across both stacks.
+RUN addgroup -S -g 10001 cumuru \
+  && adduser -S -D -H -u 10001 -G cumuru cumuru \
+  && mkdir -p /go/pkg/mod /home/cumuru/.cache /out \
+  && chown -R cumuru:cumuru /src /go /home/cumuru /out
+
+USER 10001:10001
+
+ENV GOCACHE=/home/cumuru/.cache/go-build
+ENV CUMURU_DEV_TARGET=api
+
+CMD ["/bin/sh", "/usr/local/bin/dev.sh"]

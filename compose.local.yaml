@@ -16,6 +16,7 @@ services:
       OIDC_AUDIENCE: cumuru-local
       OTEL_EXPORTER: none
       LOCAL_DEMO_ENABLED: "true"
+      LOCAL_DEMO_ACCOUNT_PASSWORD: "${LOCAL_DEMO_ACCOUNT_PASSWORD:-demonstracao-local-2026}"
       DATABASE_URL: postgres://cumuru_app:cumuru-local-app-only@postgres:5432/cumuru?sslmode=disable
       WORKER_DATABASE_URL: postgres://cumuru_worker:cumuru-local-worker-only@postgres:5432/cumuru?sslmode=disable
       PROVISIONING_DATABASE_URL: postgres://cumuru_migration:cumuru-local-migration-only@postgres:5432/cumuru?sslmode=disable
@@ -76,8 +77,6 @@ services:
   web:
     build:
       args:
-        VITE_LOCAL_DEMO_IDENTITY: cumuru-local-platform-read
-        VITE_LOCAL_DEMO_MODE: "true"
         LOCAL_DEMO_PROXY_LOOPBACK: "true"
     healthcheck:
       test:

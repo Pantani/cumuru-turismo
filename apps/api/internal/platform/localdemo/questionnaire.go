@@ -25,32 +25,52 @@ func ensureQuestionnaire(
 		"fixture-questionnaire-reviewer",
 		[]string{"questionnaires:approve"},
 	)
-	current, err := service.GetVersion(ctx, editor, versionID)
-	if errors.Is(err, questionnaire.ErrNotFound) {
-		current, err = createQuestionnaire(ctx, service, editor)
-	}
+	current, err := currentQuestionnaire(ctx, service, editor)
 	if err != nil {
 		return err
 	}
 	if current.Status == questionnaire.StatusPublished {
-		if !definitionsEqual(current.Definition(), questionnaireDefinition()) {
-			return errFixtureConflict
-		}
-		return nil
+		return confirmPublishedFixture(current)
 	}
+	return publishQuestionnaireFixture(ctx, service, editor, reviewer, current)
+}
+
+func currentQuestionnaire(
+	ctx context.Context,
+	service *questionnaire.Service,
+	editor access.Principal,
+) (questionnaire.Version, error) {
+	current, err := service.GetVersion(ctx, editor, versionID)
+	if errors.Is(err, questionnaire.ErrNotFound) {
+		return createQuestionnaire(ctx, service, editor)
+	}
+	return current, err
+}
+
+// A published fixture is never rewritten: a divergent definition means the
+// database holds something this seeder did not create.
+func confirmPublishedFixture(current questionnaire.Version) error {
+	if !definitionsEqual(current.Definition(), questionnaireDefinition()) {
+		return errFixtureConflict
+	}
+	return nil
+}
+
+func publishQuestionnaireFixture(
+	ctx context.Context,
+	service *questionnaire.Service,
+	editor access.Principal,
+	reviewer access.Principal,
+	current questionnaire.Version,
+) error {
+	var err error
 	if current.Status == questionnaire.StatusDraft {
 		current, err = updateQuestionnaire(ctx, service, editor, current)
+		if err != nil {
+			return err
+		}
 	}
-	if err != nil {
-		return err
-	}
-	current, err = transitionQuestionnaire(
-		ctx,
-		service,
-		editor,
-		reviewer,
-		current,
-	)
+	current, err = transitionQuestionnaire(ctx, service, editor, reviewer, current)
 	if err != nil {
 		return err
 	}

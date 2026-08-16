@@ -149,6 +149,27 @@ type StoredResponse struct {
 	Body        []byte
 }
 
+// Only a successful JSON response with a resource identity is worth replaying;
+// anything else would make a retry return something the client cannot use.
+func successfulJSON(status int, contentType string) bool {
+	return status >= 200 && status <= 299 && contentType == "application/json"
+}
+
+func storableResponse(
+	status int,
+	contentType string,
+	etag string,
+	resourceID uuid.UUID,
+) bool {
+	if !successfulJSON(status, contentType) {
+		return false
+	}
+	if etag != "" && !etagPattern.MatchString(etag) {
+		return false
+	}
+	return resourceID != uuid.Nil
+}
+
 func NewStoredResponse(
 	status int,
 	contentType string,
@@ -157,13 +178,7 @@ func NewStoredResponse(
 	resourceID uuid.UUID,
 	body []byte,
 ) (StoredResponse, error) {
-	if status < 200 || status > 299 || contentType != "application/json" {
-		return StoredResponse{}, ErrInvalidResponse
-	}
-	if etag != "" && !etagPattern.MatchString(etag) {
-		return StoredResponse{}, ErrInvalidResponse
-	}
-	if resourceID == uuid.Nil {
+	if !storableResponse(status, contentType, etag, resourceID) {
 		return StoredResponse{}, ErrInvalidResponse
 	}
 	return StoredResponse{

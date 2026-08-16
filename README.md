@@ -65,7 +65,7 @@ Materiais simples para apresentação e treinamento:
 | Dados remotos no front | TanStack Query |
 | Formulários | React Hook Form + Zod |
 | Gráficos | Apache ECharts |
-| Autenticação | OIDC/OAuth 2.1; provedor definido por ambiente |
+| Autenticação | E-mail e senha local (Argon2id, sessão opaca) e OIDC/OAuth 2.1 em paralelo |
 | Contrato | OpenAPI 3.1 |
 | Observabilidade | OpenTelemetry, métricas Prometheus e logs JSON |
 | Implantação | Contêineres OCI; serviço gerenciado de PostgreSQL |
@@ -173,7 +173,6 @@ make install
 make tools
 make generate
 make generated-check
-make local-demo-build-test
 make migration-test
 make local-restore-drill
 make local-demo-test
@@ -188,23 +187,27 @@ make smoke
 
 `make up` constrói e inicia PostgreSQL, migrations, API, worker e web. O target
 usa `compose.local.yaml` para executar o comando Go `/app/local-demo`, que
-aplica fixtures fictícias idempotentes pelos serviços de domínio, ativa o fake
-OIDC somente no browser local e espera a primeira publicação anônima. Nenhum
-arquivo SQL de fixtures é montado ou executado.
+aplica fixtures fictícias idempotentes pelos serviços de domínio, semeia a conta
+local de demonstração e espera a primeira publicação anônima. Nenhum arquivo SQL
+de fixtures é montado ou executado.
 
-O build local mostra permanentemente “Sessão fictícia local” e
-`PROTOTYPE_ONLY`, só aceita a identidade fake em loopback e mantém sessão e
-capabilities em memória. Recarregar recria a sessão fictícia por conveniência;
-isso não cria credencial institucional. O build padrão rejeita qualquer
-identidade da demo.
+O bundle não carrega credencial: a entrada é por e-mail e senha em
+`/acesso`. A conta fictícia é `operador@cumuru.local`, com a senha definida em
+`LOCAL_DEMO_ACCOUNT_PASSWORD` (o Compose local usa
+`demonstracao-local-2026`). A sessão vive apenas na memória da aba — recarregar
+a página exige entrar de novo, por construção — e nada é gravado em
+`localStorage`, `sessionStorage` ou cache do service worker.
 Abra:
 
 - `http://127.0.0.1:4173/` para o dashboard fictício;
 - `http://127.0.0.1:4173/acesso` para a jornada do operador.
 
-Na área autenticada, use **Listar acomodações**, crie uma estadia e então crie
-o convite. O botão **Abrir registro neste navegador** mantém a capability
-somente em memória, remove-a da URL e conduz ao registro e à pesquisa. As rotas
+Na área da hospedagem, escolha uma hospedagem, crie uma estadia informando
+chegada, saída e número de pessoas, e use as ações oferecidas pelo próprio
+cartão da estadia — só aparecem as transições que o servidor aceita naquele
+estado. Nenhum identificador ou ETag é digitado: ambos vêm da própria listagem.
+O botão **Abrir registro neste navegador** mantém a capability somente em
+memória, remove-a da URL e conduz ao registro e à pesquisa. As rotas
 `/registro` e `/pesquisa` abertas diretamente continuam bloqueadas por design.
 
 `make smoke` exige publicação, séries públicas, preferências e ao menos uma
@@ -380,7 +383,6 @@ make phase4-integration
 make phase4-proxy-test
 make phase4-full-stack
 make phase4-benchmark
-make local-demo-build-test
 make local-demo-test
 make local-demo-e2e
 make phase4-remediation

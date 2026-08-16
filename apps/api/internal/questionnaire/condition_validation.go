@@ -21,19 +21,24 @@ func validCondition(
 	if condition.Operator == "answered" {
 		return len(condition.Value) == 0
 	}
+	return validConditionValue(source, condition)
+}
+
+func validConditionValue(source Question, condition Condition) bool {
 	if len(condition.Value) == 0 || !json.Valid(condition.Value) {
 		return false
 	}
-	switch condition.Operator {
-	case "equals", "not_equals":
-		return validEqualsCondition(source, condition.Value)
-	case "in":
-		return validInCondition(source, condition.Value)
-	case "contains":
-		return validContainsCondition(source, condition.Value)
-	default:
-		return false
-	}
+	validate, known := conditionValueValidators[condition.Operator]
+	return known && validate(source, condition.Value)
+}
+
+// One value validator per operator that carries a value. "answered" is absent
+// on purpose: it must arrive with no value at all.
+var conditionValueValidators = map[string]func(Question, json.RawMessage) bool{
+	"equals":     validEqualsCondition,
+	"not_equals": validEqualsCondition,
+	"in":         validInCondition,
+	"contains":   validContainsCondition,
 }
 
 func conditionSource(
@@ -59,19 +64,24 @@ func validEqualsCondition(source Question, raw json.RawMessage) bool {
 		validScalarCondition(source, value)
 }
 
-func validInCondition(source Question, raw json.RawMessage) bool {
-	var values []any
-	if json.Unmarshal(raw, &values) != nil ||
-		len(values) == 0 ||
-		len(values) > 20 {
-		return false
-	}
+func allValidScalarConditions(source Question, values []any) bool {
 	for _, value := range values {
 		if !validScalarCondition(source, value) {
 			return false
 		}
 	}
 	return true
+}
+
+func validInCondition(source Question, raw json.RawMessage) bool {
+	var values []any
+	if json.Unmarshal(raw, &values) != nil {
+		return false
+	}
+	if len(values) == 0 || len(values) > 20 {
+		return false
+	}
+	return allValidScalarConditions(source, values)
 }
 
 func validContainsCondition(source Question, raw json.RawMessage) bool {
@@ -123,16 +133,20 @@ func validOptionCondition(options []Option, value string) bool {
 		slices.Contains(optionValues(options), value)
 }
 
-func validMultipleCondition(source Question, values []string) bool {
-	if len(values) == 0 || len(values) > 20 || duplicateStrings(values) {
-		return false
-	}
+func allValidOptionConditions(options []Option, values []string) bool {
 	for _, value := range values {
-		if !validOptionCondition(source.Options, value) {
+		if !validOptionCondition(options, value) {
 			return false
 		}
 	}
 	return true
+}
+
+func validMultipleCondition(source Question, values []string) bool {
+	if len(values) == 0 || len(values) > 20 || duplicateStrings(values) {
+		return false
+	}
+	return allValidOptionConditions(source.Options, values)
 }
 
 func validConditionDate(value string) bool {
@@ -140,14 +154,21 @@ func validConditionDate(value string) bool {
 	return err == nil && parsed.Format("2006-01-02") == value
 }
 
-func validSafeConditionString(value string) bool {
-	trimmed := strings.TrimSpace(value)
-	lower := strings.ToLower(trimmed)
-	return utf8.ValidString(value) &&
-		trimmed == value &&
-		len(value) >= 1 &&
-		len(value) <= 100 &&
-		!strings.ContainsAny(value, "<>/\\") &&
+// A condition literal reaches a rendered questionnaire, so it must not be able
+// to carry markup or a scheme that a renderer might act on.
+func inertConditionString(value string) bool {
+	lower := strings.ToLower(value)
+	return !strings.ContainsAny(value, "<>/\\") &&
 		!strings.Contains(lower, "javascript:") &&
 		!strings.Contains(lower, "data:")
+}
+
+func validSafeConditionString(value string) bool {
+	if !utf8.ValidString(value) || strings.TrimSpace(value) != value {
+		return false
+	}
+	if len(value) < 1 || len(value) > 100 {
+		return false
+	}
+	return inertConditionString(value)
 }

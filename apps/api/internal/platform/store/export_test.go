@@ -26,7 +26,7 @@ func TestRollbackLocalDemoUsesFreshContext(t *testing.T) {
 	t.Parallel()
 
 	tx := &rollbackTxStub{}
-	rollbackLocalDemo(tx, time.Second)
+	rollbackProvisioning(tx, time.Second)
 	if tx.contextErr != nil {
 		t.Fatalf("rollback context error = %v, want fresh context", tx.contextErr)
 	}

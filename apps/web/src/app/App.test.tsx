@@ -5,7 +5,11 @@ import axe from "axe-core";
 import { lazy, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AuthSessionProvider } from "../shared/auth/AuthSession";
+import {
+  renderWithSession,
+  stubAuthClient,
+  testSession,
+} from "../test/session";
 import {
   clearInviteCapability,
   captureInviteCapability,
@@ -52,7 +56,7 @@ describe("App", () => {
     ["/", "Observatório Turístico de Cumuruxatiba"],
     ["/registro", "Registro de estadias"],
     ["/pesquisa", "Pesquisa turística"],
-    ["/acesso", "Área autenticada"],
+    ["/acesso", "Área da hospedagem"],
     ["/questionarios", "Questionários"],
     ["/qualidade", "Qualidade dos dados"],
     ["/nao-existe", "Página não encontrada"],
@@ -170,22 +174,18 @@ describe("App", () => {
     ).toHaveAttribute("role", "status");
   });
 
-  it("oculta a rota de qualidade sem sessão e a mostra com sessão", () => {
+  it("oculta a rota de qualidade sem sessão e a mostra com sessão", async () => {
     const { unmount } = renderApp();
 
     expect(screen.queryByRole("link", { name: "Qualidade" })).toBeNull();
     unmount();
 
-    renderApp(
-      <AuthSessionProvider accessToken="opaque-test-token">
-        <App />
-      </AuthSessionProvider>,
-    );
+    renderWithSession(<App />);
 
     expect(
-      screen.getByRole("link", { name: "Qualidade" }),
+      await screen.findByRole("link", { name: "Qualidade" }),
     ).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain("opaque-test-token");
+    expect(document.body.textContent).not.toContain("cms_test-session-token");
   });
 
   it("mostra registro e pesquisa somente com a capability correspondente", () => {
@@ -211,28 +211,33 @@ describe("App", () => {
     expect(screen.getByRole("link", { name: "Pesquisa" })).toBeInTheDocument();
   });
 
-  it("oculta superfícies institucionais sem sessão", () => {
+  it("oferece a área da hospedagem sem sessão e esconde as internas", () => {
     renderApp();
 
-    expect(screen.queryByRole("link", { name: "Área autenticada" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Questionários" })).toBeNull();
-  });
-
-  it("mantém a demo do operador somente em superfícies autorizadas", () => {
-    renderApp(
-      <AuthSessionProvider
-        accessToken="cumuru-local-platform-read"
-        localDemo
-      >
-        <App />
-      </AuthSessionProvider>,
-    );
-
     expect(
-      screen.getByRole("link", { name: "Área autenticada" }),
+      screen.getByRole("link", { name: "Área da hospedagem" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Questionários" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Qualidade" })).toBeNull();
+  });
+
+  it("mostra superfícies internas somente com o escopo correspondente", async () => {
+    renderWithSession(<App />, {
+      authClient: stubAuthClient(testSession(["stays:read:own"])),
+    });
+
+    expect(
+      await screen.findByRole("link", { name: "Área da hospedagem" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Questionários" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Qualidade" })).toBeNull();
+  });
+
+  it("apresenta o nome da conta e a saída quando há sessão", async () => {
+    renderWithSession(<App />);
+
+    expect(await screen.findByText("Operadora de teste")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sair" })).toBeInTheDocument();
   });
 
   it("remove a navegação contextual quando a capability é consumida", () => {

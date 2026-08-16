@@ -45,7 +45,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: cumuru-local-admin-only
     ports:
-      - "127.0.0.1:5432:5432"
+      # 5433 por padrão para não colidir com um PostgreSQL local na 5432.
+      # A rede interna do Compose continua usando 5432.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro

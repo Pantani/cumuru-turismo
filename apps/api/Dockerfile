@@ -24,7 +24,10 @@ RUN echo "${BUILD_VERSION}" | grep -Eq \
       -ldflags="-s -w -X main.version=${BUILD_VERSION} -X main.revision=${BUILD_REVISION} -X main.builtAt=${BUILD_TIME}" \
       -o /out/worker ./cmd/worker \
   && CGO_ENABLED=0 go build -trimpath \
-      -o /out/local-demo ./cmd/localdemo
+      -o /out/local-demo ./cmd/localdemo \
+  && CGO_ENABLED=0 go build -trimpath \
+      -ldflags="-s -w" \
+      -o /out/seed ./cmd/seed
 
 FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 
@@ -46,6 +49,7 @@ WORKDIR /app
 COPY --from=build --chown=cumuru:cumuru /out/api /app/api
 COPY --from=build --chown=cumuru:cumuru /out/worker /app/worker
 COPY --from=build --chown=cumuru:cumuru /out/local-demo /app/local-demo
+COPY --from=build --chown=cumuru:cumuru /out/seed /app/seed
 
 USER 10001:10001
 CMD ["/app/api"]

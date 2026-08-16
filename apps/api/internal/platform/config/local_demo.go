@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -14,18 +13,13 @@ type LocalDemoConfig struct {
 }
 
 func LoadLocalDemo(lookup LookupEnv) (LocalDemoConfig, error) {
-	if lookup == nil {
-		lookup = os.LookupEnv
-	}
+	lookup = resolveLookup(lookup)
 	if err := validateLocalDemoMode(lookup); err != nil {
 		return LocalDemoConfig{}, err
 	}
-	application, err := Load(ProcessWorker, lookup)
+	application, err := localDemoApplication(lookup)
 	if err != nil {
 		return LocalDemoConfig{}, err
-	}
-	if !application.Phase3.Enabled || !application.Phase4.Enabled {
-		return LocalDemoConfig{}, errors.New("local demo requires phases 3 and 4")
 	}
 	workerURL, provisioningURL, err := localDemoDatabaseURLs(
 		lookup,
@@ -40,13 +34,25 @@ func LoadLocalDemo(lookup LookupEnv) (LocalDemoConfig, error) {
 	}, nil
 }
 
+// The seeder writes fixture data, so it refuses to run anywhere but a local or
+// test environment backed by the fake verifier.
+func localDemoApplication(lookup LookupEnv) (Config, error) {
+	application, err := Load(ProcessWorker, lookup)
+	if err != nil {
+		return Config{}, err
+	}
+	if !application.Phase3.Enabled || !application.Phase4.Enabled {
+		return Config{}, errors.New("local demo requires phases 3 and 4")
+	}
+	return application, nil
+}
+
 func validateLocalDemoMode(lookup LookupEnv) error {
 	enabled, err := parseBoolean(lookup, "LOCAL_DEMO_ENABLED", false)
 	if err != nil || !enabled {
 		return invalid("LOCAL_DEMO_ENABLED")
 	}
-	environment := Environment(required(lookup, "APP_ENV"))
-	if environment != EnvironmentLocal && environment != EnvironmentTest {
+	if !localOrTest(Environment(required(lookup, "APP_ENV"))) {
 		return invalid("APP_ENV")
 	}
 	if OIDCMode(required(lookup, "OIDC_MODE")) != OIDCModeFake {
@@ -75,7 +81,7 @@ func localDemoDatabaseURLs(
 	); err != nil {
 		return "", "", err
 	}
-	if duplicateLocalDemoDatabaseURL(
+	if duplicateDatabaseRoles(
 		applicationURL,
 		workerURL,
 		provisioningURL,
@@ -85,18 +91,25 @@ func localDemoDatabaseURLs(
 	return workerURL, provisioningURL, nil
 }
 
-func duplicateLocalDemoDatabaseURL(values ...string) bool {
+// Each process must connect as a distinct role so the grant model actually
+// constrains it.
+func duplicateDatabaseRoles(values ...string) bool {
 	seen := make(map[string]bool, len(values))
 	for _, value := range values {
-		parsed, err := url.Parse(strings.TrimSpace(value))
-		if err != nil || parsed.User == nil || parsed.User.Username() == "" {
-			return true
-		}
-		role := parsed.User.Username()
-		if seen[role] {
+		role, ok := databaseRole(value)
+		if !ok || seen[role] {
 			return true
 		}
 		seen[role] = true
 	}
 	return false
+}
+
+func databaseRole(value string) (string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.User == nil {
+		return "", false
+	}
+	role := parsed.User.Username()
+	return role, role != ""
 }

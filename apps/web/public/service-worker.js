@@ -44,6 +44,13 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(cacheStaticAsset(event.request));
 });
 
+function isCacheableShellTarget(url, mode) {
+  if (mode === "navigate") {
+    return true;
+  }
+  return url.pathname.startsWith("/assets/") && url.search === "";
+}
+
 function isShellRequest(request, url) {
   if (request.method !== "GET" || url.origin !== self.location.origin) {
     return false;
@@ -51,23 +58,24 @@ function isShellRequest(request, url) {
   if (request.headers.has("authorization") || containsCapability(url)) {
     return false;
   }
-  return (
-    request.mode === "navigate" ||
-    (url.pathname.startsWith("/assets/") && url.search === "")
+  return isCacheableShellTarget(url, request.mode);
+}
+
+const CAPABILITY_PATH_PREFIXES = ["/api/", "/convites/", "/invites/"];
+
+function hasCapabilityPath(url) {
+  const path = url.pathname.toLowerCase();
+  return CAPABILITY_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+function hasCapabilityQuery(url) {
+  return [...url.searchParams.keys()].some((key) =>
+    CAPABILITY_QUERY_KEYS.has(key.toLowerCase()),
   );
 }
 
 function containsCapability(url) {
-  const path = url.pathname.toLowerCase();
-  if (path.startsWith("/api/") || path.startsWith("/convites/") || path.startsWith("/invites/")) {
-    return true;
-  }
-  for (const key of url.searchParams.keys()) {
-    if (CAPABILITY_QUERY_KEYS.has(key.toLowerCase())) {
-      return true;
-    }
-  }
-  return false;
+  return hasCapabilityPath(url) || hasCapabilityQuery(url);
 }
 
 async function navigateWithShellFallback(request) {

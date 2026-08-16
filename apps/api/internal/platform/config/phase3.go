@@ -38,29 +38,35 @@ func loadPhase3(
 	if !enabled {
 		return config, nil
 	}
-	if environment != EnvironmentLocal && environment != EnvironmentTest {
+	if !localOrTest(environment) {
 		return Phase3Config{}, invalid("PHASE3_ENABLED")
 	}
 
-	surveyKeys, err := parseKeyring(
-		"SURVEY_HMAC_CURRENT_VERSION",
-		required(lookup, "SURVEY_HMAC_CURRENT_VERSION"),
-		"SURVEY_HMAC_KEYS",
-		required(lookup, "SURVEY_HMAC_KEYS"),
-	)
-	if err != nil {
+	if err := applyPhase3Settings(&config, phase2, lookup); err != nil {
 		return Phase3Config{}, err
 	}
-	freeTextKeys, err := parseKeyring(
-		"SURVEY_FREE_TEXT_CURRENT_VERSION",
-		required(lookup, "SURVEY_FREE_TEXT_CURRENT_VERSION"),
-		"SURVEY_FREE_TEXT_KEYS",
-		required(lookup, "SURVEY_FREE_TEXT_KEYS"),
-	)
-	if err != nil {
-		return Phase3Config{}, err
-	}
+	return config, nil
+}
 
+// A survey keyring must never share a key with a phase 2 keyring: one leaked
+// key would otherwise span two capability domains.
+func (k phase3Keyrings) distinctFrom(phase2 Phase2Config) error {
+	existing := phase2Keyrings(phase2)
+	if keyringsOverlap(append(existing, k.survey, k.freeText)) {
+		return invalid("PHASE3_KEYRINGS")
+	}
+	return nil
+}
+
+func applyPhase3Settings(
+	config *Phase3Config,
+	phase2 Phase2Config,
+	lookup LookupEnv,
+) error {
+	keys, err := loadPhase3Keyrings(lookup)
+	if err != nil {
+		return err
+	}
 	config.SurveyTTL = duration(lookup, "SURVEY_CAPABILITY_TTL", maximumSurveyTTL)
 	config.FreeTextTTL = duration(lookup, "SURVEY_FREE_TEXT_TTL", maximumSurveyTTL)
 	config.SurveySubmitRateLimit = positiveInteger(
@@ -74,16 +80,38 @@ func loadPhase3(
 		false,
 	)
 	if err != nil {
-		return Phase3Config{}, err
+		return err
 	}
-	config.SurveyKeys = surveyKeys
-	config.FreeTextKeys = freeTextKeys
+	config.SurveyKeys = keys.survey
+	config.FreeTextKeys = keys.freeText
+	return keys.distinctFrom(phase2)
+}
 
-	existing := phase2Keyrings(phase2)
-	if keyringsOverlap(append(existing, surveyKeys, freeTextKeys)) {
-		return Phase3Config{}, invalid("PHASE3_KEYRINGS")
+type phase3Keyrings struct {
+	survey   KeyringConfig
+	freeText KeyringConfig
+}
+
+func loadPhase3Keyrings(lookup LookupEnv) (phase3Keyrings, error) {
+	surveyKeys, err := parseKeyring(
+		"SURVEY_HMAC_CURRENT_VERSION",
+		required(lookup, "SURVEY_HMAC_CURRENT_VERSION"),
+		"SURVEY_HMAC_KEYS",
+		required(lookup, "SURVEY_HMAC_KEYS"),
+	)
+	if err != nil {
+		return phase3Keyrings{}, err
 	}
-	return config, nil
+	freeTextKeys, err := parseKeyring(
+		"SURVEY_FREE_TEXT_CURRENT_VERSION",
+		required(lookup, "SURVEY_FREE_TEXT_CURRENT_VERSION"),
+		"SURVEY_FREE_TEXT_KEYS",
+		required(lookup, "SURVEY_FREE_TEXT_KEYS"),
+	)
+	if err != nil {
+		return phase3Keyrings{}, err
+	}
+	return phase3Keyrings{survey: surveyKeys, freeText: freeTextKeys}, nil
 }
 
 func (c Phase3Config) validate() error {
@@ -96,6 +124,12 @@ func (c Phase3Config) validate() error {
 	if err := c.validateDurations(); err != nil {
 		return err
 	}
+	return c.validateSurveyPolicy()
+}
+
+// Free text is only accepted when its erase pipeline is enabled, so plaintext
+// always has a deletion path.
+func (c Phase3Config) validateSurveyPolicy() error {
 	if c.SurveySubmitRateLimit <= 0 {
 		return invalid("SURVEY_SUBMIT_RATE_LIMIT")
 	}

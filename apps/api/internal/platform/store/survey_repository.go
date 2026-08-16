@@ -90,14 +90,28 @@ func (r *QuestionnaireRepository) resolveSurveySubmission(
 	if err := validateCapabilityRow(row, capability, command.VersionID, now); err != nil {
 		return row, questionnaire.Version{}, err
 	}
-	version, err := r.readVersion(ctx, q, command.VersionID)
-	if err != nil || version.Status != questionnaire.StatusPublished {
-		return row, questionnaire.Version{}, questionnaire.ErrCapabilityInvalid
-	}
-	if err := questionnaire.ValidateResponse(version.Definition(), command); err != nil {
+	version, err := r.publishedVersion(ctx, q, command)
+	if err != nil {
 		return row, questionnaire.Version{}, err
 	}
 	return row, version, nil
+}
+
+// A response may only be recorded against the published version the capability
+// was issued for, and must satisfy that version's own definition.
+func (r *QuestionnaireRepository) publishedVersion(
+	ctx context.Context,
+	q generated.Querier,
+	command questionnaire.SubmissionCommand,
+) (questionnaire.Version, error) {
+	version, err := r.readVersion(ctx, q, command.VersionID)
+	if err != nil || version.Status != questionnaire.StatusPublished {
+		return questionnaire.Version{}, questionnaire.ErrCapabilityInvalid
+	}
+	if err := questionnaire.ValidateResponse(version.Definition(), command); err != nil {
+		return questionnaire.Version{}, err
+	}
+	return version, nil
 }
 
 func (r *QuestionnaireRepository) persistSurveySubmission(
@@ -167,18 +181,29 @@ func validateCapabilityRow(
 	versionID uuid.UUID,
 	now time.Time,
 ) error {
-	if uuid.UUID(row.ID.Bytes) != capability.ID ||
-		row.TokenKeyVersion != capability.KeyVersion ||
-		uuid.UUID(row.QuestionnaireVersionID.Bytes) != versionID ||
-		row.RevokedAt.Valid ||
-		!row.ExpiresAt.Valid ||
-		!row.ExpiresAt.Time.After(now) {
+	if !capabilityMatches(row, capability, versionID) || !capabilityLive(row, now) {
 		return questionnaire.ErrCapabilityInvalid
 	}
 	if row.ConsumedAt.Valid {
 		return questionnaire.ErrConflict
 	}
 	return nil
+}
+
+func capabilityMatches(
+	row generated.SurveyCapability,
+	capability questionnaire.Capability,
+	versionID uuid.UUID,
+) bool {
+	return uuid.UUID(row.ID.Bytes) == capability.ID &&
+		row.TokenKeyVersion == capability.KeyVersion &&
+		uuid.UUID(row.QuestionnaireVersionID.Bytes) == versionID
+}
+
+func capabilityLive(row generated.SurveyCapability, now time.Time) bool {
+	return !row.RevokedAt.Valid &&
+		row.ExpiresAt.Valid &&
+		row.ExpiresAt.Time.After(now)
 }
 
 func surveyCapabilityError(err error) error {
@@ -245,18 +270,32 @@ func (r *QuestionnaireRepository) insertSurveyAnswer(
 		QuestionnaireVersionID: pgUUID(versionID), QuestionID: pgUUID(answer.QuestionID),
 		CreatedAt: pgTime(now),
 	}
-	if question.AnswerType == questionnaire.AnswerShortText ||
-		question.AnswerType == questionnaire.AnswerLongText {
-		if err := r.encryptFreeText(&params, responseID, versionID, answer, now); err != nil {
-			return err
-		}
-	} else {
-		params.StructuredValue = append([]byte(nil), answer.Value...)
+	if err := r.fillAnswerValue(&params, question, responseID, versionID, answer, now); err != nil {
+		return err
 	}
 	if err := q.InsertSurveyAnswer(ctx, params); err != nil {
 		return questionnaireStoreError(err)
 	}
 	return nil
+}
+
+// Free text is encrypted at rest with an erase deadline; every other answer
+// type is structured and stored in the clear for aggregation.
+func (r *QuestionnaireRepository) fillAnswerValue(
+	params *generated.InsertSurveyAnswerParams,
+	question questionnaire.Question,
+	responseID uuid.UUID,
+	versionID uuid.UUID,
+	answer questionnaire.AnswerInput,
+	now time.Time,
+) error {
+	freeText := question.AnswerType == questionnaire.AnswerShortText ||
+		question.AnswerType == questionnaire.AnswerLongText
+	if !freeText {
+		params.StructuredValue = append([]byte(nil), answer.Value...)
+		return nil
+	}
+	return r.encryptFreeText(params, responseID, versionID, answer, now)
 }
 
 func (r *QuestionnaireRepository) encryptFreeText(
@@ -266,15 +305,12 @@ func (r *QuestionnaireRepository) encryptFreeText(
 	answer questionnaire.AnswerInput,
 	now time.Time,
 ) error {
-	if r.store.textCipher == nil || !r.store.phase3.FreeTextCleanupEnabled {
-		return questionnaire.ErrInvalidInput
+	keyVersion, err := r.freeTextKeyVersion()
+	if err != nil {
+		return err
 	}
 	var plaintext string
 	if json.Unmarshal(answer.Value, &plaintext) != nil {
-		return questionnaire.ErrInvalidInput
-	}
-	keyVersion := r.store.textCipher.CurrentVersion()
-	if keyVersion == "" {
 		return questionnaire.ErrInvalidInput
 	}
 	aad := surveyAAD(responseID, versionID, answer.QuestionID, keyVersion)
@@ -287,6 +323,19 @@ func (r *QuestionnaireRepository) encryptFreeText(
 	params.EncryptionKeyVersion = &value.KeyVersion
 	params.EraseAfter = pgTime(now.Add(r.store.phase3.FreeTextTTL))
 	return nil
+}
+
+// Free text is refused unless the cipher and the erase pipeline are both
+// configured, so plaintext can never be stored without a deletion path.
+func (r *QuestionnaireRepository) freeTextKeyVersion() (string, error) {
+	if r.store.textCipher == nil || !r.store.phase3.FreeTextCleanupEnabled {
+		return "", questionnaire.ErrInvalidInput
+	}
+	keyVersion := r.store.textCipher.CurrentVersion()
+	if keyVersion == "" {
+		return "", questionnaire.ErrInvalidInput
+	}
+	return keyVersion, nil
 }
 
 func insertSurveyConsents(
@@ -369,12 +418,18 @@ func (r *QuestionnaireRepository) acquireSurveyRateConnection(
 	}
 	acquireCtx, cancel := context.WithTimeout(ctx, r.store.timeout)
 	defer cancel()
-	if err := acquireSurveyPairPermit(
-		acquireCtx, r.store.surveyPairPermit,
-	); err != nil {
+	return r.acquirePairedConnection(acquireCtx)
+}
+
+// The rate-limit counter runs on a second connection, so a permit is held to
+// guarantee the pool can always serve both halves of the pair.
+func (r *QuestionnaireRepository) acquirePairedConnection(
+	ctx context.Context,
+) (*surveyRateConnection, error) {
+	if err := acquireSurveyPairPermit(ctx, r.store.surveyPairPermit); err != nil {
 		return nil, err
 	}
-	connection, err := r.store.pool.Acquire(acquireCtx)
+	connection, err := r.store.pool.Acquire(ctx)
 	if err != nil {
 		<-r.store.surveyPairPermit
 		return nil, questionnaire.ErrUnavailable

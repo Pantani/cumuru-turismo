@@ -13,7 +13,8 @@ ANALYZER_STATUS=0
 OXLINT_OPTIONS=(--config .oxlintrc.json --deny-warnings)
 WEB_FILES=()
 WEB_PASS_FILES=()
-WEB_FAIL_FILES=()
+WEB_CYCLO_FAIL_FILES=()
+WEB_COGNIT_FAIL_FILES=()
 
 cleanup() {
   rm -rf -- "${TEMP_DIR}"
@@ -252,7 +253,6 @@ write_go_fixture() {
   local score="$2"
   local suffix="$3"
   local branch=1
-  local cyclomatic_branches="$((score - 1))"
   local path="${directory}/complexity_test.go"
 
   mkdir -p "${directory}"
@@ -260,40 +260,13 @@ write_go_fixture() {
     echo "package fixture"
     echo
     echo "func cyclomatic${suffix}(value int) bool {"
-    while [[ "${branch}" -le "${cyclomatic_branches}" ]]; do
+    while [[ "${branch}" -le "${score}" ]]; do
       echo "	if value == ${branch} {"
       echo "		return true"
       echo "	}"
       branch="$((branch + 1))"
     done
     echo "	return false"
-    echo "}"
-    echo
-    echo "func cognitive${suffix}(value int) int {"
-    echo "	total := 0"
-    echo "	if value > 0 {"
-    echo "		total++"
-    echo "		if value > 1 {"
-    echo "			total++"
-    echo "			if value > 2 {"
-    echo "				total++"
-    if [[ "${score}" -eq 10 ]]; then
-      echo "				if value > 3 {"
-      echo "					total++"
-      echo "				}"
-    fi
-    echo "			}"
-    echo "		}"
-    echo "	}"
-    if [[ "${score}" -eq 9 ]]; then
-      echo "	if value > 3 {"
-      echo "		total++"
-      echo "		if value > 4 {"
-      echo "			total++"
-      echo "		}"
-      echo "	}"
-    fi
-    echo "	return total"
     echo "}"
   } >"${path}"
 }
@@ -303,7 +276,6 @@ write_web_fixture() {
   local score="$2"
   local suffix="$3"
   local branch=1
-  local cyclomatic_branches="$((score - 1))"
   local export_prefix="export "
 
   case "${path}" in
@@ -312,89 +284,70 @@ write_web_fixture() {
 
   {
     echo "${export_prefix}function cyclomatic${suffix}(value) {"
-    while [[ "${branch}" -le "${cyclomatic_branches}" ]]; do
+    while [[ "${branch}" -le "${score}" ]]; do
       echo "  if (value === ${branch}) return true;"
       branch="$((branch + 1))"
     done
     echo "  return false;"
     echo "}"
-    echo
-    echo "${export_prefix}function cognitive${suffix}(value) {"
-    echo "  let total = 0;"
-    echo "  if (value > 0) {"
-    echo "    total++;"
-    echo "    if (value > 1) {"
-    echo "      total++;"
-    echo "      if (value > 2) {"
-    echo "        total++;"
-    if [[ "${score}" -eq 10 ]]; then
-      echo "        if (value > 3) total++;"
-    fi
-    echo "      }"
-    echo "    }"
-    echo "  }"
-    if [[ "${score}" -eq 9 ]]; then
-      echo "  if (value > 3) {"
-      echo "    total++;"
-      echo "    if (value > 4) total++;"
-      echo "  }"
-    fi
-    echo "  return total;"
-    echo "}"
     if [[ -z "${export_prefix}" ]]; then
       echo
-      echo "module.exports = { cyclomatic${suffix}, cognitive${suffix} };"
+      echo "module.exports = { cyclomatic${suffix} };"
     fi
   } >"${path}"
 }
 
 write_threshold_fixtures() {
   local extension
-  local fail_path
   local pass_path
 
-  write_go_fixture "${TEMP_DIR}/go-pass" 9 Nine
-  write_go_fixture "${TEMP_DIR}/go-fail" 10 Ten
+  # A run of N sequential top-level ifs scores N+1 cyclomatic and N cognitive,
+  # so each threshold is proved on its own boundary instead of a shared shape.
+  write_go_fixture "${TEMP_DIR}/go-cyclo-pass" 4 CycloPass
+  write_go_fixture "${TEMP_DIR}/go-cyclo-fail" 5 CycloFail
+  write_go_fixture "${TEMP_DIR}/go-cognit-pass" 8 CognitPass
+  write_go_fixture "${TEMP_DIR}/go-cognit-fail" 9 CognitFail
   mkdir -p "${TEMP_DIR}/web-pass" "${TEMP_DIR}/web-fail"
   for extension in js jsx mjs cjs ts tsx mts cts; do
-    pass_path="${TEMP_DIR}/web-pass/complexity-nine.${extension}"
-    fail_path="${TEMP_DIR}/web-fail/complexity-ten.${extension}"
-    write_web_fixture "${pass_path}" 9 Nine
-    write_web_fixture "${fail_path}" 10 Ten
+    pass_path="${TEMP_DIR}/web-pass/complexity-pass.${extension}"
+    write_web_fixture "${pass_path}" 4 Pass
+    write_web_fixture "${TEMP_DIR}/web-fail/cyclomatic-six.${extension}" 5 CycloFail
+    write_web_fixture "${TEMP_DIR}/web-fail/cognitive-nine.${extension}" 9 CognitFail
     WEB_PASS_FILES+=("${pass_path}")
-    WEB_FAIL_FILES+=("${fail_path}")
+    WEB_CYCLO_FAIL_FILES+=("${TEMP_DIR}/web-fail/cyclomatic-six.${extension}")
+    WEB_COGNIT_FAIL_FILES+=("${TEMP_DIR}/web-fail/cognitive-nine.${extension}")
   done
 }
 
 prove_go_threshold() {
-  capture_command "${GOCYCLO}" -over 9 "${TEMP_DIR}/go-pass"
+  capture_command "${GOCYCLO}" -over 5 "${TEMP_DIR}/go-cyclo-pass"
   if [[ "${ANALYZER_STATUS}" -ne 0 || -n "${ANALYZER_OUTPUT}" ]]; then
-    echo "gocyclo rejected the score-9 fixture:" >&2
+    echo "gocyclo rejected the score-5 fixture:" >&2
     echo "${ANALYZER_OUTPUT}" >&2
     return 1
   fi
 
-  capture_command "${GOCOGNIT}" -test -over 9 "${TEMP_DIR}/go-pass"
+  capture_command "${GOCOGNIT}" -test -over 8 "${TEMP_DIR}/go-cognit-pass"
   if [[ "${ANALYZER_STATUS}" -ne 0 || -n "${ANALYZER_OUTPUT}" ]]; then
-    echo "gocognit rejected the score-9 fixture:" >&2
+    echo "gocognit rejected the score-8 fixture:" >&2
     echo "${ANALYZER_OUTPUT}" >&2
     return 1
   fi
 
-  capture_command "${GOCYCLO}" -over 9 "${TEMP_DIR}/go-fail"
+  capture_command "${GOCYCLO}" -over 5 "${TEMP_DIR}/go-cyclo-fail"
   if [[ "${ANALYZER_STATUS}" -ne 1 ]] ||
-    ! grep -Eq '10 .*cyclomaticTen .*complexity_test\.go:' \
+    ! grep -Eq '6 .*cyclomaticCycloFail .*complexity_test\.go:' \
     <<<"${ANALYZER_OUTPUT}"; then
-    echo "gocyclo did not reject the score-10 fixture" >&2
+    echo "gocyclo did not reject the score-6 fixture" >&2
     echo "${ANALYZER_OUTPUT}" >&2
     return 1
   fi
 
-  capture_command "${GOCOGNIT}" -test -over 9 "${TEMP_DIR}/go-fail"
+  capture_command "${GOCOGNIT}" -test -over 8 "${TEMP_DIR}/go-cognit-fail"
   if [[ "${ANALYZER_STATUS}" -ne 1 ]] ||
-    ! grep -Eq '10 .*cognitiveTen .*complexity_test\.go:' \
+    ! grep -Eq '9 .*cyclomaticCognitFail .*complexity_test\.go:' \
     <<<"${ANALYZER_OUTPUT}"; then
-    echo "gocognit did not reject the score-10 fixture" >&2
+    echo "gocognit did not reject the score-9 fixture" >&2
     echo "${ANALYZER_OUTPUT}" >&2
     return 1
   fi
@@ -405,17 +358,26 @@ prove_web_threshold() {
 
   run_oxlint_files "${WEB_PASS_FILES[@]}"
   if [[ "${ANALYZER_STATUS}" -ne 0 ]]; then
-    echo "Oxlint rejected a score-9 web fixture:" >&2
+    echo "Oxlint rejected a passing web fixture:" >&2
     echo "${ANALYZER_OUTPUT}" >&2
     return 1
   fi
 
-  for file in "${WEB_FAIL_FILES[@]}"; do
+  for file in "${WEB_CYCLO_FAIL_FILES[@]}"; do
     run_oxlint_files "${file}"
     if [[ "${ANALYZER_STATUS}" -ne 1 ]] ||
-      ! grep -Fq "complexity" <<<"${ANALYZER_OUTPUT}" ||
+      ! grep -Fq "eslint(complexity)" <<<"${ANALYZER_OUTPUT}"; then
+      echo "Oxlint did not reject cyclomatic 6 for ${file}" >&2
+      echo "${ANALYZER_OUTPUT}" >&2
+      return 1
+    fi
+  done
+
+  for file in "${WEB_COGNIT_FAIL_FILES[@]}"; do
+    run_oxlint_files "${file}"
+    if [[ "${ANALYZER_STATUS}" -ne 1 ]] ||
       ! grep -Fq "sonarjs(cognitive-complexity)" <<<"${ANALYZER_OUTPUT}"; then
-      echo "Oxlint did not reject both score-10 rules for ${file}" >&2
+      echo "Oxlint did not reject cognitive 9 for ${file}" >&2
       echo "${ANALYZER_OUTPUT}" >&2
       return 1
     fi
@@ -481,16 +443,24 @@ prove_web_coverage() {
   done
 }
 
+# Production and generated Go code is held to cyclomatic 5 and cognitive 8.
+# Go test code is held to 9: a table-driven test with several assertions is
+# clear at 6 or 7, and splitting those assertions into helpers costs the
+# locality that makes a failure readable. Web code, tests included, meets 5/8.
 check_go_baseline() {
   local failed=0
   check_analyzer_clean "Go cyclomatic complexity" \
-    "${GOCYCLO}" -over 9 "${ROOT_DIR}/apps/api" || failed=1
+    "${GOCYCLO}" -over 5 -ignore '_test\.go' "${ROOT_DIR}/apps/api" || failed=1
   check_analyzer_clean "Go cognitive complexity" \
+    "${GOCOGNIT}" -over 8 -ignore '_test\.go' "${ROOT_DIR}/apps/api" || failed=1
+  check_analyzer_clean "Go cyclomatic complexity in tests" \
+    "${GOCYCLO}" -over 9 "${ROOT_DIR}/apps/api" || failed=1
+  check_analyzer_clean "Go cognitive complexity in tests" \
     "${GOCOGNIT}" -test -over 9 "${ROOT_DIR}/apps/api" || failed=1
   if [[ "${failed}" -ne 0 ]]; then
     return 1
   fi
-  echo "Go complexity passed for all owned source, tests, and generated code"
+  echo "Go complexity passed: 5/8 for source and generated code, 9 for tests"
 }
 
 check_web_baseline() {
@@ -514,7 +484,7 @@ write_suppression_fixtures
 write_threshold_fixtures
 prove_go_threshold
 prove_web_threshold
-echo "complexity score 9 passed and score 10 failed for Go and JS/JSX/MJS/CJS/TS/TSX/MTS/CTS"
+echo "cyclomatic 5 and cognitive 8 passed; 6 and 9 failed for Go and JS/JSX/MJS/CJS/TS/TSX/MTS/CTS"
 prove_operational_failure_detection
 echo "synthetic operational analyzer failure was rejected"
 prove_suppression_detection

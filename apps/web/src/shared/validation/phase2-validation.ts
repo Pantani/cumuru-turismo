@@ -42,60 +42,72 @@ function uuidV7Issue(field: string, value: string): ValidationIssue[] {
     : [{ field, message: "Informe um identificador UUIDv7 válido." }];
 }
 
-export function validateCreateAccommodation(
-  value: CreateAccommodationInput,
-) {
-  const issues = uuidV7Issue(
-    "client_submission_id",
-    value.client_submission_id,
-  );
-  if (value.name.trim().length === 0 || value.name.length > 200) {
-    issues.push({ field: "name", message: "Informe o nome do local." });
+function accommodationNameIssues(name: string) {
+  if (name.trim().length > 0 && name.length <= 200) {
+    return [];
   }
-  if (!accommodationInputCategories.has(value.category)) {
-    issues.push({
-      field: "category",
-      message: "Escolha um tipo de hospedagem da lista.",
-    });
-  }
-  if (
-    !Number.isInteger(value.capacity) ||
-    value.capacity < 1 ||
-    value.capacity > 10_000
-  ) {
-    issues.push({
-      field: "capacity",
-      message: "Informe uma capacidade entre 1 e 10.000 pessoas.",
-    });
-  }
-  return issues;
+  return [{ field: "name", message: "Informe o nome do local." }];
 }
 
-function validateDateRange(value: CreateStayRequest) {
-  const issues: ValidationIssue[] = [];
-  if (!datePattern.test(value.planned_arrival_on)) {
-    issues.push({
-      field: "planned_arrival_on",
-      message: "Informe a data de chegada.",
-    });
+function accommodationCategoryIssues(category: string) {
+  if (accommodationInputCategories.has(category)) {
+    return [];
   }
-  if (!datePattern.test(value.planned_departure_on)) {
-    issues.push({
-      field: "planned_departure_on",
-      message: "Informe a data de saída.",
-    });
+  return [
+    { field: "category", message: "Escolha um tipo de hospedagem da lista." },
+  ];
+}
+
+function capacityIssues(capacity: number) {
+  const inRange =
+    Number.isInteger(capacity) && capacity >= 1 && capacity <= 10_000;
+  if (inRange) {
+    return [];
   }
-  if (
+  return [
+    {
+      field: "capacity",
+      message: "Informe uma capacidade entre 1 e 10.000 pessoas.",
+    },
+  ];
+}
+
+export function validateCreateAccommodation(value: CreateAccommodationInput) {
+  return [
+    ...uuidV7Issue("client_submission_id", value.client_submission_id),
+    ...accommodationNameIssues(value.name),
+    ...accommodationCategoryIssues(value.category),
+    ...capacityIssues(value.capacity),
+  ];
+}
+
+function civilDateIssues(field: string, value: string, label: string) {
+  return datePattern.test(value)
+    ? []
+    : [{ field, message: `Informe a data de ${label}.` }];
+}
+
+function dateOrderIssues(value: CreateStayRequest) {
+  const wellFormed =
     datePattern.test(value.planned_arrival_on) &&
-    datePattern.test(value.planned_departure_on) &&
-    value.planned_departure_on <= value.planned_arrival_on
-  ) {
-    issues.push({
+    datePattern.test(value.planned_departure_on);
+  if (!wellFormed || value.planned_departure_on > value.planned_arrival_on) {
+    return [];
+  }
+  return [
+    {
       field: "planned_departure_on",
       message: "A saída deve ser posterior à chegada.",
-    });
-  }
-  return issues;
+    },
+  ];
+}
+
+function validateDateRange(value: CreateStayRequest): ValidationIssue[] {
+  return [
+    ...civilDateIssues("planned_arrival_on", value.planned_arrival_on, "chegada"),
+    ...civilDateIssues("planned_departure_on", value.planned_departure_on, "saída"),
+    ...dateOrderIssues(value),
+  ];
 }
 
 export function validateCreateStay(value: CreateStayRequest) {

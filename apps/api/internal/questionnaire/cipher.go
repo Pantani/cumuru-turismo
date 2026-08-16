@@ -26,17 +26,25 @@ func (c *TextCipher) CurrentVersion() string {
 	return c.currentVersion
 }
 
-func NewTextCipher(keyring Keyring) (*TextCipher, error) {
-	if keyring.CurrentVersion == "" || len(keyring.Keys) == 0 {
-		return nil, ErrInvalidInput
-	}
-	aeads := make(map[string]cipher.AEAD, len(keyring.Keys))
-	for version, key := range keyring.Keys {
+func buildAEADs(keys map[string][]byte) (map[string]cipher.AEAD, error) {
+	aeads := make(map[string]cipher.AEAD, len(keys))
+	for version, key := range keys {
 		aead, err := newAEAD(key)
 		if err != nil {
 			return nil, err
 		}
 		aeads[version] = aead
+	}
+	return aeads, nil
+}
+
+func NewTextCipher(keyring Keyring) (*TextCipher, error) {
+	if keyring.CurrentVersion == "" || len(keyring.Keys) == 0 {
+		return nil, ErrInvalidInput
+	}
+	aeads, err := buildAEADs(keyring.Keys)
+	if err != nil {
+		return nil, err
 	}
 	if _, ok := aeads[keyring.CurrentVersion]; !ok {
 		return nil, ErrInvalidInput

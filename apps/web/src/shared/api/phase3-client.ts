@@ -106,17 +106,32 @@ async function problemFrom(response: Response): Promise<Schemas["Problem"]> {
   }
 }
 
+function requireStrongEtag(response: Response, requestId: string) {
+  if (!/^"[1-9][0-9]*"$/.test(response.headers.get("ETag") ?? "")) {
+    throw invalidResponse("ETag forte obrigatório ausente ou inválido.", requestId);
+  }
+}
+
+function requireReplayFlag(response: Response, requestId: string) {
+  const replayed = response.headers.get("Idempotency-Replayed");
+  if (replayed !== "true" && replayed !== "false") {
+    throw invalidResponse(
+      "Idempotency-Replayed obrigatório ausente ou inválido.",
+      requestId,
+    );
+  }
+}
+
 function requireMetadata(
   response: Response,
   spec: RequestSpec,
   requestId: string,
 ) {
-  if (spec.etag === true && !/^"[1-9][0-9]*"$/.test(response.headers.get("ETag") ?? "")) {
-    throw invalidResponse("ETag forte obrigatório ausente ou inválido.", requestId);
+  if (spec.etag === true) {
+    requireStrongEtag(response, requestId);
   }
-  const replayed = response.headers.get("Idempotency-Replayed");
-  if (spec.replay === true && replayed !== "true" && replayed !== "false") {
-    throw invalidResponse("Idempotency-Replayed obrigatório ausente ou inválido.", requestId);
+  if (spec.replay === true) {
+    requireReplayFlag(response, requestId);
   }
 }
 

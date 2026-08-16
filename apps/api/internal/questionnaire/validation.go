@@ -30,14 +30,22 @@ func validPage(cursorSet bool, cursorID uuid.UUID, limit int32) bool {
 }
 
 func validCreate(command CreateCommand) bool {
+	return validCreateIdentity(command) &&
+		validCreateText(command) &&
+		validMutationMeta(command.IdempotencyKey, command.RequestID)
+}
+
+func validCreateIdentity(command CreateCommand) bool {
 	return validActor(command.Actor.Issuer, command.Actor.Subject) &&
 		command.ID.Version() == 7 &&
 		command.VersionID.Version() == 7 &&
-		validCatalogKey(command.StableKey) &&
-		validText(command.Name, 1, 160) &&
+		validCatalogKey(command.StableKey)
+}
+
+func validCreateText(command CreateCommand) bool {
+	return validText(command.Name, 1, 160) &&
 		validText(command.Title, 1, 200) &&
-		validText(command.PrivacyNoticeVersion, 1, 100) &&
-		validMutationMeta(command.IdempotencyKey, command.RequestID)
+		validText(command.PrivacyNoticeVersion, 1, 100)
 }
 
 func validClone(command CloneCommand) bool {
@@ -56,17 +64,24 @@ func validUpdate(command UpdateCommand) bool {
 		ValidateDefinition(command.Definition) == nil
 }
 
-func validTransition(command TransitionCommand) bool {
-	if !validActor(command.Actor.Issuer, command.Actor.Subject) ||
-		command.VersionID == uuid.Nil ||
-		command.ExpectedVersion < 1 ||
-		!validMutationMeta(command.IdempotencyKey, command.RequestID) {
-		return false
-	}
+func validTransitionAuthority(command TransitionCommand) bool {
+	return validActor(command.Actor.Issuer, command.Actor.Subject) &&
+		command.VersionID != uuid.Nil &&
+		command.ExpectedVersion >= 1 &&
+		validMutationMeta(command.IdempotencyKey, command.RequestID)
+}
+
+// A change request carries a reason code from the closed catalogue; every other
+// transition must carry none.
+func validTransitionReason(command TransitionCommand) bool {
 	if command.Transition == TransitionRequestChanges {
 		return changeReasonCodes[command.ReasonCode]
 	}
 	return command.ReasonCode == "" && validTransitions()[command.Transition]
+}
+
+func validTransition(command TransitionCommand) bool {
+	return validTransitionAuthority(command) && validTransitionReason(command)
 }
 
 func validSubmission(command SubmissionCommand) bool {
@@ -95,22 +110,37 @@ func validSubmittedPayload(command SubmissionCommand) bool {
 		validConsentInputs(command.Consents)
 }
 
+func validDefinitionText(definition Definition) bool {
+	return validText(definition.Title, 1, 200) &&
+		validOptionalText(definition.Introduction, 2000) &&
+		validText(definition.PrivacyNoticeVersion, 1, 100)
+}
+
+func validDefinitionCounts(definition Definition) bool {
+	return len(definition.Questions) >= 1 &&
+		len(definition.Questions) <= 100 &&
+		len(definition.ConsentRequirements) <= 50
+}
+
 func ValidateDefinition(definition Definition) error {
-	if !validText(definition.Title, 1, 200) ||
-		!validOptionalText(definition.Introduction, 2000) ||
-		!validText(definition.PrivacyNoticeVersion, 1, 100) ||
-		len(definition.Questions) < 1 ||
-		len(definition.Questions) > 100 ||
-		len(definition.ConsentRequirements) > 50 {
-		return ErrInvalidInput
-	}
-	if !validRequirements(definition.ConsentRequirements) {
-		return ErrInvalidInput
-	}
-	if !validQuestions(definition.Questions, definition.ConsentRequirements) {
+	valid := validDefinitionText(definition) &&
+		validDefinitionCounts(definition) &&
+		validRequirements(definition.ConsentRequirements) &&
+		validQuestions(definition.Questions, definition.ConsentRequirements)
+	if !valid {
 		return ErrInvalidInput
 	}
 	return nil
+}
+
+// publishableQuestion refuses to publish sensitive or secret classifications,
+// and refuses free text while the free-text pipeline is disabled.
+func publishableQuestion(question Question, freeTextEnabled bool) bool {
+	if question.DataClassification == ClassificationSensitive ||
+		question.DataClassification == ClassificationSecret {
+		return false
+	}
+	return freeTextEnabled || !isFreeText(question.AnswerType)
 }
 
 func ValidatePublishable(definition Definition, freeTextEnabled bool) error {
@@ -118,11 +148,7 @@ func ValidatePublishable(definition Definition, freeTextEnabled bool) error {
 		return err
 	}
 	for _, question := range definition.Questions {
-		if question.DataClassification == ClassificationSensitive ||
-			question.DataClassification == ClassificationSecret {
-			return ErrInvalidInput
-		}
-		if isFreeText(question.AnswerType) && !freeTextEnabled {
+		if !publishableQuestion(question, freeTextEnabled) {
 			return ErrInvalidInput
 		}
 	}
@@ -148,8 +174,7 @@ func validRequirement(requirement ConsentRequirement) bool {
 	return validCode(requirement.PurposeCode, 100) &&
 		validText(requirement.NoticeVersion, 1, 100) &&
 		validText(requirement.Prompt, 1, 500) &&
-		requirement.DisplayOrder >= 1 &&
-		requirement.DisplayOrder <= 100
+		within32(requirement.DisplayOrder, 1, 100)
 }
 
 func validQuestions(questions []Question, requirements []ConsentRequirement) bool {
@@ -172,15 +197,23 @@ type questionValidation struct {
 	purposes map[string]bool
 }
 
-func (v *questionValidation) add(question Question) bool {
-	if !validQuestionFields(question) ||
-		v.ids[question.ID] ||
-		v.orders[question.DisplayOrder] ||
-		!v.purposes[question.PurposeCode] ||
-		!validVisibility(question.VisibilityRule, v.keys, question.DisplayOrder) {
+func (v *questionValidation) unique(question Question) bool {
+	if v.ids[question.ID] || v.orders[question.DisplayOrder] {
 		return false
 	}
-	if _, duplicate := v.keys[question.StableKey]; duplicate {
+	_, duplicate := v.keys[question.StableKey]
+	return !duplicate
+}
+
+func (v *questionValidation) accepts(question Question) bool {
+	return validQuestionFields(question) &&
+		v.purposes[question.PurposeCode] &&
+		validVisibility(question.VisibilityRule, v.keys, question.DisplayOrder) &&
+		v.unique(question)
+}
+
+func (v *questionValidation) add(question Question) bool {
+	if !v.accepts(question) {
 		return false
 	}
 	v.ids[question.ID] = true
@@ -195,15 +228,18 @@ func validQuestionFields(question Question) bool {
 		validPrivacyMetadata(question)
 }
 
+func validQuestionCodes(question Question) bool {
+	return validCode(question.StableKey, 64) &&
+		validCode(question.PurposeCode, 100) &&
+		validCode(question.RetentionPolicyCode, 100)
+}
+
 func validQuestionIdentity(question Question) bool {
 	return question.ID.Version() == 7 &&
-		validCode(question.StableKey, 64) &&
+		validQuestionCodes(question) &&
 		validText(question.Prompt, 1, 500) &&
 		validOptionalText(question.HelpText, 500) &&
-		validCode(question.PurposeCode, 100) &&
-		validCode(question.RetentionPolicyCode, 100) &&
-		question.DisplayOrder >= 1 &&
-		question.DisplayOrder <= 100
+		within32(question.DisplayOrder, 1, 100)
 }
 
 func validQuestionType(question Question) bool {
@@ -237,29 +273,57 @@ func validAggregationMetadata(question Question) bool {
 		*question.MinimumPublicCell >= 10
 }
 
-func validOptions(answerType AnswerType, options []Option) bool {
-	choice := answerType == AnswerSingleChoice || answerType == AnswerMultipleChoice
-	if choice != (len(options) > 0) || len(options) > 100 {
+type optionSeen struct {
+	ids    map[uuid.UUID]bool
+	values map[string]bool
+	orders map[int32]bool
+}
+
+func newOptionSeen(size int) optionSeen {
+	return optionSeen{
+		ids:    make(map[uuid.UUID]bool, size),
+		values: make(map[string]bool, size),
+		orders: make(map[int32]bool, size),
+	}
+}
+
+func (s optionSeen) accept(option Option) bool {
+	if s.ids[option.ID] || s.values[option.Value] || s.orders[option.DisplayOrder] {
 		return false
 	}
-	ids := make(map[uuid.UUID]bool, len(options))
-	values := make(map[string]bool, len(options))
-	orders := make(map[int32]bool, len(options))
+	s.ids[option.ID] = true
+	s.values[option.Value] = true
+	s.orders[option.DisplayOrder] = true
+	return true
+}
+
+// Only choice questions carry options, and a choice question must carry some.
+func choiceAnswerType(answerType AnswerType) bool {
+	return answerType == AnswerSingleChoice || answerType == AnswerMultipleChoice
+}
+
+func distinctValidOptions(options []Option) bool {
+	seen := newOptionSeen(len(options))
 	for _, option := range options {
-		if !validOption(option) || ids[option.ID] || values[option.Value] || orders[option.DisplayOrder] {
+		if !validOption(option) || !seen.accept(option) {
 			return false
 		}
-		ids[option.ID], values[option.Value], orders[option.DisplayOrder] = true, true, true
 	}
 	return true
+}
+
+func validOptions(answerType AnswerType, options []Option) bool {
+	if choiceAnswerType(answerType) != (len(options) > 0) {
+		return false
+	}
+	return len(options) <= 100 && distinctValidOptions(options)
 }
 
 func validOption(option Option) bool {
 	return option.ID.Version() == 7 &&
 		validText(option.Value, 1, 100) &&
 		validText(option.Label, 1, 200) &&
-		option.DisplayOrder >= 1 &&
-		option.DisplayOrder <= 100
+		within32(option.DisplayOrder, 1, 100)
 }
 
 func validValidation(validation *ValidationDefinition) bool {
@@ -271,26 +335,36 @@ func validValidation(validation *ValidationDefinition) bool {
 		within(validation.MaxSelections, 1, 50)
 }
 
-func validVisibility(rule *VisibilityRule, prior map[string]Question, currentOrder int32) bool {
-	if rule == nil {
-		return true
-	}
+// ruleConditions returns the single populated branch of the rule, or nil when
+// the rule sets both or neither — the DSL allows exactly one.
+func ruleConditions(rule *VisibilityRule) []Condition {
 	if (len(rule.All) > 0) == (len(rule.Any) > 0) {
-		return false
+		return nil
 	}
-	conditions := rule.All
-	if len(conditions) == 0 {
-		conditions = rule.Any
+	if len(rule.All) > 0 {
+		return rule.All
 	}
-	if len(conditions) > 10 {
-		return false
-	}
+	return rule.Any
+}
+
+func validConditions(conditions []Condition, prior map[string]Question, currentOrder int32) bool {
 	for _, condition := range conditions {
 		if !validCondition(condition, prior, currentOrder) {
 			return false
 		}
 	}
 	return true
+}
+
+func validVisibility(rule *VisibilityRule, prior map[string]Question, currentOrder int32) bool {
+	if rule == nil {
+		return true
+	}
+	conditions := ruleConditions(rule)
+	if len(conditions) == 0 || len(conditions) > 10 {
+		return false
+	}
+	return validConditions(conditions, prior, currentOrder)
 }
 
 func validAnswerInputs(answers []AnswerInput) bool {
@@ -340,6 +414,10 @@ func validOptionalText(value *string, maximum int) bool {
 
 func validOptionalStableKey(value *string) bool {
 	return value != nil && validCode(*value, 100)
+}
+
+func within32(value, minimum, maximum int32) bool {
+	return value >= minimum && value <= maximum
 }
 
 func within(value *int32, minimum, maximum int32) bool {

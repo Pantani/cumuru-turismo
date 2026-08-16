@@ -102,7 +102,7 @@ migration_files="$(
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_accommodation_onboarding.down.sql\n000002_accommodation_onboarding.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_accommodation_onboarding.down.sql\n000002_accommodation_onboarding.up.sql\n000003_local_password_auth.down.sql\n000003_local_password_auth.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
@@ -244,6 +244,68 @@ upgraded_migration_state="$(
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
 test "${upgraded_migration_state}" = "2:false"
+
+run_migrate up 1
+auth_migration_state="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
+)"
+test "${auth_migration_state}" = "3:false"
+
+# The application role reads the hash to verify a login; no other role may.
+auth_hash_grants="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT coalesce(string_agg(grantee, ',' ORDER BY grantee), 'none')
+      FROM information_schema.column_privileges
+      WHERE table_schema = 'auth'
+        AND table_name = 'accounts'
+        AND column_name = 'password_hash'
+        AND grantee IN (
+          'app_runtime', 'worker_runtime', 'public_runtime', 'privacy_officer'
+        )
+    "
+)"
+test "${auth_hash_grants}" = "app_runtime"
+
+auth_session_write_grants="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT count(*)
+      FROM information_schema.table_privileges
+      WHERE table_schema = 'auth'
+        AND grantee IN ('worker_runtime', 'public_runtime', 'privacy_officer')
+    "
+)"
+test "${auth_session_write_grants}" = "0"
+
+# A stored digest is exactly one SHA-256, so a raw token can never be persisted.
+auth_digest_constraint="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT count(*)
+      FROM pg_constraint
+      WHERE conname = 'sessions_token_hash_sha256'
+    "
+)"
+test "${auth_digest_constraint}" = "1"
+
+run_migrate down 1
+auth_schema_after_down="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT count(*)
+      FROM information_schema.schemata
+      WHERE schema_name = 'auth'
+    "
+)"
+test "${auth_schema_after_down}" = "0"
+
 
 fixture_categories_and_cadastur="$(
   psql_as cumuru_migration cumuru-local-migration-only \
@@ -1541,6 +1603,6 @@ final_version="$(
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${final_version}" = "2:false"
+test "${final_version}" = "3:false"
 
-echo "migrations zero-to-latest and 1-to-2 upgrade, closed categories, onboarding grants, bounded cleanup and fictitious tenant isolation passed"
+echo "migrations zero-to-latest, 1-to-3 upgrade, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"

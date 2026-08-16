@@ -114,21 +114,29 @@ func parseKeyring(versionField, currentVersion, keysField, encoded string) (Keyr
 	if !keyVersionPattern.MatchString(currentVersion) {
 		return KeyringConfig{}, invalid(versionField)
 	}
-	keys := make(map[string][]byte)
-	for _, entry := range splitList(encoded) {
-		version, key, err := parseKeyEntry(entry, keysField)
-		if err != nil {
-			return KeyringConfig{}, err
-		}
-		if _, duplicate := keys[version]; duplicate {
-			return KeyringConfig{}, invalid(keysField)
-		}
-		keys[version] = key
+	keys, err := parseKeyEntries(encoded, keysField)
+	if err != nil {
+		return KeyringConfig{}, err
 	}
 	if _, ok := keys[currentVersion]; !ok {
 		return KeyringConfig{}, invalid(versionField)
 	}
 	return KeyringConfig{CurrentVersion: currentVersion, Keys: keys}, nil
+}
+
+func parseKeyEntries(encoded, field string) (map[string][]byte, error) {
+	keys := make(map[string][]byte)
+	for _, entry := range splitList(encoded) {
+		version, key, err := parseKeyEntry(entry, field)
+		if err != nil {
+			return nil, err
+		}
+		if _, duplicate := keys[version]; duplicate {
+			return nil, invalid(field)
+		}
+		keys[version] = key
+	}
+	return keys, nil
 }
 
 func parseKeyEntry(entry, field string) (string, []byte, error) {
@@ -201,17 +209,31 @@ func (c Phase2Config) validateAccommodationOnboarding(
 	return nil
 }
 
+// The replay window must outlast any invite, otherwise a retry could execute a
+// second time after its idempotency record expired.
 func (c Phase2Config) validateDurations() error {
+	return firstError(c.validateInviteWindow, c.validateRateWindow)
+}
+
+func (c Phase2Config) validateInviteWindow() error {
 	if c.InviteTTL <= 0 || c.InviteTTL > minimumReplayTTL {
 		return invalid("INVITE_TTL")
 	}
-	if c.IdempotencyTTL < minimumReplayTTL || c.IdempotencyTTL < c.InviteTTL {
+	if !c.validReplayWindow() {
 		return invalid("IDEMPOTENCY_TTL")
 	}
+	return nil
+}
+
+func (c Phase2Config) validateRateWindow() error {
 	if c.RateLimitWindow <= 0 || c.RateLimitWindow > time.Hour {
 		return invalid("RATE_LIMIT_WINDOW")
 	}
 	return nil
+}
+
+func (c Phase2Config) validReplayWindow() bool {
+	return c.IdempotencyTTL >= minimumReplayTTL && c.IdempotencyTTL >= c.InviteTTL
 }
 
 func (c Phase2Config) validateRateLimits() error {
@@ -224,8 +246,17 @@ func (c Phase2Config) validateRateLimits() error {
 	return nil
 }
 
+// An invite base URL carries no credentials, query or fragment: the capability
+// itself is appended to the path and must not collide with anything.
+func bareURL(value *url.URL) bool {
+	return value != nil &&
+		value.User == nil &&
+		value.RawQuery == "" &&
+		value.Fragment == ""
+}
+
 func validateInviteURL(value *url.URL, requireHTTPS bool) error {
-	if value == nil || value.User != nil || value.RawQuery != "" || value.Fragment != "" {
+	if !bareURL(value) {
 		return invalid("INVITE_BASE_URL")
 	}
 	if requireHTTPS && value.Scheme != "https" {
@@ -246,9 +277,15 @@ func validateOrigins(origins []string, requireHTTPS bool) error {
 	return nil
 }
 
+// An allowed origin is scheme, host and port only; a path would never match a
+// browser Origin header.
+func originOnly(parsed *url.URL) bool {
+	return bareURL(parsed) && parsed.Path == ""
+}
+
 func validateOrigin(origin string, requireHTTPS bool) error {
 	parsed, err := parseAbsoluteURL("CORS_ALLOWED_ORIGINS", origin)
-	if err != nil || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+	if err != nil || !originOnly(parsed) {
 		return invalid("CORS_ALLOWED_ORIGINS")
 	}
 	if requireHTTPS && parsed.Scheme != "https" {

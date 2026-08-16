@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 import type { components } from "../../generated/schema";
 import {
   phase4PublicClient,
   type Phase4Client,
 } from "../../shared/api/phase4-client";
+import { PresenceChart } from "./PresenceChart";
 
 type Schemas = components["schemas"];
 type PresenceWindow = components["parameters"]["PresenceWindow"];
@@ -108,12 +109,12 @@ function SummaryCards({ summary }: { summary: Schemas["PublicSummary"] }) {
       <h3 id="summary-title" className="visually-hidden">
         Resumo da presença
       </h3>
-      <article className="summary-card">
+      <article className="summary-card" data-kind={summary.presence_today.kind}>
         <p className="metric-label">Presença de hoje</p>
         <p className="metric-kind">{kindLabel(summary.presence_today.kind)}</p>
         <PointValue point={summary.presence_today} />
       </article>
-      <article className="summary-card">
+      <article className="summary-card" data-kind="forecast">
         <p className="metric-label">Pico previsto nos próximos 30 dias</p>
         <p className="metric-kind">◇ Previsto</p>
         {"date" in peak ? (
@@ -162,6 +163,15 @@ function categoryLabel(category: PreferenceCategory["category_code"]) {
   return category === "first_visit" ? "Primeira visita" : "Visitante recorrente";
 }
 
+/**
+ * The row draws its own proportional bar from --share. A protected category has
+ * no share to draw, so it reports zero and the bar stays absent.
+ */
+function shareStyle(category: PreferenceCategory): CSSProperties {
+  const share = category.status === "published" ? category.share_percent : 0;
+  return { "--share": share } as CSSProperties;
+}
+
 function PreferenceValue({ category }: { category: PreferenceCategory }) {
   if (category.status === "published") {
     return <strong>{category.share_percent}% das respostas elegíveis</strong>;
@@ -202,7 +212,7 @@ function Preferences({
       ) : (
         <ul className="preference-list">
           {metric.categories.map((category) => (
-            <li key={category.category_code}>
+            <li key={category.category_code} style={shareStyle(category)}>
               <span>{categoryLabel(category.category_code)}</span>
               <PreferenceValue category={category} />
             </li>
@@ -269,6 +279,72 @@ function Methodology({
   );
 }
 
+type DashboardStage = "loading" | "failed";
+
+interface QueryStage {
+  isPending: boolean;
+  isFetching: boolean;
+  isError: boolean;
+}
+
+function dashboardStage(queries: readonly QueryStage[]): DashboardStage {
+  return queries.some((query) => query.isError) ? "failed" : "loading";
+}
+
+interface DashboardPayloads<S, P, F, M> {
+  summary: S;
+  presence: P;
+  preferences: F;
+  methodology: M;
+}
+
+/**
+ * Narrows the four payloads together so the render below reads them without a
+ * per-panel undefined check.
+ */
+function loadedPayloads<S, P, F, M>(
+  summary: S | undefined,
+  presence: P | undefined,
+  preferences: F | undefined,
+  methodology: M | undefined,
+): DashboardPayloads<S, P, F, M> | null {
+  if (
+    summary === undefined ||
+    presence === undefined ||
+    preferences === undefined ||
+    methodology === undefined
+  ) {
+    return null;
+  }
+  return { summary, presence, preferences, methodology };
+}
+
+function DashboardPlaceholder({
+  onRetry,
+  stage,
+}: {
+  onRetry: () => void;
+  stage: DashboardStage;
+}) {
+  return (
+    <section className="analytics-dashboard" aria-labelledby="analytics-title">
+      <h2 id="analytics-title">Indicadores públicos</h2>
+      {stage === "failed" ? (
+        <div className="analytics-error" role="alert">
+          <p>Não foi possível carregar os indicadores públicos.</p>
+          <button type="button" onClick={onRetry}>
+            Tentar novamente
+          </button>
+        </div>
+      ) : (
+        <p role="status" aria-live="polite">
+          Atualizando indicadores públicos…
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function AnalyticsDashboard({
   client = phase4PublicClient,
 }: AnalyticsDashboardProps) {
@@ -295,50 +371,20 @@ export function AnalyticsDashboard({
     staleTime: 300_000,
   });
   const queries = [summary, presence, preferences, methodology];
-  const pending = queries.some((query) => query.isPending);
-  const fetching = queries.some((query) => query.isFetching);
-  const failed = queries.some((query) => query.isError);
 
   function retry() {
     void Promise.all(queries.map((query) => query.refetch()));
   }
 
-  if (pending || fetching) {
+  const loaded = loadedPayloads(
+    summary.data,
+    presence.data,
+    preferences.data,
+    methodology.data,
+  );
+  if (loaded === null) {
     return (
-      <section className="analytics-dashboard" aria-labelledby="analytics-title">
-        <h2 id="analytics-title">Indicadores públicos</h2>
-        <p role="status" aria-live="polite">
-          Atualizando indicadores públicos…
-        </p>
-      </section>
-    );
-  }
-  if (failed) {
-    return (
-      <section className="analytics-dashboard" aria-labelledby="analytics-title">
-        <h2 id="analytics-title">Indicadores públicos</h2>
-        <div className="analytics-error" role="alert">
-          <p>Não foi possível carregar os indicadores públicos.</p>
-          <button type="button" onClick={retry}>
-            Tentar novamente
-          </button>
-        </div>
-      </section>
-    );
-  }
-  if (
-    summary.data === undefined ||
-    presence.data === undefined ||
-    preferences.data === undefined ||
-    methodology.data === undefined
-  ) {
-    return (
-      <section className="analytics-dashboard" aria-labelledby="analytics-title">
-        <h2 id="analytics-title">Indicadores públicos</h2>
-        <p role="status" aria-live="polite">
-          Atualizando indicadores públicos…
-        </p>
-      </section>
+      <DashboardPlaceholder onRetry={retry} stage={dashboardStage(queries)} />
     );
   }
 
@@ -346,7 +392,7 @@ export function AnalyticsDashboard({
     <section className="analytics-dashboard" aria-labelledby="analytics-title">
       <div className="dashboard-heading">
         <div>
-          <p className="section-kicker">Publicação protegida · Fase 4</p>
+          <p className="section-kicker">Publicação protegida</p>
           <h2 id="analytics-title">Indicadores públicos</h2>
           <p>
             Tendências agregadas para planejamento, sem microdados, IDs ou
@@ -355,8 +401,8 @@ export function AnalyticsDashboard({
         </div>
         <span className="prototype-badge">Dados fictícios de protótipo</span>
       </div>
-      <MetadataPanel metadata={summary.data.data.metadata} />
-      <SummaryCards summary={summary.data.data} />
+      <MetadataPanel metadata={loaded.summary.data.metadata} />
+      <SummaryCards summary={loaded.summary.data} />
       <section className="analytics-section" aria-labelledby="presence-title">
         <div className="section-heading">
           <div>
@@ -377,14 +423,20 @@ export function AnalyticsDashboard({
           </label>
         </div>
         <p className="legend" aria-label="Legenda da série">
-          <span>● Observado</span>
-          <span>◇ Previsto, com faixa provável</span>
-          <span>▨ Protegido ou indisponível, sem valor substituto</span>
+          <span className="legend-observed">Observado</span>
+          <span className="legend-forecast">Previsto, com faixa provável</span>
+          <span className="legend-gap">
+            Protegido ou indisponível, sem valor substituto
+          </span>
         </p>
-        <PresenceTable presence={presence.data.data} />
+        <PresenceChart series={loaded.presence.data.series} />
+        <details className="series-details">
+          <summary>Ver a série dia a dia</summary>
+          <PresenceTable presence={loaded.presence.data} />
+        </details>
       </section>
-      <Preferences preferences={preferences.data.data} />
-      <Methodology methodology={methodology.data.data} />
+      <Preferences preferences={loaded.preferences.data} />
+      <Methodology methodology={loaded.methodology.data} />
     </section>
   );
 }

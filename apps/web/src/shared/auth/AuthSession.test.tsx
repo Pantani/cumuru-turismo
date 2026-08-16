@@ -1,20 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
-import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { useEffect, useRef, type ReactNode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  AuthSessionProvider,
-  localDemoAccessToken,
-  useAuthSession,
-} from "./AuthSession";
+import { AuthSessionProvider, useAuthSession } from "./AuthSession";
 import AuthenticatedPage from "../../pages/AuthenticatedPage";
+import { AuthError, type AuthClient } from "../api/auth-client";
+import { inspectDraftPresence, saveDraft } from "../offline/encrypted-drafts";
 import {
-  inspectDraftPresence,
-  saveDraft,
-} from "../offline/encrypted-drafts";
+  renderWithSession,
+  stubAuthClient,
+  testSession,
+} from "../../test/session";
 
 function LogoutProbe({ completed }: { completed: () => void }) {
   const { endSession } = useAuthSession();
@@ -57,27 +56,16 @@ function renderSession(children: ReactNode) {
   const queryClient = new QueryClient();
   return {
     ...render(
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>,
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
     ),
     queryClient,
   };
 }
 
-describe("fronteira de autenticação institucional", () => {
-  it("habilita o principal fictício somente com o sinal local explícito", () => {
-    expect(localDemoAccessToken(false, "fixture-token", "localhost")).toBeNull();
-    expect(localDemoAccessToken(true, undefined, "localhost")).toBeNull();
-    expect(localDemoAccessToken(true, "fixture-token", "example.org")).toBeNull();
-    for (const hostname of ["localhost", "127.0.0.1", "::1", "[::1]"]) {
-      expect(localDemoAccessToken(true, "fixture-token", hostname)).toBe(
-        "fixture-token",
-      );
-    }
-  });
+afterEach(cleanup);
 
-  it("falha fechada sem token entregue pelo provedor OIDC", () => {
+describe("fronteira de autenticação local", () => {
+  it("apresenta o formulário de login sem sessão", () => {
     renderSession(
       <AuthSessionProvider>
         <AuthenticatedPage />
@@ -85,25 +73,76 @@ describe("fronteira de autenticação institucional", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Acesso institucional necessário" }),
+      screen.getByRole("heading", { name: "Entrar na área da hospedagem" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: /senha/i })).toBeNull();
+    expect(screen.getByLabelText("E-mail")).toBeInTheDocument();
+    expect(screen.getByLabelText("Senha")).toBeInTheDocument();
   });
 
-  it("libera o workspace com token mantido somente em memória", () => {
+  it("não anuncia exigência de CNPJ nem de credencial federal", () => {
     renderSession(
-      <AuthSessionProvider accessToken="opaque-test-token">
+      <AuthSessionProvider>
         <AuthenticatedPage />
       </AuthSessionProvider>,
     );
 
-    expect(
-      screen.getByRole("heading", { name: "Operação de estadias" }),
-    ).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain("opaque-test-token");
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Não é preciso CNPJ");
+    expect(text).not.toContain("OIDC");
   });
 
-  it("não apresenta violações axe na fronteira fail-closed", async () => {
+  it("abre o workspace mantendo o token fora do DOM", async () => {
+    renderWithSession(<AuthenticatedPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Suas hospedagens" }),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("cms_test-session-token");
+  });
+
+  it("informa credencial rejeitada sem revelar se a conta existe", async () => {
+    const user = userEvent.setup();
+    const rejecting: AuthClient = {
+      ...stubAuthClient(),
+      login: async () => {
+        throw new AuthError(401, "E-mail ou senha incorretos.");
+      },
+    };
+    renderSession(
+      <AuthSessionProvider authClient={rejecting}>
+        <AuthenticatedPage />
+      </AuthSessionProvider>,
+    );
+
+    await user.type(screen.getByLabelText("E-mail"), "quem@cumuru.local");
+    await user.type(screen.getByLabelText("Senha"), "senha-de-teste-longa");
+    await user.click(screen.getByRole("button", { name: "Entrar" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("E-mail ou senha incorretos.");
+    expect(alert.textContent).not.toContain("quem@cumuru.local");
+  });
+
+  it("bloqueia envio com senha abaixo do mínimo do contrato", async () => {
+    const user = userEvent.setup();
+    const login = vi.fn(async () => testSession());
+    renderSession(
+      <AuthSessionProvider authClient={{ ...stubAuthClient(), login }}>
+        <AuthenticatedPage />
+      </AuthSessionProvider>,
+    );
+
+    await user.type(screen.getByLabelText("E-mail"), "operador@cumuru.local");
+    await user.type(screen.getByLabelText("Senha"), "curta");
+    await user.click(screen.getByRole("button", { name: "Entrar" }));
+
+    expect(login).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("A senha tem no mínimo 12 caracteres."),
+    ).toBeInTheDocument();
+  });
+
+  it("não apresenta violações axe na tela de login", async () => {
     const { container } = renderSession(
       <AuthSessionProvider>
         <AuthenticatedPage />
@@ -117,20 +156,25 @@ describe("fronteira de autenticação institucional", () => {
     expect(report.violations).toEqual([]);
   });
 
-  it("expõe logout aguardável que elimina payload e chave", async () => {
+  it("revoga no servidor e elimina payload, chave e cache no logout", async () => {
     const user = userEvent.setup();
     const completed = vi.fn();
+    const logout = vi.fn(async () => undefined);
     const saved = await saveDraft({ privacy_notice_version: "2026-07" });
-    const { queryClient } = renderSession(
-      <AuthSessionProvider accessToken="opaque-test-token">
-        <LogoutProbe completed={completed} />
-      </AuthSessionProvider>,
+    const queryClient = new QueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AuthSessionProvider authClient={{ ...stubAuthClient(), logout }}>
+          <SignedInProbe completed={completed} />
+        </AuthSessionProvider>
+      </QueryClientProvider>,
     );
     queryClient.setQueryData(["authenticated"], { sensitive: true });
 
-    await user.click(screen.getByRole("button", { name: "Encerrar" }));
+    await user.click(await screen.findByRole("button", { name: "Encerrar" }));
     await waitFor(() => expect(completed).toHaveBeenCalledOnce());
 
+    expect(logout).toHaveBeenCalledWith("cms_test-session-token");
     await expect(inspectDraftPresence(saved.id)).resolves.toEqual({
       draft: false,
       key: false,
@@ -138,7 +182,7 @@ describe("fronteira de autenticação institucional", () => {
     expect(queryClient.getQueryData(["authenticated"])).toBeUndefined();
   });
 
-  it("mantém o cliente de analytics fail-closed sem token", async () => {
+  it("mantém o cliente de analytics fail-closed sem sessão", async () => {
     const user = userEvent.setup();
     const completed = vi.fn();
     const fetcher = vi.spyOn(globalThis, "fetch");
@@ -148,11 +192,24 @@ describe("fronteira de autenticação institucional", () => {
       </AuthSessionProvider>,
     );
 
-    await user.click(screen.getByRole("button", {
-      name: "Consultar qualidade",
-    }));
+    await user.click(
+      screen.getByRole("button", { name: "Consultar qualidade" }),
+    );
 
     await waitFor(() => expect(completed).toHaveBeenCalledWith(401));
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+function SignedInProbe({ completed }: { completed: () => void }) {
+  const { authenticated, signIn } = useAuthSession();
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) {
+      return;
+    }
+    started.current = true;
+    void signIn("operador@cumuru.local", "fixture-fixture-");
+  }, [signIn]);
+  return authenticated ? <LogoutProbe completed={completed} /> : null;
+}

@@ -28,6 +28,7 @@ type Store struct {
 	pool             *pgxpool.Pool
 	phase2           config.Phase2Config
 	phase3           config.Phase3Config
+	auth             config.AuthConfig
 	surveyCodec      *questionnaire.CapabilityCodec
 	textCipher       *questionnaire.TextCipher
 	surveyPairPermit chan struct{}
@@ -41,6 +42,14 @@ func WithCurrentTime(now func() time.Time) Option {
 		if now != nil {
 			store.now = now
 		}
+	}
+}
+
+// WithAuthConfig enables the local e-mail and password track. Without it the
+// store stays OIDC-only and Authenticate rejects every attempt.
+func WithAuthConfig(auth config.AuthConfig) Option {
+	return func(store *Store) {
+		store.auth = auth
 	}
 }
 
@@ -121,9 +130,15 @@ func (s *Store) ResolveTenants(ctx context.Context, principal access.Principal) 
 	if err != nil {
 		return nil, ErrUnavailable
 	}
+	return tenantMemberships(rows)
+}
+
+func tenantMemberships(
+	rows []generated.ListActiveTenantMembershipsRow,
+) ([]TenantMembership, error) {
 	result := make([]TenantMembership, 0, len(rows))
 	for _, row := range rows {
-		if !row.MembershipID.Valid || !row.AccommodationID.Valid || !row.OrganizationID.Valid {
+		if !completeTenantRow(row) {
 			return nil, ErrUnavailable
 		}
 		result = append(result, TenantMembership{
@@ -134,4 +149,10 @@ func (s *Store) ResolveTenants(ctx context.Context, principal access.Principal) 
 		})
 	}
 	return result, nil
+}
+
+func completeTenantRow(row generated.ListActiveTenantMembershipsRow) bool {
+	return row.MembershipID.Valid &&
+		row.AccommodationID.Valid &&
+		row.OrganizationID.Valid
 }

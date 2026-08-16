@@ -219,13 +219,15 @@ const isPublishedForecastShape = objectValidator({
   upper: isPublishedValue,
 });
 
+/** A published forecast must arrive ordered; an inverted band is a contract break. */
+function orderedBand(object: Record<string, unknown> | null) {
+  const lower = Number(object?.lower);
+  const central = Number(object?.central);
+  return lower <= central && central <= Number(object?.upper);
+}
+
 function isPublishedForecastPoint(value: unknown) {
-  const object = record(value);
-  return (
-    isPublishedForecastShape(value) &&
-    Number(object?.lower) <= Number(object?.central) &&
-    Number(object?.central) <= Number(object?.upper)
-  );
+  return isPublishedForecastShape(value) && orderedBand(record(value));
 }
 
 const isProtectedObservedPoint = objectValidator({
@@ -442,6 +444,50 @@ async function payloadFrom<T>(
   return value as T;
 }
 
+function sessionToken(
+  authenticated: boolean,
+  getAccessToken: () => string | null,
+) {
+  if (!authenticated) {
+    return null;
+  }
+  const token = getAccessToken();
+  if (token === null || token.length === 0) {
+    throw missingSessionError();
+  }
+  return token;
+}
+
+async function requireSuccess(response: Response, requestId: string) {
+  if (!response.ok) {
+    requireNoStore(response, requestId);
+    throw new Phase4ApiError(
+      response.status,
+      await problemFrom(response),
+      requestId,
+    );
+  }
+  if (response.status !== 200) {
+    throw invalidResponse(`Status ${response.status} inesperado.`, requestId);
+  }
+}
+
+/**
+ * An authenticated payload must never be cached; a public one carries the
+ * shared-cache headers instead.
+ */
+function requireCacheDiscipline(
+  response: Response,
+  authenticated: boolean,
+  requestId: string,
+) {
+  if (authenticated) {
+    requireNoStore(response, requestId);
+    return;
+  }
+  requirePublicHeaders(response, requestId);
+}
+
 export function createPhase4Client(options: ClientOptions) {
   const baseUrl =
     options.baseUrl ??
@@ -452,30 +498,13 @@ export function createPhase4Client(options: ClientOptions) {
   async function request<T>(
     spec: RequestSpec,
   ): Promise<Phase4Result<T>> {
-    const token = spec.authenticated ? options.getAccessToken() : null;
-    if (spec.authenticated && (token === null || token.length === 0)) {
-      throw missingSessionError();
-    }
+    const token = sessionToken(spec.authenticated, options.getAccessToken);
     const response = await (options.fetcher ?? fetch)(
       buildRequest(baseUrl, spec.path, token, spec.authenticated),
     );
     const requestId = requestIdFrom(response);
-    if (!response.ok) {
-      requireNoStore(response, requestId);
-      throw new Phase4ApiError(
-        response.status,
-        await problemFrom(response),
-        requestId,
-      );
-    }
-    if (response.status !== 200) {
-      throw invalidResponse(`Status ${response.status} inesperado.`, requestId);
-    }
-    if (spec.authenticated) {
-      requireNoStore(response, requestId);
-    } else {
-      requirePublicHeaders(response, requestId);
-    }
+    await requireSuccess(response, requestId);
+    requireCacheDiscipline(response, spec.authenticated, requestId);
     return {
       data: await payloadFrom<T>(response, requestId, spec.isValid),
       etag: response.headers.get("ETag"),

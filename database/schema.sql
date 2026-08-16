@@ -1,6 +1,7 @@
 -- Esquema lógico inicial. Converta em migrações pequenas antes da implementação.
 -- IDs devem ser UUIDv7 gerados pela aplicação.
 
+CREATE SCHEMA IF NOT EXISTS auth;
 CREATE SCHEMA IF NOT EXISTS identity;
 CREATE SCHEMA IF NOT EXISTS core;
 CREATE SCHEMA IF NOT EXISTS survey;
@@ -40,6 +41,39 @@ CREATE TYPE platform.job_status AS ENUM (
 
 CREATE TYPE identity.privacy_request_status AS ENUM (
   'pending_verification', 'open', 'in_review', 'completed', 'rejected', 'cancelled'
+);
+
+CREATE TABLE auth.accounts (
+  id uuid PRIMARY KEY,
+  email text NOT NULL,
+  display_name text NOT NULL,
+  password_hash text NOT NULL,
+  scopes text[] NOT NULL,
+  status text NOT NULL DEFAULT 'active',
+  failed_attempts integer NOT NULL DEFAULT 0,
+  locked_until timestamptz,
+  password_changed_at timestamptz NOT NULL DEFAULT now(),
+  password_must_change boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT accounts_email_normalized CHECK (email = btrim(lower(email))),
+  CONSTRAINT accounts_display_name_not_blank CHECK (btrim(display_name) <> ''),
+  CONSTRAINT accounts_password_hash_algorithm CHECK (password_hash LIKE '$argon2id$%'),
+  CONSTRAINT accounts_scopes_bounded CHECK (cardinality(scopes) BETWEEN 1 AND 32),
+  CONSTRAINT accounts_status_valid CHECK (status IN ('active', 'disabled'))
+);
+
+CREATE TABLE auth.sessions (
+  id uuid PRIMARY KEY,
+  account_id uuid NOT NULL REFERENCES auth.accounts(id),
+  token_hash bytea NOT NULL,
+  issued_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  idle_expires_at timestamptz NOT NULL,
+  absolute_expires_at timestamptz NOT NULL,
+  revoked_at timestamptz,
+  CONSTRAINT sessions_token_hash_sha256 CHECK (octet_length(token_hash) = 32),
+  CONSTRAINT sessions_expiry_ordered CHECK (idle_expires_at <= absolute_expires_at)
 );
 
 CREATE TABLE core.organizations (

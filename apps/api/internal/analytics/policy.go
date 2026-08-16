@@ -48,28 +48,49 @@ func ProtectCells(cells []Cell, policy Policy) ([]ProtectedCell, error) {
 	if !validPolicy(policy) {
 		return nil, ErrInvalidPolicy
 	}
+	result, err := primaryProtection(cells, policy)
+	if err != nil {
+		return nil, err
+	}
+	applyComplementarySuppression(cells, result)
+	publishRounded(cells, result, policy.RoundingBase)
+	return result, nil
+}
+
+func primaryProtection(cells []Cell, policy Policy) ([]ProtectedCell, error) {
 	result := make([]ProtectedCell, 0, len(cells))
 	for _, cell := range cells {
 		if !validCell(cell) {
 			return nil, ErrInvalidPolicy
 		}
-		status := primaryStatus(cell, policy)
 		result = append(result, ProtectedCell{
-			Key: cell.Key, Family: cell.Family, Status: status, Total: cell.Total,
+			Key: cell.Key, Family: cell.Family,
+			Status: primaryStatus(cell, policy), Total: cell.Total,
 		})
-	}
-	applyComplementarySuppression(cells, result)
-	for index := range result {
-		if result[index].Status == CellPublished {
-			value := roundHalfUp(cells[index].RawValue, policy.RoundingBase)
-			result[index].PublishedValue = &value
-		}
 	}
 	return result, nil
 }
 
+// Only a cell that survived both suppression passes carries a value, and that
+// value is rounded before it ever leaves the process.
+func publishRounded(cells []Cell, result []ProtectedCell, base int) {
+	for index := range result {
+		if result[index].Status != CellPublished {
+			continue
+		}
+		value := roundHalfUp(cells[index].RawValue, base)
+		result[index].PublishedValue = &value
+	}
+}
+
+func orderedForecast(lower, central, upper float64) bool {
+	return lower >= 0 && lower <= central && central <= upper
+}
+
+// The bounds are rounded outward and the centre to nearest, so rounding can
+// never narrow a published interval.
 func RoundForecast(lower, central, upper float64, base int) (ForecastValues, error) {
-	if base < 1 || lower < 0 || lower > central || central > upper {
+	if base < 1 || !orderedForecast(lower, central, upper) {
 		return ForecastValues{}, ErrInvalidPolicy
 	}
 	result := ForecastValues{
@@ -147,7 +168,7 @@ func complementaryIndex(
 ) int {
 	selected := -1
 	for index := range source {
-		if protected[index].Family != family || protected[index].Status != CellPublished {
+		if !eligibleForComplementary(protected[index], family) {
 			continue
 		}
 		if selected < 0 || lessDisclosureRisk(source[index], source[selected]) {
@@ -155,6 +176,10 @@ func complementaryIndex(
 		}
 	}
 	return selected
+}
+
+func eligibleForComplementary(cell ProtectedCell, family string) bool {
+	return cell.Family == family && cell.Status == CellPublished
 }
 
 func lessDisclosureRisk(candidate, selected Cell) bool {

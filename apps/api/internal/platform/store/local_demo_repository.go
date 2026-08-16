@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Pantani/cumuru/apps/api/internal/access"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store/generated"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -29,6 +30,17 @@ type LocalDemoFoundation struct {
 	OIDCIssuer       string
 	OIDCSubject      string
 	Accommodations   []LocalDemoAccommodation
+}
+
+// LocalDemoAccount seeds the local e-mail and password track so the prototype
+// can be opened without a CNPJ, a Cadastur entry or a federal credential. The
+// hash arrives already computed; the plain secret never reaches this layer.
+type LocalDemoAccount struct {
+	ID           uuid.UUID
+	Email        string
+	DisplayName  string
+	PasswordHash string
+	Scopes       []string
 }
 
 type LocalDemoMetricMapping struct {
@@ -103,6 +115,83 @@ func (r *LocalDemoRepository) EnsureFoundation(
 		}
 		return nil
 	})
+}
+
+// EnsureAccount seeds the demo credential and binds it to every fixture
+// accommodation through the same membership table the OIDC track uses, so the
+// two tracks share one authorization path.
+func (r *LocalDemoRepository) EnsureAccount(
+	ctx context.Context,
+	fixture LocalDemoFoundation,
+	account LocalDemoAccount,
+) error {
+	return r.inTransaction(ctx, func(q *generated.Queries) error {
+		if err := ensureLocalAccount(ctx, q, account); err != nil {
+			return err
+		}
+		return ensureLocalAccountMemberships(ctx, q, fixture, account)
+	})
+}
+
+func ensureLocalAccount(
+	ctx context.Context,
+	q *generated.Queries,
+	account LocalDemoAccount,
+) error {
+	insert := generated.InsertLocalDemoAccountParams{
+		ID:           pgUUID(account.ID),
+		Email:        account.Email,
+		DisplayName:  account.DisplayName,
+		PasswordHash: account.PasswordHash,
+		Scopes:       account.Scopes,
+	}
+	if err := q.InsertLocalDemoAccount(ctx, insert); err != nil {
+		return ErrUnavailable
+	}
+	return confirmLocalAccount(ctx, q, account)
+}
+
+// The insert is idempotent, so the stored row is read back: a pre-existing
+// account under the reserved id that does not match is a conflict, not a reuse.
+func confirmLocalAccount(
+	ctx context.Context,
+	q *generated.Queries,
+	account LocalDemoAccount,
+) error {
+	stored, err := q.GetLocalDemoAccount(ctx, pgUUID(account.ID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrLocalDemoConflict
+	}
+	if err != nil {
+		return ErrUnavailable
+	}
+	if stored.Email != account.Email || stored.Status != accountStatusActive {
+		return ErrLocalDemoConflict
+	}
+	return nil
+}
+
+func ensureLocalAccountMemberships(
+	ctx context.Context,
+	q *generated.Queries,
+	fixture LocalDemoFoundation,
+	account LocalDemoAccount,
+) error {
+	local := LocalDemoFoundation{
+		OrganizationID: fixture.OrganizationID,
+		OIDCIssuer:     access.LocalSessionIssuer,
+		OIDCSubject:    account.ID.String(),
+		Accommodations: fixture.Accommodations,
+	}
+	for index, accommodation := range fixture.Accommodations {
+		err := ensureLocalMembership(
+			ctx, q, local, accommodation.ID, index+len(fixture.Accommodations),
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *LocalDemoRepository) EnsureMappings(
@@ -230,7 +319,7 @@ func (r *LocalDemoRepository) inTransaction(
 	}
 	queries := generated.New(tx)
 	if err := work(queries); err != nil {
-		rollbackLocalDemo(tx, r.timeout)
+		rollbackProvisioning(tx, r.timeout)
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -239,7 +328,7 @@ func (r *LocalDemoRepository) inTransaction(
 	return nil
 }
 
-func rollbackLocalDemo(tx pgx.Tx, timeout time.Duration) {
+func rollbackProvisioning(tx pgx.Tx, timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	_ = tx.Rollback(ctx)

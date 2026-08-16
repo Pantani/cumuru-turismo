@@ -41,7 +41,7 @@ func loadPhase4(
 	if !enabled {
 		return config, nil
 	}
-	if environment != EnvironmentLocal && environment != EnvironmentTest {
+	if !localOrTest(environment) {
 		return Phase4Config{}, invalid("PHASE4_ENABLED")
 	}
 	if process == ProcessAPI {
@@ -107,7 +107,7 @@ func (c Phase4Config) validate(
 	if !c.Enabled {
 		return nil
 	}
-	if environment != EnvironmentLocal && environment != EnvironmentTest {
+	if !localOrTest(environment) {
 		return invalid("PHASE4_ENABLED")
 	}
 	if err := c.validatePolicy(); err != nil {
@@ -120,6 +120,14 @@ func (c Phase4Config) validate(
 }
 
 func (c Phase4Config) validatePolicy() error {
+	return firstError(
+		c.validatePolicyVersions,
+		c.validateThresholds,
+		c.validateTimingAndWeight,
+	)
+}
+
+func (c Phase4Config) validatePolicyVersions() error {
 	if c.PrivacyPolicyVersion != phase4PolicyVersion {
 		return invalid("PHASE4_PRIVACY_POLICY_VERSION")
 	}
@@ -129,6 +137,12 @@ func (c Phase4Config) validatePolicy() error {
 	if c.DataMode != phase4DataMode {
 		return invalid("PHASE4_DATA_MODE")
 	}
+	return nil
+}
+
+// The suppression thresholds are frozen: weakening them would change what the
+// public dashboard is allowed to reveal.
+func (c Phase4Config) validateThresholds() error {
 	if c.PrimaryCellThreshold != 10 {
 		return invalid("PHASE4_PRIMARY_CELL_THRESHOLD")
 	}
@@ -138,13 +152,17 @@ func (c Phase4Config) validatePolicy() error {
 	if c.RoundingBase != 10 {
 		return invalid("PHASE4_ROUNDING_BASE")
 	}
-	return c.validateTimingAndWeight()
+	return nil
 }
 
 func (c Phase4Config) validateTimingAndWeight() error {
 	if math.Abs(c.PreRegisteredWeight-0.80) > 0.000001 {
 		return invalid("PHASE4_PRE_REGISTERED_WEIGHT")
 	}
+	return c.validateIntervals()
+}
+
+func (c Phase4Config) validateIntervals() error {
 	if c.IncrementalInterval <= 0 || c.IncrementalInterval > 15*time.Minute {
 		return invalid("PHASE4_INCREMENTAL_INTERVAL")
 	}

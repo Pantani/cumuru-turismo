@@ -14,6 +14,19 @@ type Forecast struct {
 	Fallback bool
 }
 
+// The seasonal baseline is the median of eligible weekdays; a negative sample
+// means the history itself is corrupt.
+func historicalBaseline(previousWeekdays []float64) (float64, error) {
+	history := append([]float64(nil), previousWeekdays...)
+	for _, value := range history {
+		if value < 0 {
+			return 0, ErrInvalidForecast
+		}
+	}
+	sort.Float64s(history)
+	return median(history), nil
+}
+
 func ExplainableBaseline(
 	onBooks float64,
 	previousWeekdays []float64,
@@ -28,14 +41,10 @@ func ExplainableBaseline(
 			Upper: onBooks * 1.30, Fallback: true,
 		}, nil
 	}
-	history := append([]float64(nil), previousWeekdays...)
-	for _, value := range history {
-		if value < 0 {
-			return Forecast{}, ErrInvalidForecast
-		}
+	baseline, err := historicalBaseline(previousWeekdays)
+	if err != nil {
+		return Forecast{}, err
 	}
-	sort.Float64s(history)
-	baseline := median(history)
 	leadFactor := float64(min(leadDays, 30)) / 30
 	projected := max(baseline-onBooks, 0) * leadFactor
 	central := onBooks + projected

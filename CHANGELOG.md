@@ -3,7 +3,41 @@
 Todas as mudanças relevantes do contrato e da plataforma são registradas neste
 arquivo.
 
-## 0.6.0 — em desenvolvimento
+## 0.7.0 — em desenvolvimento
+
+### Adicionado
+
+- autenticação local por e-mail e senha com Argon2id, sessão opaca, bloqueio
+  por tentativas e `POST /auth/login`, `POST /auth/logout` e `GET /auth/session`
+  no contrato, permitindo entrar sem CNPJ, Cadastur ou chave federal
+  ([ADR-037](docs/decisoes/ADR-037-autenticacao-local-por-email-e-senha.md));
+- schema `auth` com `accounts` e `sessions`, grants restritos a `app_runtime` e
+  `password_hash` fora de worker, público e privacy officer;
+- tela de login e área da hospedagem orientada a tarefa: lista de hospedagens
+  selecionável, criação de estadia por datas e número de pessoas, e ações de
+  ciclo de vida derivadas do estado da estadia;
+- gráfico de presença em SVG no painel público, com a série dia a dia mantida
+  como alternativa acessível.
+
+### Alterado
+
+- limite de complexidade passa de `9` único para ciclomática `5` e cognitiva
+  `8` no código de aplicação, gerado e no web inteiro; o Go de teste permanece
+  em `9`
+  ([ADR-036](docs/decisoes/ADR-036-limite-de-complexidade-cinco-e-oito.md));
+- a área autenticada deixou de expor identificadores internos: ETag e
+  `Idempotency-Key` passam a ser derivados da versão já listada em vez de
+  digitados;
+- densidade e tipografia do layout revistas; rótulos de fase interna removidos
+  das telas voltadas ao público e ao operador.
+
+### Removido
+
+- injeção de identidade em tempo de build (`VITE_LOCAL_DEMO_MODE` e
+  `VITE_LOCAL_DEMO_IDENTITY`), com o guarda `local-demo-build` e o alvo
+  `local-demo-build-test` correspondentes: o bundle não carrega mais credencial.
+
+## 0.6.0
 
 ### Adicionado
 

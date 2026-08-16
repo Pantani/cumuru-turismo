@@ -4,6 +4,83 @@
  */
 
 export interface paths {
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Abrir sessão local por e-mail e senha
+         * @description Autentica um operador local sem exigir CNPJ, Cadastur ou credencial federal. Responde igual para e-mail inexistente e senha incorreta, e aplica bloqueio temporário por tentativas repetidas.
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Encerrar a sessão local corrente
+         * @description Revoga a sessão apresentada. É idempotente: um token já revogado ou desconhecido também responde 204.
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trocar a senha da sessão corrente
+         * @description Substitui a senha da conta autenticada e revoga todas as sessões abertas com a senha anterior, inclusive a que fez a chamada. É o único caminho disponível para uma sessão marcada com must_change_password; depois da troca o cliente autentica novamente.
+         */
+        post: operations["rotatePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar a sessão local corrente */
+        get: operations["getSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/platform/health": {
         parameters: {
             query?: never;
@@ -598,6 +675,35 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        LoginRequest: {
+            /** Format: email */
+            email: string;
+            /** @description Segredo do operador. Nunca é registrado em log, métrica, trace ou evento de auditoria. */
+            password: string;
+        };
+        PasswordRotationRequest: {
+            /** @description Senha em vigor. Nunca é registrada em log, métrica, trace ou evento de auditoria. */
+            current_password: string;
+            /** @description Nova senha; precisa diferir da atual. A política segue a orientação do NIST SP 800-63B de privilegiar comprimento sobre composição. */
+            new_password: string;
+        };
+        Session: {
+            /** @description Token opaco para o header Authorization. Deve permanecer em memória e nunca em localStorage, sessionStorage ou cache. */
+            token: string;
+            /** Format: date-time */
+            expires_at: string;
+            account: components["schemas"]["SessionAccount"];
+        };
+        SessionAccount: {
+            /** @description Verdadeiro enquanto a senha semeada não for trocada. Nesse estado a sessão só alcança troca de senha, logout e consulta da própria sessão; qualquer rota com escopo responde 401. */
+            must_change_password: boolean;
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            display_name: string;
+            scopes: string[];
+        };
         HealthStatus: {
             /** @constant */
             status: "ok";
@@ -1484,6 +1590,115 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Sessão aberta. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            429: components["responses"]["ProblemWithRetry"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessão revogada ou já inexistente. */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    rotatePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordRotationRequest"];
+            };
+        };
+        responses: {
+            /** @description Senha trocada e sessões anteriores revogadas. */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["ProblemWithRetry"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessão válida. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     getPlatformHealth: {
         parameters: {
             query?: never;

@@ -117,10 +117,7 @@ func ensureSurveyFixture(
 		return nil
 	}
 	responseExists, err := provisioner.HasSurveyResponse(
-		ctx,
-		current.ID,
-		versionID,
-		surveyClientSubmissionID(fixture),
+		ctx, current.ID, versionID, surveyClientSubmissionID(fixture),
 	)
 	if err != nil {
 		return fmt.Errorf("survey inspect: %w", err)
@@ -128,6 +125,23 @@ func ensureSurveyFixture(
 	if responseExists {
 		return nil
 	}
+	return replaySurveyFixture(
+		ctx, services, operator, fixture, current, group, groupExists,
+	)
+}
+
+// The survey capability is only issued alongside a group submission, so a
+// missing response replays the group first.
+func replaySurveyFixture(
+	ctx context.Context,
+	services fixtureServices,
+	operator access.Principal,
+	fixture stayFixture,
+	current stay.Record,
+	group stay.SubmissionAccepted,
+	groupExists bool,
+) error {
+	var err error
 	if groupExists {
 		group, err = submitGroupFixture(
 			ctx,
@@ -203,9 +217,7 @@ func reconcileStayDates(
 		current.PlannedDepartureOn == departure {
 		return current, nil
 	}
-	if current.Status == stay.StatusCheckedOut ||
-		current.Status == stay.StatusCancelled ||
-		current.Status == stay.StatusNoShow {
+	if terminalStayStatus(current.Status) {
 		return stay.Record{}, errFixtureConflict
 	}
 	return service.Update(ctx, stay.UpdateCommand{
@@ -220,6 +232,14 @@ func reconcileStayDates(
 		},
 		RequestID: fixtureRequestID("stay-update-" + fixture.key),
 	})
+}
+
+// A terminal stay cannot have its dates reconciled; the fixture would be
+// rewriting history rather than seeding it.
+func terminalStayStatus(status stay.Status) bool {
+	return status == stay.StatusCheckedOut ||
+		status == stay.StatusCancelled ||
+		status == stay.StatusNoShow
 }
 
 func stayClientSubmissionID(fixture stayFixture) uuid.UUID {
@@ -260,12 +280,9 @@ func transitionStayFixture(
 	if stayTransitionComplete(current.Status, fixture.keepCheckedIn) {
 		return nil
 	}
-	if current.Status == stay.StatusCheckedIn && !fixture.keepCheckedIn {
+	if current.Status == stay.StatusCheckedIn {
 		return checkOutStayFixture(
-			ctx,
-			service,
-			operator,
-			fixture,
+			ctx, service, operator, fixture,
 			stay.MutationResult{
 				ID: current.ID, Status: current.Status, Version: current.Version,
 			},
@@ -274,6 +291,16 @@ func transitionStayFixture(
 	if current.Status != stay.StatusPreRegistered {
 		return errFixtureConflict
 	}
+	return checkInStayFixture(ctx, service, operator, fixture, current)
+}
+
+func checkInStayFixture(
+	ctx context.Context,
+	service *stay.Service,
+	operator access.Principal,
+	fixture stayFixture,
+	current stay.Record,
+) error {
 	checkedIn, _, err := service.Transition(ctx, stay.TransitionCommand{
 		Actor:           operator,
 		StayID:          current.ID,

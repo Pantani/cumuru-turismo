@@ -178,28 +178,12 @@ func (r *QuestionnaireRepository) clone(
 	command questionnaire.CloneCommand,
 	now time.Time,
 ) (storedMutation, error) {
-	if _, err := q.LockQuestionnaire(ctx, pgUUID(command.QuestionnaireID)); err != nil {
-		return storedMutation{}, questionnaireQueryError(err)
-	}
-	source, err := r.readVersion(ctx, q, command.SourceVersionID)
-	if err != nil || source.QuestionnaireID != command.QuestionnaireID {
-		return storedMutation{}, questionnaireQueryError(err)
-	}
-	number, err := q.GetNextQuestionnaireVersionNumber(ctx, pgUUID(command.QuestionnaireID))
+	source, err := r.lockedCloneSource(ctx, q, command)
 	if err != nil {
-		return storedMutation{}, questionnaire.ErrUnavailable
+		return storedMutation{}, err
 	}
-	actor := currentActorDigest(r.store, command.Actor)
-	row, err := q.CreateQuestionnaireVersion(ctx, generated.CreateQuestionnaireVersionParams{
-		ID: pgUUID(command.NewVersionID), QuestionnaireID: pgUUID(command.QuestionnaireID),
-		VersionNumber: number, Title: source.Title, Introduction: source.Introduction,
-		PrivacyNoticeVersion: source.PrivacyNoticeVersion,
-		LastEditorHmac:       actor.sum, LastEditorKeyVersion: actor.version, CreatedAt: pgTime(now),
-	})
+	row, err := r.insertClonedVersion(ctx, q, command, source, now)
 	if err != nil {
-		return storedMutation{}, questionnaireStoreError(err)
-	}
-	if err := r.cloneContent(ctx, q, command.NewVersionID, source); err != nil {
 		return storedMutation{}, err
 	}
 	result := createVersionMutation(row)
@@ -291,6 +275,51 @@ func (r *QuestionnaireRepository) GetPublished(
 	return result, err
 }
 
+// The questionnaire row is locked first so two clones cannot claim the same
+// next version number.
+func (r *QuestionnaireRepository) lockedCloneSource(
+	ctx context.Context,
+	q generated.Querier,
+	command questionnaire.CloneCommand,
+) (questionnaire.Version, error) {
+	if _, err := q.LockQuestionnaire(ctx, pgUUID(command.QuestionnaireID)); err != nil {
+		return questionnaire.Version{}, questionnaireQueryError(err)
+	}
+	source, err := r.readVersion(ctx, q, command.SourceVersionID)
+	if err != nil || source.QuestionnaireID != command.QuestionnaireID {
+		return questionnaire.Version{}, questionnaireQueryError(err)
+	}
+	return source, nil
+}
+
+func (r *QuestionnaireRepository) insertClonedVersion(
+	ctx context.Context,
+	q generated.Querier,
+	command questionnaire.CloneCommand,
+	source questionnaire.Version,
+	now time.Time,
+) (generated.CreateQuestionnaireVersionRow, error) {
+	var empty generated.CreateQuestionnaireVersionRow
+	number, err := q.GetNextQuestionnaireVersionNumber(ctx, pgUUID(command.QuestionnaireID))
+	if err != nil {
+		return empty, questionnaire.ErrUnavailable
+	}
+	actor := currentActorDigest(r.store, command.Actor)
+	row, err := q.CreateQuestionnaireVersion(ctx, generated.CreateQuestionnaireVersionParams{
+		ID: pgUUID(command.NewVersionID), QuestionnaireID: pgUUID(command.QuestionnaireID),
+		VersionNumber: number, Title: source.Title, Introduction: source.Introduction,
+		PrivacyNoticeVersion: source.PrivacyNoticeVersion,
+		LastEditorHmac:       actor.sum, LastEditorKeyVersion: actor.version, CreatedAt: pgTime(now),
+	})
+	if err != nil {
+		return empty, questionnaireStoreError(err)
+	}
+	if err := r.cloneContent(ctx, q, command.NewVersionID, source); err != nil {
+		return empty, err
+	}
+	return row, nil
+}
+
 func (r *QuestionnaireRepository) readVersion(
 	ctx context.Context,
 	q generated.Querier,
@@ -300,23 +329,35 @@ func (r *QuestionnaireRepository) readVersion(
 	if err != nil {
 		return questionnaire.Version{}, questionnaireQueryError(err)
 	}
+	mapped, requirements, err := readVersionContent(ctx, q, id)
+	if err != nil {
+		return questionnaire.Version{}, err
+	}
+	return versionFromParts(row, mapped, requirements), nil
+}
+
+func readVersionContent(
+	ctx context.Context,
+	q generated.Querier,
+	id uuid.UUID,
+) ([]questionnaire.Question, []questionnaire.ConsentRequirement, error) {
 	questions, err := q.ListQuestionsForVersion(ctx, pgUUID(id))
 	if err != nil {
-		return questionnaire.Version{}, questionnaire.ErrUnavailable
+		return nil, nil, questionnaire.ErrUnavailable
 	}
 	options, err := q.ListQuestionOptionsForVersion(ctx, pgUUID(id))
 	if err != nil {
-		return questionnaire.Version{}, questionnaire.ErrUnavailable
+		return nil, nil, questionnaire.ErrUnavailable
 	}
 	mapped, err := questionsFromRows(questions, options)
 	if err != nil {
-		return questionnaire.Version{}, questionnaire.ErrUnavailable
+		return nil, nil, questionnaire.ErrUnavailable
 	}
 	requirements, err := q.ListConsentRequirementsForVersion(ctx, pgUUID(id))
 	if err != nil {
-		return questionnaire.Version{}, questionnaire.ErrUnavailable
+		return nil, nil, questionnaire.ErrUnavailable
 	}
-	return versionFromParts(row, mapped, requirementsFromRows(requirements)), nil
+	return mapped, requirementsFromRows(requirements), nil
 }
 
 func (r *QuestionnaireRepository) replaceContent(

@@ -77,6 +77,35 @@ func (q *Queries) GetLocalDemoAccommodation(ctx context.Context, id pgtype.UUID)
 	return i, err
 }
 
+const getLocalDemoAccount = `-- name: GetLocalDemoAccount :one
+SELECT
+  email,
+  display_name,
+  scopes,
+  status
+FROM auth.accounts
+WHERE id = $1
+`
+
+type GetLocalDemoAccountRow struct {
+	Email       string   `json:"email"`
+	DisplayName string   `json:"display_name"`
+	Scopes      []string `json:"scopes"`
+	Status      string   `json:"status"`
+}
+
+func (q *Queries) GetLocalDemoAccount(ctx context.Context, id pgtype.UUID) (GetLocalDemoAccountRow, error) {
+	row := q.db.QueryRow(ctx, getLocalDemoAccount, id)
+	var i GetLocalDemoAccountRow
+	err := row.Scan(
+		&i.Email,
+		&i.DisplayName,
+		&i.Scopes,
+		&i.Status,
+	)
+	return i, err
+}
+
 const getLocalDemoMembership = `-- name: GetLocalDemoMembership :one
 SELECT
   accommodation_id,
@@ -234,6 +263,43 @@ func (q *Queries) InsertLocalDemoAccommodation(ctx context.Context, arg InsertLo
 		arg.CadasturID,
 		arg.Capacity,
 		arg.PublicAreaCode,
+	)
+	return err
+}
+
+const insertLocalDemoAccount = `-- name: InsertLocalDemoAccount :exec
+INSERT INTO auth.accounts (
+  id,
+  email,
+  display_name,
+  password_hash,
+  scopes
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5
+)
+ON CONFLICT DO NOTHING
+`
+
+type InsertLocalDemoAccountParams struct {
+	ID           pgtype.UUID `json:"id"`
+	Email        string      `json:"email"`
+	DisplayName  string      `json:"display_name"`
+	PasswordHash string      `json:"password_hash"`
+	Scopes       []string    `json:"scopes"`
+}
+
+func (q *Queries) InsertLocalDemoAccount(ctx context.Context, arg InsertLocalDemoAccountParams) error {
+	_, err := q.db.Exec(ctx, insertLocalDemoAccount,
+		arg.ID,
+		arg.Email,
+		arg.DisplayName,
+		arg.PasswordHash,
+		arg.Scopes,
 	)
 	return err
 }

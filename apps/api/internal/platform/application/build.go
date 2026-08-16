@@ -29,21 +29,37 @@ func ParseBuild(version, revision, builtAt string) (Build, error) {
 	return build, nil
 }
 
+// "unknown" is the linker default; seeing it means the build wrapper did not
+// inject provenance, which must fail rather than ship unlabelled.
+func injectedMetadata(value string, pattern *regexp.Regexp) bool {
+	return value != "unknown" && pattern.MatchString(value)
+}
+
 func (b Build) validate() error {
-	if b.Version == "unknown" || !buildVersionPattern.MatchString(b.Version) {
+	if !injectedMetadata(b.Version, buildVersionPattern) {
 		return invalidBuildMetadata("VERSION")
 	}
-	if b.Revision == "unknown" || !buildRevisionPattern.MatchString(b.Revision) {
+	if !injectedMetadata(b.Revision, buildRevisionPattern) {
 		return invalidBuildMetadata("REVISION")
 	}
-	_, offset := b.BuiltAt.Zone()
-	if b.BuiltAt.IsZero() ||
-		b.BuiltAt.Equal(time.Unix(0, 0)) ||
-		offset != 0 ||
-		b.BuiltAt.Nanosecond() != 0 {
+	if !reproducibleTimestamp(b.BuiltAt) {
 		return invalidBuildMetadata("BUILT_AT")
 	}
 	return nil
+}
+
+// A reproducible build stamps a whole-second UTC timestamp; a zero, epoch or
+// zoned value means the metadata was not injected by the build wrapper.
+func placeholderTimestamp(value time.Time) bool {
+	return value.IsZero() || value.Equal(time.Unix(0, 0))
+}
+
+func reproducibleTimestamp(value time.Time) bool {
+	if placeholderTimestamp(value) {
+		return false
+	}
+	_, offset := value.Zone()
+	return offset == 0 && value.Nanosecond() == 0
 }
 
 func invalidBuildMetadata(field string) error {

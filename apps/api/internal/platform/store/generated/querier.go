@@ -13,12 +13,14 @@ import (
 type Querier interface {
 	AcquireAccommodationOnboardingLock(ctx context.Context, actorLockKey string) error
 	AcquireLocalDemoRunLock(ctx context.Context) error
+	AcquireSeedRunLock(ctx context.Context) error
 	ApplyStayTransition(ctx context.Context, arg ApplyStayTransitionParams) (ApplyStayTransitionRow, error)
 	ApproveQuestionnaireVersion(ctx context.Context, arg ApproveQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	AssumePublicRuntimeRole(ctx context.Context) error
 	CheckReadiness(ctx context.Context) (int32, error)
 	ClaimIdempotencyKey(ctx context.Context, arg ClaimIdempotencyKeyParams) (PlatformIdempotencyRecord, error)
 	CleanupExpiredOperationalRecords(ctx context.Context, arg CleanupExpiredOperationalRecordsParams) (CleanupExpiredOperationalRecordsRow, error)
+	ClearAuthFailures(ctx context.Context, id pgtype.UUID) error
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) (CompleteIdempotencyKeyRow, error)
 	CompletePublicationRun(ctx context.Context, arg CompletePublicationRunParams) (int64, error)
 	CompleteReconciliationRun(ctx context.Context, arg CompleteReconciliationRunParams) (int64, error)
@@ -34,18 +36,24 @@ type Querier interface {
 	CreateSurveyCapability(ctx context.Context, arg CreateSurveyCapabilityParams) (SurveyCapability, error)
 	DeleteDraftConsentRequirements(ctx context.Context, questionnaireVersionID pgtype.UUID) error
 	DeleteDraftQuestionnaireContent(ctx context.Context, questionnaireVersionID pgtype.UUID) error
+	DeleteExpiredAuthSessions(ctx context.Context, cutoff pgtype.Timestamptz) error
 	DeletePresenceDay(ctx context.Context, arg DeletePresenceDayParams) (int64, error)
 	DeleteStagedMetricCellsForRun(ctx context.Context, publicationRunID pgtype.UUID) (int64, error)
 	EraseExpiredSurveyFreeText(ctx context.Context, cutoff pgtype.Timestamptz) (int32, error)
 	FinalizeInviteSubmission(ctx context.Context, arg FinalizeInviteSubmissionParams) (FinalizeInviteSubmissionRow, error)
+	FindAuthAccountByEmail(ctx context.Context, email string) (FindAuthAccountByEmailRow, error)
+	FindAuthAccountByID(ctx context.Context, id pgtype.UUID) (FindAuthAccountByIDRow, error)
+	FindAuthSession(ctx context.Context, tokenHash []byte) (FindAuthSessionRow, error)
 	FindLocalDemoStay(ctx context.Context, arg FindLocalDemoStayParams) (pgtype.UUID, error)
 	FindOnboardedAccommodation(ctx context.Context, arg FindOnboardedAccommodationParams) (FindOnboardedAccommodationRow, error)
+	FindSeedAccount(ctx context.Context, email string) (FindSeedAccountRow, error)
 	GetAccessibleAccommodation(ctx context.Context, arg GetAccessibleAccommodationParams) (GetAccessibleAccommodationRow, error)
 	GetAccessibleStay(ctx context.Context, arg GetAccessibleStayParams) (GetAccessibleStayRow, error)
 	GetCurrentMethodology(ctx context.Context) (GetCurrentMethodologyRow, error)
 	GetCurrentPublicationVersion(ctx context.Context) (int64, error)
 	GetInviteForCapability(ctx context.Context, inviteID pgtype.UUID) (GetInviteForCapabilityRow, error)
 	GetLocalDemoAccommodation(ctx context.Context, id pgtype.UUID) (GetLocalDemoAccommodationRow, error)
+	GetLocalDemoAccount(ctx context.Context, id pgtype.UUID) (GetLocalDemoAccountRow, error)
 	GetLocalDemoMembership(ctx context.Context, id pgtype.UUID) (GetLocalDemoMembershipRow, error)
 	GetLocalDemoMetricMapping(ctx context.Context, arg GetLocalDemoMetricMappingParams) (string, error)
 	GetLocalDemoOrganization(ctx context.Context, id pgtype.UUID) (string, error)
@@ -65,10 +73,12 @@ type Querier interface {
 	IncrementRateLimit(ctx context.Context, arg IncrementRateLimitParams) (IncrementRateLimitRow, error)
 	InsertAssistedVisitor(ctx context.Context, arg InsertAssistedVisitorParams) (InsertAssistedVisitorRow, error)
 	InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) error
+	InsertAuthSession(ctx context.Context, arg InsertAuthSessionParams) error
 	InsertConsentDecision(ctx context.Context, arg InsertConsentDecisionParams) error
 	InsertConsentRequirement(ctx context.Context, arg InsertConsentRequirementParams) error
 	InsertInviteVisitor(ctx context.Context, arg InsertInviteVisitorParams) (InsertInviteVisitorRow, error)
 	InsertLocalDemoAccommodation(ctx context.Context, arg InsertLocalDemoAccommodationParams) error
+	InsertLocalDemoAccount(ctx context.Context, arg InsertLocalDemoAccountParams) error
 	InsertLocalDemoMembership(ctx context.Context, arg InsertLocalDemoMembershipParams) error
 	InsertLocalDemoMetricMapping(ctx context.Context, arg InsertLocalDemoMetricMappingParams) error
 	InsertLocalDemoOrganization(ctx context.Context, arg InsertLocalDemoOrganizationParams) error
@@ -84,6 +94,9 @@ type Querier interface {
 	InsertQuestion(ctx context.Context, arg InsertQuestionParams) error
 	InsertQuestionOption(ctx context.Context, arg InsertQuestionOptionParams) error
 	InsertReconciliationRun(ctx context.Context, arg InsertReconciliationRunParams) (AnalyticsReconciliationRun, error)
+	// InsertSeedAccount never updates password_hash on conflict: re-running the
+	// seeder must not reset a credential the administrator already rotated.
+	InsertSeedAccount(ctx context.Context, arg InsertSeedAccountParams) error
 	InsertStagedMetricCell(ctx context.Context, arg InsertStagedMetricCellParams) error
 	InsertSurveyAnswer(ctx context.Context, arg InsertSurveyAnswerParams) error
 	InsertSurveyResponse(ctx context.Context, arg InsertSurveyResponseParams) error
@@ -122,18 +135,33 @@ type Querier interface {
 	PromoteCurrentPublication(ctx context.Context, publicationVersion int64) (int64, error)
 	PublishQuestionnaireVersion(ctx context.Context, arg PublishQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	RecordAggregationFailureQualitySnapshot(ctx context.Context, arg RecordAggregationFailureQualitySnapshotParams) (RecordAggregationFailureQualitySnapshotRow, error)
+	RegisterAuthFailure(ctx context.Context, arg RegisterAuthFailureParams) error
 	ReleaseLocalDemoRunLock(ctx context.Context) (bool, error)
+	ReleaseSeedRunLock(ctx context.Context) (bool, error)
 	RequestQuestionnaireVersionChanges(ctx context.Context, arg RequestQuestionnaireVersionChangesParams) (SurveyQuestionnaireVersion, error)
 	RetireCurrentPublishedVersion(ctx context.Context, arg RetireCurrentPublishedVersionParams) error
 	RetireQuestionnaireVersion(ctx context.Context, arg RetireQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
+	// RevokeAccountSessions closes every open session of an account. A rotation
+	// ends the sessions the previous secret opened, including the one that
+	// requested it.
+	RevokeAccountSessions(ctx context.Context, arg RevokeAccountSessionsParams) error
 	RevokeActiveInvites(ctx context.Context, arg RevokeActiveInvitesParams) (int64, error)
+	RevokeAuthSession(ctx context.Context, arg RevokeAuthSessionParams) error
+	// RotateAccountPassword clears the provisional flag in the same statement that
+	// writes the new secret, so a rotation cannot land while leaving the session
+	// restricted.
+	RotateAccountPassword(ctx context.Context, arg RotateAccountPasswordParams) error
 	SetPublicRuntimeSearchPath(ctx context.Context) error
 	SubmitQuestionnaireVersionReview(ctx context.Context, arg SubmitQuestionnaireVersionReviewParams) (SurveyQuestionnaireVersion, error)
+	TouchAuthSession(ctx context.Context, arg TouchAuthSessionParams) error
 	UpdateAccommodation(ctx context.Context, arg UpdateAccommodationParams) (UpdateAccommodationRow, error)
 	UpdateAccommodationMembership(ctx context.Context, arg UpdateAccommodationMembershipParams) (UpdateAccommodationMembershipRow, error)
 	UpdateDraftQuestionnaireVersion(ctx context.Context, arg UpdateDraftQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	UpdateStay(ctx context.Context, arg UpdateStayParams) (UpdateStayRow, error)
 	UpsertPresenceDay(ctx context.Context, arg UpsertPresenceDayParams) (int64, error)
+	UpsertSeedAccommodation(ctx context.Context, arg UpsertSeedAccommodationParams) error
+	UpsertSeedMembership(ctx context.Context, arg UpsertSeedMembershipParams) error
+	UpsertSeedOrganization(ctx context.Context, arg UpsertSeedOrganizationParams) error
 	ValidatePublicRuntimeSession(ctx context.Context) (ValidatePublicRuntimeSessionRow, error)
 }
 

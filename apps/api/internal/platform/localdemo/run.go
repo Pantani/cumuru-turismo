@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -139,45 +140,88 @@ func loadFixturesLocked(
 	provisioner *store.LocalDemoRepository,
 ) error {
 	foundation := foundationFixture()
-	if err := provisioner.EnsureFoundation(ctx, foundation); err != nil {
-		return fmt.Errorf("local demo foundation failed: %w", err)
-	}
-	now := time.Now().UTC()
-	factory, err := fixtureServiceFactory(pools.application, cfg, now)
-	if err != nil {
-		return fmt.Errorf("local demo fixture services failed: %w", err)
-	}
-	currentServices := factory(now)
-	if err := ensureQuestionnaire(ctx, currentServices.questionnaires); err != nil {
-		return fmt.Errorf("local demo questionnaire failed: %w", err)
-	}
-	if err := provisioner.EnsureMappings(ctx, mappingFixtures()); err != nil {
-		return fmt.Errorf("local demo mappings failed: %w", err)
-	}
-	fixtures := stayFixtures(now, location)
-	if err := loadStayFixtures(
-		ctx,
-		factory,
-		provisioner,
-		fixtures,
-	); err != nil {
+	if err := ensureFoundationAndAccount(ctx, provisioner, foundation); err != nil {
 		return err
 	}
-	if err := publishAnalytics(
-		ctx,
-		pools.worker,
-		cfg,
-		civilDay(now, location),
-	); err != nil {
+	now := time.Now().UTC()
+	fixtures, err := loadJourneys(ctx, cfg, pools, location, provisioner, now)
+	if err != nil {
+		return err
+	}
+	if err := publishAnalytics(ctx, pools.worker, cfg, civilDay(now, location)); err != nil {
 		return fmt.Errorf("local demo analytics publication failed: %w", err)
 	}
-	_, err = fmt.Fprintf(
+	return reportSeed(output, foundation, fixtures)
+}
+
+// The catalogue must exist before any stay journey runs, since a submission
+// needs a published questionnaire to issue its survey capability.
+func loadJourneys(
+	ctx context.Context,
+	cfg config.Config,
+	pools localDemoPools,
+	location *time.Location,
+	provisioner *store.LocalDemoRepository,
+	now time.Time,
+) ([]stayFixture, error) {
+	factory, err := fixtureServiceFactory(pools.application, cfg, now)
+	if err != nil {
+		return nil, fmt.Errorf("local demo fixture services failed: %w", err)
+	}
+	if err := ensureCatalog(ctx, factory(now), provisioner); err != nil {
+		return nil, err
+	}
+	fixtures := stayFixtures(now, location)
+	if err := loadStayFixtures(ctx, factory, provisioner, fixtures); err != nil {
+		return nil, err
+	}
+	return fixtures, nil
+}
+
+func reportSeed(
+	output io.Writer,
+	foundation store.LocalDemoFoundation,
+	fixtures []stayFixture,
+) error {
+	_, err := fmt.Fprintf(
 		output,
 		"LOCAL_DEMO_SEED=PASS %s source=go\n",
 		fixtureSummary(foundation, fixtures),
 	)
 	if err != nil {
 		return fmt.Errorf("local demo summary failed: %w", err)
+	}
+	return nil
+}
+
+func ensureFoundationAndAccount(
+	ctx context.Context,
+	provisioner *store.LocalDemoRepository,
+	foundation store.LocalDemoFoundation,
+) error {
+	if err := provisioner.EnsureFoundation(ctx, foundation); err != nil {
+		return fmt.Errorf("local demo foundation failed: %w", err)
+	}
+	account, err := accountFixture(os.LookupEnv)
+	if err != nil {
+		return err
+	}
+	if err := provisioner.EnsureAccount(ctx, foundation, account); err != nil {
+		return fmt.Errorf("local demo account failed: %w", err)
+	}
+	return nil
+}
+
+func ensureCatalog(
+	ctx context.Context,
+	services fixtureServices,
+	provisioner *store.LocalDemoRepository,
+) error {
+	if err := ensureQuestionnaire(ctx, services.questionnaires); err != nil {
+		return fmt.Errorf("local demo questionnaire failed: %w", err)
+	}
+	if err := provisioner.EnsureMappings(ctx, mappingFixtures()); err != nil {
+		return fmt.Errorf("local demo mappings failed: %w", err)
 	}
 	return nil
 }

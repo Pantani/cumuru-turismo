@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+
+import type { components } from "../../generated/schema";
 import {
   type FormEvent,
   useEffect,
@@ -73,15 +75,77 @@ function recordValue(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function hasDraftIdentity(record: Record<string, unknown>) {
+  return (
+    typeof record.clientSubmissionId === "string" &&
+    typeof record.questionnaireVersionId === "string"
+  );
+}
+
+/**
+ * A restored draft must never carry a capability: the invite secret belongs to
+ * the URL fragment, never to storage.
+ */
 function validSurveyDraft(value: unknown): value is SurveyDraft {
   const record = recordValue(value);
+  if (record === null || "capability" in record) {
+    return false;
+  }
   return (
-    record !== null &&
-    typeof record.clientSubmissionId === "string" &&
-    typeof record.questionnaireVersionId === "string" &&
+    hasDraftIdentity(record) &&
     recordValue(record.answers) !== null &&
-    recordValue(record.consents) !== null &&
-    !("capability" in record)
+    recordValue(record.consents) !== null
+  );
+}
+
+type PublishedQuestionnaire =
+  components["schemas"]["PublishedQuestionnaire"];
+
+type GateState = "unauthorized" | "completed" | "loading" | "error";
+
+interface GateInput {
+  capability: string | null;
+  completed: boolean;
+  isError: boolean;
+  isPending: boolean;
+  questionnaire: PublishedQuestionnaire | undefined;
+}
+
+function questionnaireGate(input: GateInput): GateState | null {
+  if (input.isPending) {
+    return "loading";
+  }
+  return input.isError || input.questionnaire === undefined ? "error" : null;
+}
+
+/** Returns the blocking state, or null when the form may render. */
+function surveyGate(input: GateInput): GateState | null {
+  if (input.completed) {
+    return "completed";
+  }
+  return input.capability === null ? "unauthorized" : questionnaireGate(input);
+}
+
+function SurveyGateNotice({ state }: { state: GateState }) {
+  if (state === "loading") {
+    return <p role="status">Carregando pesquisa…</p>;
+  }
+  if (state === "completed") {
+    return (
+      <section className="form-card" aria-labelledby="survey-completed">
+        <h2 id="survey-completed">Participação registrada</h2>
+        <p>Obrigado. A capability desta pesquisa foi removida da sessão.</p>
+      </section>
+    );
+  }
+  return (
+    <section className="boundary-note" aria-labelledby="survey-authority">
+      <h2 id="survey-authority">Pesquisa disponível após o registro</h2>
+      <p>
+        A pesquisa voluntária é liberada somente na sessão que concluiu um
+        cadastro de grupo. A capability não é salva no navegador.
+      </p>
+    </section>
   );
 }
 
@@ -145,32 +209,21 @@ export function SurveyForm() {
     };
   }, [draftId, questionnaire]);
 
-  if (capability === null && !completed) {
-    return (
-      <section className="boundary-note" aria-labelledby="survey-authority">
-        <h2 id="survey-authority">Pesquisa disponível após o registro</h2>
-        <p>
-          A pesquisa voluntária é liberada somente na sessão que concluiu um
-          cadastro de grupo. A capability não é salva no navegador.
-        </p>
-      </section>
+  const gate = surveyGate({
+    capability,
+    completed,
+    isError: active.isError,
+    isPending: active.isPending,
+    questionnaire,
+  });
+  if (gate !== null) {
+    return gate === "error" ? (
+      <p role="alert">{errorMessage(active.error)}</p>
+    ) : (
+      <SurveyGateNotice state={gate} />
     );
   }
-  if (completed) {
-    return (
-      <section className="form-card" aria-labelledby="survey-completed">
-        <h2 id="survey-completed">Participação registrada</h2>
-        <p>Obrigado. A capability desta pesquisa foi removida da sessão.</p>
-      </section>
-    );
-  }
-  if (active.isPending) {
-    return <p role="status">Carregando pesquisa…</p>;
-  }
-  if (active.isError || questionnaire === undefined) {
-    return <p role="alert">{errorMessage(active.error)}</p>;
-  }
-  const published = questionnaire;
+  const published = questionnaire as PublishedQuestionnaire;
 
   const draft: SurveyDraft = {
     answers,
@@ -199,37 +252,46 @@ export function SurveyForm() {
     setCompleted(true);
   }
 
+  function blockingIssue(participation: "submitted" | "declined") {
+    if (participation === "declined") {
+      return null;
+    }
+    if (missingRequired(applicable, answers).length > 0) {
+      return "Responda todas as perguntas obrigatórias visíveis.";
+    }
+    if (missingRequiredConsent(published.consent_requirements, consents)) {
+      return "O consentimento indicado é necessário para enviar respostas.";
+    }
+    return null;
+  }
+
+  function submissionBody(participation: "submitted" | "declined") {
+    const declined = participation === "declined";
+    return {
+      questionnaire_version_id: published.id,
+      client_submission_id: clientSubmissionId.current,
+      participation,
+      answers: declined ? [] : answerInputs(applicable, answers),
+      consent_decisions: declined
+        ? []
+        : consentInputs(published.consent_requirements, consents),
+    };
+  }
+
   async function submit(participation: "submitted" | "declined") {
     if (capability === null) {
       return;
     }
-    if (participation === "submitted") {
-      if (missingRequired(applicable, answers).length > 0) {
-        setMessage("Responda todas as perguntas obrigatórias visíveis.");
-        return;
-      }
-      if (missingRequiredConsent(published.consent_requirements, consents)) {
-        setMessage("O consentimento indicado é necessário para enviar respostas.");
-        return;
-      }
+    const issue = blockingIssue(participation);
+    if (issue !== null) {
+      setMessage(issue);
+      return;
     }
     setBusy(true);
     setMessage("Enviando participação…");
     try {
       await surveyClient.submitSurveyResponse(
-        {
-          questionnaire_version_id: published.id,
-          client_submission_id: clientSubmissionId.current,
-          participation,
-          answers:
-            participation === "declined"
-              ? []
-              : answerInputs(applicable, answers),
-          consent_decisions:
-            participation === "declined"
-              ? []
-              : consentInputs(published.consent_requirements, consents),
-        },
+        submissionBody(participation),
         capability,
         idempotencyKey.current,
       );

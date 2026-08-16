@@ -1,7 +1,7 @@
 export default function RegistrationPlaceholderPage() {
   return (
     <article className="page placeholder-page">
-      <div className="eyebrow">Área de registro · Fase 2</div>
+      <div className="eyebrow">Convite da hospedagem</div>
       <h1 data-route-heading tabIndex={-1}>
         Registro de estadias
       </h1>

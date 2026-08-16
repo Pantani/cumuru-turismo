@@ -227,21 +227,20 @@ func validPage(page PageRequest) bool {
 	return page.CursorCreatedAt.IsZero() == (page.CursorID == uuid.Nil)
 }
 
-func validUpdate(command UpdateCommand) bool {
-	if !validUpdateIdentity(command) {
-		return false
-	}
-	patch := command.Patch
+func validAccommodationPatch(patch UpdatePatch) bool {
 	if !hasAccommodationPatch(patch) {
 		return false
 	}
 	if !validRequiredTextPatch(patch.SetName, patch.Name, 200) {
 		return false
 	}
-	if patch.SetCategory && !patch.Category.ValidInput() {
-		return false
-	}
-	return validOptionalFields(patch)
+	return !patch.SetCategory || patch.Category.ValidInput()
+}
+
+func validUpdate(command UpdateCommand) bool {
+	return validUpdateIdentity(command) &&
+		validAccommodationPatch(command.Patch) &&
+		validOptionalFields(command.Patch)
 }
 
 func validUpdateIdentity(command UpdateCommand) bool {
@@ -266,15 +265,25 @@ func validOptionalFields(patch UpdatePatch) bool {
 	return validNullableText(patch.SetPublicAreaCode, patch.PublicAreaCode, 100)
 }
 
-func validCreate(command CreateCommand) bool {
+func validCreateShape(command CreateCommand) bool {
 	return strings.TrimSpace(command.Name) != "" &&
 		validTextLength(command.Name, 200) &&
 		command.Category.ValidInput() &&
-		command.Capacity >= 1 && command.Capacity <= 10000 &&
-		command.ClientSubmissionID.Version() == 7 &&
-		command.ClientSubmissionID.Variant() == uuid.RFC4122 &&
-		idempotencyKeyPattern.MatchString(command.IdempotencyKey) &&
-		command.RequestID != ""
+		command.Capacity >= 1 && command.Capacity <= 10000
+}
+
+func validSubmissionID(id uuid.UUID) bool {
+	return id.Version() == 7 && id.Variant() == uuid.RFC4122
+}
+
+func validMutationMeta(idempotencyKey, requestID string) bool {
+	return idempotencyKeyPattern.MatchString(idempotencyKey) && requestID != ""
+}
+
+func validCreate(command CreateCommand) bool {
+	return validCreateShape(command) &&
+		validSubmissionID(command.ClientSubmissionID) &&
+		validMutationMeta(command.IdempotencyKey, command.RequestID)
 }
 
 func validNullableText(set bool, value *string, maximum int) bool {
@@ -289,15 +298,15 @@ func validNullableCapacity(set bool, value *int32) bool {
 	return !set || value == nil || (*value >= 1 && *value <= 10000)
 }
 
+func validIssuerURL(value string) bool {
+	issuer, err := url.Parse(value)
+	return err == nil && issuer.IsAbs() && issuer.Host != "" && len(value) <= 2048
+}
+
 func validCreateMembership(command CreateMembershipCommand) bool {
-	if !validMembershipTarget(command) {
-		return false
-	}
-	if !idempotencyKeyPattern.MatchString(command.IdempotencyKey) || command.RequestID == "" {
-		return false
-	}
-	issuer, err := url.Parse(command.TargetIssuer)
-	return err == nil && issuer.IsAbs() && issuer.Host != "" && len(command.TargetIssuer) <= 2048
+	return validMembershipTarget(command) &&
+		validMutationMeta(command.IdempotencyKey, command.RequestID) &&
+		validIssuerURL(command.TargetIssuer)
 }
 
 func validMembershipTarget(command CreateMembershipCommand) bool {
@@ -307,15 +316,20 @@ func validMembershipTarget(command CreateMembershipCommand) bool {
 		len(command.TargetSubject) <= 255
 }
 
+func validMembershipIdentity(command UpdateMembershipCommand) bool {
+	return command.AccommodationID != uuid.Nil &&
+		command.MembershipID != uuid.Nil &&
+		command.ExpectedVersion >= 1 &&
+		command.RequestID != ""
+}
+
+func validMembershipPatch(patch UpdateMembershipPatch) bool {
+	if !patch.SetRole && !patch.SetActive {
+		return false
+	}
+	return !patch.SetRole || patch.Role.Valid()
+}
+
 func validUpdateMembership(command UpdateMembershipCommand) bool {
-	if command.AccommodationID == uuid.Nil || command.MembershipID == uuid.Nil {
-		return false
-	}
-	if command.ExpectedVersion < 1 || command.RequestID == "" {
-		return false
-	}
-	if !command.Patch.SetRole && !command.Patch.SetActive {
-		return false
-	}
-	return !command.Patch.SetRole || command.Patch.Role.Valid()
+	return validMembershipIdentity(command) && validMembershipPatch(command.Patch)
 }

@@ -76,6 +76,32 @@ VALUES (
 )
 ON CONFLICT DO NOTHING;
 
+-- name: GetLocalDemoAccount :one
+SELECT
+  email,
+  display_name,
+  scopes,
+  status
+FROM auth.accounts
+WHERE id = sqlc.arg(id);
+
+-- name: InsertLocalDemoAccount :exec
+INSERT INTO auth.accounts (
+  id,
+  email,
+  display_name,
+  password_hash,
+  scopes
+)
+VALUES (
+  sqlc.arg(id),
+  sqlc.arg(email),
+  sqlc.arg(display_name),
+  sqlc.arg(password_hash),
+  sqlc.arg(scopes)
+)
+ON CONFLICT DO NOTHING;
+
 -- name: GetLocalDemoMetricMapping :one
 SELECT category_code
 FROM analytics.metric_mappings

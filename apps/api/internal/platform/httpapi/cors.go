@@ -79,16 +79,27 @@ func forwardedAddress(request *http.Request) (netip.Addr, error) {
 	if err != nil {
 		return netip.Addr{}, errInvalidClientAddress
 	}
-	if !hasForwarded && !hasRealIP {
+	return reconcileProxyAddresses(forwarded, hasForwarded, realIP, hasRealIP)
+}
+
+// When both proxy headers are present they must agree; a disagreement means the
+// chain is untrustworthy, not that one of them should be preferred.
+func reconcileProxyAddresses(
+	forwarded netip.Addr,
+	hasForwarded bool,
+	realIP netip.Addr,
+	hasRealIP bool,
+) (netip.Addr, error) {
+	if !hasForwarded {
+		if !hasRealIP {
+			return netip.Addr{}, errInvalidClientAddress
+		}
+		return realIP, nil
+	}
+	if hasRealIP && forwarded != realIP {
 		return netip.Addr{}, errInvalidClientAddress
 	}
-	if hasForwarded && hasRealIP && forwarded != realIP {
-		return netip.Addr{}, errInvalidClientAddress
-	}
-	if hasForwarded {
-		return forwarded, nil
-	}
-	return realIP, nil
+	return forwarded, nil
 }
 
 func proxyHeaderAddress(

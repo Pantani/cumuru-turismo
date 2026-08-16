@@ -3,8 +3,10 @@ package localdemo
 import (
 	"crypto/sha256"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/Pantani/cumuru/apps/api/internal/access"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store"
 	"github.com/Pantani/cumuru/apps/api/internal/questionnaire"
 	"github.com/Pantani/cumuru/apps/api/internal/stay"
@@ -16,9 +18,17 @@ const (
 	operatorSubject      = "fixture-operator"
 	privacyNoticeVersion = "prototype-v1"
 	firstVisitMetricCode = "first_visit_share"
+
+	// DemoAccountEmail identifies the fixture operator of the local prototype.
+	// The matching secret is never compiled in: it comes from
+	// LOCAL_DEMO_ACCOUNT_PASSWORD so the binary carries no credential.
+	DemoAccountEmail = "operador@cumuru.local"
+
+	demoPasswordVariable = "LOCAL_DEMO_ACCOUNT_PASSWORD"
 )
 
 var (
+	demoAccountID      = uuid.MustParse("019fae14-0000-7000-8000-000000000001")
 	organizationID     = uuid.MustParse("019fae10-0000-7000-8000-000000000001")
 	questionnaireID    = uuid.MustParse("019fae13-0000-7000-8000-000000000001")
 	versionID          = uuid.MustParse("019fae13-0000-7000-8000-000000000002")
@@ -51,6 +61,40 @@ func foundationFixture() store.LocalDemoFoundation {
 			localAccommodation(4, "Casa Silenciosa Fictícia", "family_hosting", 8, nil),
 		},
 	}
+}
+
+// accountFixture hashes the environment-supplied demo secret. It fails closed:
+// without LOCAL_DEMO_ACCOUNT_PASSWORD the seeder stops instead of creating an
+// account nobody can reach or, worse, one with a guessable default.
+func accountFixture(lookup func(string) (string, bool)) (store.LocalDemoAccount, error) {
+	secret, ok := lookup(demoPasswordVariable)
+	if !ok || strings.TrimSpace(secret) == "" {
+		return store.LocalDemoAccount{}, fmt.Errorf(
+			"%s is required to seed the local demo account", demoPasswordVariable,
+		)
+	}
+	hash, err := access.NewPasswordHasher().Hash(secret)
+	if err != nil {
+		return store.LocalDemoAccount{}, fmt.Errorf(
+			"local demo account secret is unusable: %w", err,
+		)
+	}
+	return store.LocalDemoAccount{
+		ID:           demoAccountID,
+		Email:        DemoAccountEmail,
+		DisplayName:  "Operadora fictícia da hospedagem",
+		PasswordHash: hash,
+		Scopes: []string{
+			"platform:read",
+			"accommodations:onboard",
+			"accommodations:manage",
+			"stays:read:own",
+			"stays:write",
+			"questionnaires:manage",
+			"questionnaires:approve",
+			"analytics:read:internal",
+		},
+	}, nil
 }
 
 func localAccommodation(

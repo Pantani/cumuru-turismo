@@ -25,12 +25,21 @@ type OIDCVerifier struct {
 	now      func() time.Time
 }
 
-func NewOIDCVerifier(ctx context.Context, options OIDCOptions) (*OIDCVerifier, error) {
-	if strings.TrimSpace(options.Issuer) == "" || strings.TrimSpace(options.Audience) == "" {
-		return nil, errors.New("OIDC configuration is incomplete")
+// Discovery reaches the network, so the client must carry a timeout: a hung
+// provider must not be able to stall a request indefinitely.
+func (o OIDCOptions) validate() error {
+	if strings.TrimSpace(o.Issuer) == "" || strings.TrimSpace(o.Audience) == "" {
+		return errors.New("OIDC configuration is incomplete")
 	}
-	if options.HTTPClient == nil || options.HTTPClient.Timeout <= 0 {
-		return nil, errors.New("OIDC HTTP client requires a timeout")
+	if o.HTTPClient == nil || o.HTTPClient.Timeout <= 0 {
+		return errors.New("OIDC HTTP client requires a timeout")
+	}
+	return nil
+}
+
+func NewOIDCVerifier(ctx context.Context, options OIDCOptions) (*OIDCVerifier, error) {
+	if err := options.validate(); err != nil {
+		return nil, err
 	}
 	if options.Now == nil {
 		options.Now = time.Now
@@ -60,18 +69,28 @@ func (v *OIDCVerifier) Verify(ctx context.Context, rawToken string) (Principal, 
 	if err != nil {
 		return Principal{}, ErrInvalidToken
 	}
+	scopes, err := v.acceptedScopes(token)
+	if err != nil {
+		return Principal{}, err
+	}
+	return NewPrincipal(v.issuer, token.Subject, scopes), nil
+}
+
+// A thirty second skew is allowed on nbf, matching the tolerance the library
+// applies to the other time claims.
+func (v *OIDCVerifier) acceptedScopes(token *oidc.IDToken) ([]string, error) {
 	var claims oidcClaims
 	if err := token.Claims(&claims); err != nil {
-		return Principal{}, ErrInvalidToken
+		return nil, ErrInvalidToken
 	}
 	if token.Subject == "" || claims.NotBefore.After(v.now().Add(30*time.Second)) {
-		return Principal{}, ErrInvalidToken
+		return nil, ErrInvalidToken
 	}
 	scopes, err := claims.normalizedScopes()
 	if err != nil {
-		return Principal{}, ErrInvalidToken
+		return nil, ErrInvalidToken
 	}
-	return NewPrincipal(v.issuer, token.Subject, scopes), nil
+	return scopes, nil
 }
 
 type numericDate int64

@@ -28,16 +28,21 @@ type CapabilityCodec struct {
 	keyring Keyring
 }
 
-func NewCapabilityCodec(keyring Keyring) (*CapabilityCodec, error) {
+func usableKeyring(keyring Keyring, minimumKeyBytes int) bool {
 	if keyring.CurrentVersion == "" || len(keyring.Keys) == 0 {
-		return nil, ErrCapabilityInvalid
+		return false
 	}
 	for _, key := range keyring.Keys {
-		if len(key) < 32 {
-			return nil, ErrCapabilityInvalid
+		if len(key) < minimumKeyBytes {
+			return false
 		}
 	}
-	if _, ok := keyring.Keys[keyring.CurrentVersion]; !ok {
+	_, ok := keyring.Keys[keyring.CurrentVersion]
+	return ok
+}
+
+func NewCapabilityCodec(keyring Keyring) (*CapabilityCodec, error) {
+	if !usableKeyring(keyring, 32) {
 		return nil, ErrCapabilityInvalid
 	}
 	return &CapabilityCodec{keyring: cloneKeyring(keyring)}, nil
@@ -96,23 +101,45 @@ func encodeCapabilityToken(id uuid.UUID, mac []byte) string {
 	return encoding.EncodeToString(id[:]) + "." + encoding.EncodeToString(mac)
 }
 
-func parseCapabilityToken(token string) (uuid.UUID, []byte, error) {
+func splitCapabilityToken(token string) (string, string, error) {
 	left, right, ok := strings.Cut(token, ".")
 	if !ok || strings.Contains(right, ".") {
-		return uuid.Nil, nil, errors.New("invalid token segments")
+		return "", "", errors.New("invalid token segments")
 	}
-	idBytes, err := base64.RawURLEncoding.DecodeString(left)
-	if err != nil || len(idBytes) != 16 {
-		return uuid.Nil, nil, errors.New("invalid token id")
-	}
-	mac, err := base64.RawURLEncoding.DecodeString(right)
+	return left, right, nil
+}
+
+// The MAC must round-trip through base64 unchanged; a non-canonical encoding of
+// the same bytes would otherwise widen the accepted token set.
+func decodeCapabilityMAC(segment string) ([]byte, error) {
+	mac, err := base64.RawURLEncoding.DecodeString(segment)
 	if err != nil || len(mac) != sha256.Size {
-		return uuid.Nil, nil, errors.New("invalid token mac")
+		return nil, errors.New("invalid token mac")
 	}
-	if base64.RawURLEncoding.EncodeToString(mac) != right {
-		return uuid.Nil, nil, errors.New("non-canonical token mac")
+	if base64.RawURLEncoding.EncodeToString(mac) != segment {
+		return nil, errors.New("non-canonical token mac")
 	}
-	id, err := uuid.FromBytes(idBytes)
+	return mac, nil
+}
+
+func decodeCapabilityID(segment string) (uuid.UUID, error) {
+	idBytes, err := base64.RawURLEncoding.DecodeString(segment)
+	if err != nil || len(idBytes) != 16 {
+		return uuid.Nil, errors.New("invalid token id")
+	}
+	return uuid.FromBytes(idBytes)
+}
+
+func parseCapabilityToken(token string) (uuid.UUID, []byte, error) {
+	left, right, err := splitCapabilityToken(token)
+	if err != nil {
+		return uuid.Nil, nil, err
+	}
+	id, err := decodeCapabilityID(left)
+	if err != nil {
+		return uuid.Nil, nil, err
+	}
+	mac, err := decodeCapabilityMAC(right)
 	if err != nil {
 		return uuid.Nil, nil, err
 	}

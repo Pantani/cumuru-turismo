@@ -112,17 +112,20 @@ type MembershipChange struct {
 	NextActive    bool
 }
 
+// An accommodation must always keep at least one active manager, otherwise
+// nobody could ever restore access to it.
 func (c MembershipChange) Validate(activeManagerCount int) error {
-	if !c.CurrentRole.Valid() || !c.NextRole.Valid() || activeManagerCount < 0 {
+	if !c.validRoles() || activeManagerCount < 0 {
 		return ErrInvalidMembership
 	}
-	if !c.removesActiveManager() {
-		return nil
-	}
-	if activeManagerCount <= 1 {
+	if c.removesActiveManager() && activeManagerCount <= 1 {
 		return ErrLastActiveManager
 	}
 	return nil
+}
+
+func (c MembershipChange) validRoles() bool {
+	return c.CurrentRole.Valid() && c.NextRole.Valid()
 }
 
 func (c MembershipChange) removesActiveManager() bool {

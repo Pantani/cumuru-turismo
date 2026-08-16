@@ -27,25 +27,44 @@ func ComputeCoverage(
 	freshness time.Duration,
 	minimumReporting int,
 ) Coverage {
-	denominator := 0
-	numerator := 0
-	reporting := 0
-	cutoff := asOf.Add(-freshness)
+	totals := tallyCoverage(accommodations, asOf.Add(-freshness))
+	if totals.denominator == 0 || totals.reporting < minimumReporting {
+		return Coverage{Status: CoverageUnavailable}
+	}
+	ratio := roundHalfUp(
+		100*float64(totals.numerator)/float64(totals.denominator), 5,
+	)
+	return Coverage{Status: CoveragePublished, Ratio: &ratio}
+}
+
+type coverageTotals struct {
+	denominator int
+	numerator   int
+	reporting   int
+}
+
+// Capacity of every active accommodation forms the denominator; only those that
+// reported inside the freshness window count toward the numerator.
+func tallyCoverage(
+	accommodations []AccommodationCoverage,
+	cutoff time.Time,
+) coverageTotals {
+	var totals coverageTotals
 	for _, accommodation := range accommodations {
 		if !accommodation.Active || accommodation.Capacity <= 0 {
 			continue
 		}
-		denominator += accommodation.Capacity
-		if accommodation.LastReportedAt.IsZero() ||
-			accommodation.LastReportedAt.Before(cutoff) {
+		totals.denominator += accommodation.Capacity
+		if !reportedSince(accommodation, cutoff) {
 			continue
 		}
-		numerator += accommodation.Capacity
-		reporting++
+		totals.numerator += accommodation.Capacity
+		totals.reporting++
 	}
-	if denominator == 0 || reporting < minimumReporting {
-		return Coverage{Status: CoverageUnavailable}
-	}
-	ratio := roundHalfUp(100*float64(numerator)/float64(denominator), 5)
-	return Coverage{Status: CoveragePublished, Ratio: &ratio}
+	return totals
+}
+
+func reportedSince(accommodation AccommodationCoverage, cutoff time.Time) bool {
+	return !accommodation.LastReportedAt.IsZero() &&
+		!accommodation.LastReportedAt.Before(cutoff)
 }

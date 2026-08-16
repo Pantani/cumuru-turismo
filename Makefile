@@ -13,6 +13,8 @@ TRIVY_IMAGE := aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528
 GITLEAKS_IMAGE := zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
 WITH_BUILD_METADATA := deploy/scripts/with-build-metadata.sh
 LOCAL_COMPOSE := docker compose -f compose.yaml -f compose.local.yaml
+DEV_COMPOSE := docker compose -p cumuru-dev -f compose.yaml -f compose.local.yaml -f compose.dev.yaml
+DOCKER_DEV_SERVICES ?=
 IMAGE_ARTIFACTS := deploy/scripts/image-artifacts.sh
 MATERIALIZE_PINNED_IMAGE := deploy/scripts/materialize-pinned-image.sh
 RTK ?= rtk
@@ -45,7 +47,8 @@ export DOCKER_SERVICES DOCKER_LOG_TAIL
 	phase2-integration phase2-proxy-test phase2-full-stack typecheck complexity \
 	phase3-integration phase3-proxy-test \
 	phase4-integration phase4-proxy-test phase4-full-stack phase4-benchmark \
-	local-demo-build-test local-demo-test local-demo-e2e phase4-remediation \
+	local-demo-test local-demo-e2e phase4-remediation \
+	docker-dev docker-dev-down docker-dev-logs docker-dev-status seed \
 	post-task-quality lint-shell lint lint-fix images sbom image-sbom scanner-images scan image-scan compose-config up down migrate-up \
 	migrate-down-local smoke ci
 
@@ -143,15 +146,11 @@ phase4-benchmark: phase4-full-stack ## Executa o benchmark protegido da Fase 4 v
 local-demo-test: ## Valida seed local em banco novo, repetição e preservação
 	@bash deploy/scripts/test-local-demo.sh
 
-local-demo-build-test: ## Prova guardas e ausência de authority no build padrão
-	@bash deploy/scripts/test-local-demo-build.sh
-
 local-demo-e2e: ## Executa a jornada local completa em Chromium e stack efêmera
 	@bash deploy/scripts/test-local-demo-e2e.sh
 
 phase4-remediation: ## Executa o build reproduzível de remediação do runtime local
 	@$(MAKE) --no-print-directory generated-check
-	@$(MAKE) --no-print-directory local-demo-build-test
 	@$(MAKE) --no-print-directory local-demo-test
 	@$(MAKE) --no-print-directory phase4-full-stack
 	@$(MAKE) --no-print-directory local-demo-e2e
@@ -202,7 +201,7 @@ tidy: ## Atualiza go.mod/go.sum com go mod tidy; target mutante
 typecheck: ## Executa o typecheck estrito do web
 	npm --workspace @cumuru/web run typecheck
 
-complexity: ## Verifica complexidade máxima 9 em Go e web
+complexity: ## Verifica complexidade ciclomática 5 e cognitiva 8 em Go e web
 	@bash deploy/scripts/test-complexity.sh "$(GOCYCLO)" "$(GOCOGNIT)"
 
 post-task-quality: ## Gate obrigatório pós-tarefa: complexity, lint e marcador PASS
@@ -457,9 +456,30 @@ down: ## Para a stack Compose sem remover volumes
 dev: ## Alias de up para a stack Compose comprovada; não é hot reload
 	@$(MAKE) --no-print-directory up
 
-dev-web: ## Inicia o Vite em modo demo; pressupõe API local disponível
-	VITE_LOCAL_DEMO_MODE=true \
-	VITE_LOCAL_DEMO_IDENTITY=cumuru-local-platform-read \
+docker-dev: ## Sobe a stack Docker com hot reload em 127.0.0.1:5173; projeto cumuru-dev
+	@"$(WITH_BUILD_METADATA)" $(DEV_COMPOSE) up --build --detach --wait \
+		--wait-timeout 300
+	@echo "hot reload em http://127.0.0.1:5173"
+
+docker-dev-down: ## Para a stack de hot reload; preserva volumes e a stack estática
+	@"$(WITH_BUILD_METADATA)" $(DEV_COMPOSE) down --remove-orphans
+
+docker-dev-status: ## Mostra o status da stack de hot reload
+	@"$(WITH_BUILD_METADATA)" $(DEV_COMPOSE) ps --all
+
+docker-dev-logs: ## Acompanha os logs da stack de hot reload; use DOCKER_DEV_SERVICES="api web"
+	@set -eu; \
+	set --; \
+	for service in $(DOCKER_DEV_SERVICES); do \
+		case "$$service" in \
+			postgres|migrate|local-demo|api|worker|web) ;; \
+			*) echo "invalid DOCKER_DEV_SERVICES entry: $$service" >&2; exit 2 ;; \
+		esac; \
+		set -- "$$@" "$$service"; \
+	done; \
+	"$(WITH_BUILD_METADATA)" $(DEV_COMPOSE) logs --follow --tail 50 "$$@"
+
+dev-web: ## Inicia o Vite; pressupõe API local disponível para o login
 	npm --workspace @cumuru/web run dev
 
 docker-up: ## Alias não destrutivo de up
@@ -529,7 +549,6 @@ ci: ## Executa o gate completo sequencial; pesado, usa Docker e rede
 	@$(MAKE) --no-print-directory generated-check
 	@$(MAKE) --no-print-directory migration-test
 	@$(MAKE) --no-print-directory local-restore-drill
-	@$(MAKE) --no-print-directory local-demo-build-test
 	@$(MAKE) --no-print-directory local-demo-test
 	@$(MAKE) --no-print-directory phase2-integration
 	@$(MAKE) --no-print-directory phase2-proxy-test

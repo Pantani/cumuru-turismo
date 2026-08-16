@@ -55,15 +55,15 @@ type Visitor struct {
 	ResidenceCityCode string
 }
 
+// Exactly one responsible visitor per group: the record needs a single point of
+// contact, and more than one would make the group ambiguous.
 func ValidateGroup(visitors []Visitor) error {
 	if len(visitors) < 1 || len(visitors) > 100 {
 		return ErrInvalidGroup
 	}
 	validation := groupValidation{seen: make(map[string]struct{}, len(visitors))}
-	for _, visitor := range visitors {
-		if err := validation.add(visitor); err != nil {
-			return err
-		}
+	if err := validation.addAll(visitors); err != nil {
+		return err
 	}
 	if validation.responsibleCount != 1 {
 		return ErrResponsibleCount
@@ -74,6 +74,15 @@ func ValidateGroup(visitors []Visitor) error {
 type groupValidation struct {
 	seen             map[string]struct{}
 	responsibleCount int
+}
+
+func (g *groupValidation) addAll(visitors []Visitor) error {
+	for _, visitor := range visitors {
+		if err := g.add(visitor); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (g *groupValidation) add(visitor Visitor) error {
@@ -90,28 +99,37 @@ func (g *groupValidation) add(visitor Visitor) error {
 	return nil
 }
 
-func (v Visitor) validate() error {
+func (v Visitor) validShape() bool {
 	identifier, err := uuid.Parse(v.ClientID)
 	if err != nil || identifier.Version() != 7 {
-		return ErrInvalidGroup
+		return false
 	}
-	if !v.Role.valid() || !validAgeBands[v.AgeBand] {
-		return ErrInvalidGroup
-	}
-	if !validCountry(v.ResidenceCountry) {
+	return v.Role.valid() &&
+		validAgeBands[v.AgeBand] &&
+		validCountry(v.ResidenceCountry)
+}
+
+func (v Visitor) validate() error {
+	if !v.validShape() {
 		return ErrInvalidGroup
 	}
 	return v.validateResidence()
 }
 
+// A Brazilian residence carries a generalized state and IBGE municipality; any
+// other country carries neither, so no sub-national detail leaks abroad.
 func (v Visitor) validateResidence() error {
 	if v.ResidenceCountry == "BR" {
-		if !validState(v.ResidenceState) || !cityCodePattern.MatchString(v.ResidenceCityCode) {
-			return ErrInvalidGroup
-		}
-		return nil
+		return v.validateDomesticResidence()
 	}
 	if v.ResidenceState != "" || v.ResidenceCityCode != "" {
+		return ErrInvalidGroup
+	}
+	return nil
+}
+
+func (v Visitor) validateDomesticResidence() error {
+	if !validState(v.ResidenceState) || !cityCodePattern.MatchString(v.ResidenceCityCode) {
 		return ErrInvalidGroup
 	}
 	return nil

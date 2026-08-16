@@ -72,14 +72,18 @@ func validPublication(publication Publication) bool {
 		validPublicationCells(publication.Cells)
 }
 
+func validPublicationVersions(publication Publication) bool {
+	return publication.PrivacyPolicyVersion != "" &&
+		publication.MethodologyVersion != ""
+}
+
 func validPublicationHeader(publication Publication) bool {
 	if publication.AsOfOn == "" || publication.DataMode == "" {
 		return false
 	}
-	if publication.PrivacyPolicyVersion == "" || publication.MethodologyVersion == "" {
-		return false
-	}
-	return publication.CoverageStatus != "" && len(publication.Cells) > 0
+	return validPublicationVersions(publication) &&
+		publication.CoverageStatus != "" &&
+		len(publication.Cells) > 0
 }
 
 func validPublicationCells(cells []PublicationCell) bool {

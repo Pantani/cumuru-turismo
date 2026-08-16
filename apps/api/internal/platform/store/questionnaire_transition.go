@@ -57,18 +57,8 @@ func (r *QuestionnaireRepository) transition(
 	spec transitionSpec,
 	now time.Time,
 ) (storedMutation, error) {
-	current, err := r.readVersion(ctx, q, command.VersionID)
+	current, err := r.transitionableVersion(ctx, q, command)
 	if err != nil {
-		return storedMutation{}, err
-	}
-	if current.Revision != command.ExpectedVersion {
-		return storedMutation{}, questionnaire.ErrPreconditionFailed
-	}
-	if requiresDistinctReviewer(command.Transition) &&
-		!reviewerDistinctFromEditor(r.store, current, command.Actor) {
-		return storedMutation{}, questionnaire.ErrConflict
-	}
-	if err := validateTransitionContent(current, command.Transition, r.store.phase3.Enabled); err != nil {
 		return storedMutation{}, err
 	}
 	row, err := r.applyTransition(ctx, q, current, command, now)
@@ -93,9 +83,51 @@ func (r *QuestionnaireRepository) transition(
 	})
 }
 
+// A review transition must come from someone other than the last editor, and
+// the version content itself must still satisfy the target state.
+func (r *QuestionnaireRepository) transitionableVersion(
+	ctx context.Context,
+	q generated.Querier,
+	command questionnaire.TransitionCommand,
+) (questionnaire.Version, error) {
+	current, err := r.readVersion(ctx, q, command.VersionID)
+	if err != nil {
+		return current, err
+	}
+	if current.Revision != command.ExpectedVersion {
+		return current, questionnaire.ErrPreconditionFailed
+	}
+	if requiresDistinctReviewer(command.Transition) &&
+		!reviewerDistinctFromEditor(r.store, current, command.Actor) {
+		return current, questionnaire.ErrConflict
+	}
+	err = validateTransitionContent(current, command.Transition, r.store.phase3.Enabled)
+	return current, err
+}
+
 func requiresDistinctReviewer(transition questionnaire.Transition) bool {
 	return transition == questionnaire.TransitionRequestChanges ||
 		transition == questionnaire.TransitionApprove
+}
+
+// Publishing retires the current published version first, so a questionnaire
+// never has two published versions at once.
+func publishQuestionnaireVersion(
+	ctx context.Context,
+	q generated.Querier,
+	current questionnaire.Version,
+	command questionnaire.TransitionCommand,
+	now time.Time,
+) (generated.SurveyQuestionnaireVersion, error) {
+	if err := q.RetireCurrentPublishedVersion(ctx, generated.RetireCurrentPublishedVersionParams{
+		TransitionedAt: pgTime(now), QuestionnaireID: pgUUID(current.QuestionnaireID),
+	}); err != nil {
+		return generated.SurveyQuestionnaireVersion{}, err
+	}
+	return q.PublishQuestionnaireVersion(ctx, generated.PublishQuestionnaireVersionParams{
+		TransitionedAt: pgTime(now), ID: pgUUID(command.VersionID),
+		ExpectedRevision: command.ExpectedVersion,
+	})
 }
 
 func (r *QuestionnaireRepository) applyTransition(
@@ -106,6 +138,19 @@ func (r *QuestionnaireRepository) applyTransition(
 	now time.Time,
 ) (generated.SurveyQuestionnaireVersion, error) {
 	actor := currentActorDigest(r.store, command.Actor)
+	if command.Transition == questionnaire.TransitionPublish {
+		return publishQuestionnaireVersion(ctx, q, current, command, now)
+	}
+	return applyReviewTransition(ctx, q, command, actor, now)
+}
+
+func applyReviewTransition(
+	ctx context.Context,
+	q generated.Querier,
+	command questionnaire.TransitionCommand,
+	actor actorDigest,
+	now time.Time,
+) (generated.SurveyQuestionnaireVersion, error) {
 	version := actor.version
 	switch command.Transition {
 	case questionnaire.TransitionSubmitReview:
@@ -124,16 +169,6 @@ func (r *QuestionnaireRepository) applyTransition(
 	case questionnaire.TransitionApprove:
 		return q.ApproveQuestionnaireVersion(ctx, generated.ApproveQuestionnaireVersionParams{
 			ReviewedByHmac: actor.sum, ReviewedByKeyVersion: &version,
-			TransitionedAt: pgTime(now), ID: pgUUID(command.VersionID),
-			ExpectedRevision: command.ExpectedVersion,
-		})
-	case questionnaire.TransitionPublish:
-		if err := q.RetireCurrentPublishedVersion(ctx, generated.RetireCurrentPublishedVersionParams{
-			TransitionedAt: pgTime(now), QuestionnaireID: pgUUID(current.QuestionnaireID),
-		}); err != nil {
-			return generated.SurveyQuestionnaireVersion{}, err
-		}
-		return q.PublishQuestionnaireVersion(ctx, generated.PublishQuestionnaireVersionParams{
 			TransitionedAt: pgTime(now), ID: pgUUID(command.VersionID),
 			ExpectedRevision: command.ExpectedVersion,
 		})

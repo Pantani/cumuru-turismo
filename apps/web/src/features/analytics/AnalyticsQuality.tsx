@@ -5,6 +5,7 @@ import {
   Phase4ApiError,
   type Phase4Client,
 } from "../../shared/api/phase4-client";
+import { accommodationCategoryLabels } from "../operator/stay-lifecycle";
 
 type Schemas = components["schemas"];
 type QualityCount = Schemas["QualityCount"];
@@ -29,6 +30,15 @@ const reasonMessages: Record<
     "Não há pseudônimo transversal aprovado para esta análise.",
   insufficient_source: "A fonte agregada ainda é insuficiente.",
 };
+
+/**
+ * The quality contract types category_code as a free string, so an unknown code
+ * is shown as it came instead of being hidden behind a guessed label.
+ */
+function categoryLabel(code: string) {
+  const labels: Record<string, string> = accommodationCategoryLabels;
+  return labels[code] ?? code;
+}
 
 function qualityError(error: unknown) {
   if (error instanceof Phase4ApiError && error.status === 403) {
@@ -103,7 +113,7 @@ function QualityContent({ snapshot }: { snapshot: Schemas["QualitySnapshot"] }) 
               <tbody>
                 {snapshot.coverage_by_category.map((coverage) => (
                   <tr key={coverage.category_code}>
-                    <th scope="row">{coverage.category_code}</th>
+                    <th scope="row">{categoryLabel(coverage.category_code)}</th>
                     <td>
                       <CoverageValue coverage={coverage} />
                     </td>

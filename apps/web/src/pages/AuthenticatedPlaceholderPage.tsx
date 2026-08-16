@@ -1,7 +1,7 @@
 export default function AuthenticatedPlaceholderPage() {
   return (
     <article className="page placeholder-page">
-      <div className="eyebrow">Área autenticada · Fundação</div>
+      <div className="eyebrow">Área da hospedagem</div>
       <h1 data-route-heading tabIndex={-1}>
         Área autenticada
       </h1>

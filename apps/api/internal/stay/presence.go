@@ -50,18 +50,32 @@ func PresenceDaysAt(value Stay, asOf CivilDate) ([]PresenceDay, error) {
 		return nil, ErrInvalidPresence
 	}
 	start := CivilDateFromInstant(*value.CheckedInAt)
-	observedEnd := asOf.AddDays(1)
-	if value.PlannedDeparture.Before(observedEnd) {
-		observedEnd = value.PlannedDeparture
-	}
+	observedEnd := earlierDate(asOf.AddDays(1), value.PlannedDeparture)
 	observed, err := presenceRange(start, observedEnd, PresenceObserved)
 	if err != nil {
 		return nil, err
 	}
-	if !observedEnd.Before(value.PlannedDeparture) {
+	return appendForecast(observed, observedEnd, value.PlannedDeparture)
+}
+
+func earlierDate(left, right CivilDate) CivilDate {
+	if right.Before(left) {
+		return right
+	}
+	return left
+}
+
+// Days past the observation cut-off are forecast, never observed, so a stay in
+// progress never reports presence it has not yet accrued.
+func appendForecast(
+	observed []PresenceDay,
+	observedEnd CivilDate,
+	departure CivilDate,
+) ([]PresenceDay, error) {
+	if !observedEnd.Before(departure) {
 		return observed, nil
 	}
-	forecast, err := presenceRange(observedEnd, value.PlannedDeparture, PresenceForecast)
+	forecast, err := presenceRange(observedEnd, departure, PresenceForecast)
 	if err != nil {
 		return nil, err
 	}

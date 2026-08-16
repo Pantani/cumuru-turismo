@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"slices"
 )
 
 const publicAnalyticsCache = "public, max-age=300, stale-if-error=86400"
@@ -106,7 +107,9 @@ func analyticsETag(operation, selector string, payload []byte) string {
 	return `"sha256-` + hex.EncodeToString(sum[:]) + `"`
 }
 
-func analyticsSelector(request *http.Request, name string, allowed ...string) (string, bool) {
+// The public endpoints accept exactly one selector and nothing else, so an
+// unexpected parameter is rejected rather than ignored.
+func soleQueryValue(request *http.Request, name string) (string, bool) {
 	query := request.URL.Query()
 	if len(query) != 1 {
 		return "", false
@@ -115,10 +118,16 @@ func analyticsSelector(request *http.Request, name string, allowed ...string) (s
 	if !exists || len(values) != 1 {
 		return "", false
 	}
-	for _, candidate := range allowed {
-		if values[0] == candidate {
-			return candidate, true
-		}
+	return values[0], true
+}
+
+func analyticsSelector(request *http.Request, name string, allowed ...string) (string, bool) {
+	value, ok := soleQueryValue(request, name)
+	if !ok {
+		return "", false
+	}
+	if slices.Contains(allowed, value) {
+		return value, true
 	}
 	return "", false
 }

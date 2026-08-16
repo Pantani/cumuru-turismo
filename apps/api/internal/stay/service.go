@@ -291,15 +291,21 @@ func validActor(actor access.Principal) bool {
 	return actor.Issuer != "" && actor.Subject != ""
 }
 
+func validMutationMeta(idempotencyKey, requestID string) bool {
+	return validIdempotencyKey(idempotencyKey) && requestID != ""
+}
+
+func validCreateShape(command CreateCommand) bool {
+	return command.AccommodationID != uuid.Nil &&
+		command.ClientSubmissionID.Version() == 7 &&
+		command.ExpectedGuestCount >= 1 &&
+		command.ExpectedGuestCount <= 100
+}
+
 func validCreate(command CreateCommand) bool {
-	if command.AccommodationID == uuid.Nil || command.ClientSubmissionID.Version() != 7 {
-		return false
-	}
-	if command.ExpectedGuestCount < 1 || command.ExpectedGuestCount > 100 {
-		return false
-	}
-	return validDateRange(command.PlannedArrivalOn, command.PlannedDepartureOn) &&
-		validIdempotencyKey(command.IdempotencyKey) && command.RequestID != ""
+	return validCreateShape(command) &&
+		validDateRange(command.PlannedArrivalOn, command.PlannedDepartureOn) &&
+		validMutationMeta(command.IdempotencyKey, command.RequestID)
 }
 
 func validDateRange(arrivalValue, departureValue string) bool {
@@ -311,29 +317,34 @@ func validDateRange(arrivalValue, departureValue string) bool {
 	return err == nil && arrival.Before(departure)
 }
 
+// A cursor is either fully set or fully absent; a half-set cursor would page
+// from an undefined position.
+func validCursor(page PageRequest) bool {
+	return page.CursorCreatedAt.IsZero() == (page.CursorID == uuid.Nil)
+}
+
+func validPageFilter(page PageRequest) bool {
+	return page.Status == "" || validStatus(page.Status)
+}
+
 func validPage(page PageRequest) bool {
-	if page.Limit < 1 || page.Limit > 100 {
+	if page.Limit < 1 || page.Limit > 100 || !validCursor(page) {
 		return false
 	}
-	if page.CursorCreatedAt.IsZero() != (page.CursorID == uuid.Nil) {
-		return false
+	return validPageFilter(page) && validOptionalDates(page.ArrivalFrom, page.ArrivalTo)
+}
+
+func validOptionalDate(value string) bool {
+	if value == "" {
+		return true
 	}
-	if page.Status != "" && !validStatus(page.Status) {
-		return false
-	}
-	return validOptionalDates(page.ArrivalFrom, page.ArrivalTo)
+	_, err := ParseCivilDate(value)
+	return err == nil
 }
 
 func validOptionalDates(from, to string) bool {
-	if from != "" {
-		if _, err := ParseCivilDate(from); err != nil {
-			return false
-		}
-	}
-	if to != "" {
-		if _, err := ParseCivilDate(to); err != nil {
-			return false
-		}
+	if !validOptionalDate(from) || !validOptionalDate(to) {
+		return false
 	}
 	return from == "" || to == "" || from <= to
 }
@@ -394,44 +405,55 @@ func validGroupCommand(command GroupCommand) bool {
 	if command.StayID == uuid.Nil || command.ClientSubmissionID.Version() != 7 {
 		return false
 	}
-	if command.ExpectedVersion < 1 || !validIdempotencyKey(command.IdempotencyKey) || command.RequestID == "" {
+	if command.ExpectedVersion < 1 ||
+		!validMutationMeta(command.IdempotencyKey, command.RequestID) {
 		return false
 	}
 	return validPrivacyAndVisitors(command.PrivacyNoticeVersion, command.Visitors)
 }
 
 func validPrivacyAndVisitors(version string, visitors []Visitor) bool {
-	if strings.TrimSpace(version) == "" || len(version) > 100 {
-		return false
-	}
-	return ValidateGroup(visitors) == nil
+	return validNoticeVersion(version) && ValidateGroup(visitors) == nil
+}
+
+func validNoticeVersion(value string) bool {
+	return strings.TrimSpace(value) != "" && len(value) <= 100
 }
 
 func validInviteCommand(command InviteCommand) bool {
 	return command.StayID != uuid.Nil &&
 		command.ExpectedVersion > 0 &&
-		strings.TrimSpace(command.PrivacyNoticeVersion) != "" &&
-		len(command.PrivacyNoticeVersion) <= 100 &&
-		validIdempotencyKey(command.IdempotencyKey) &&
-		command.RequestID != ""
+		validNoticeVersion(command.PrivacyNoticeVersion) &&
+		validMutationMeta(command.IdempotencyKey, command.RequestID)
 }
 
 func validTransitionCommand(command TransitionCommand) bool {
 	if !validTransitionIdentity(command) {
 		return false
 	}
-	switch command.Kind {
-	case TransitionCheckIn, TransitionCheckOut:
-		return command.ReasonCode == "" && !command.Correction
-	case TransitionCancel:
+	validate, known := transitionReasonRules[command.Kind]
+	return known && validate(command)
+}
+
+var noShowReasons = map[string]bool{
+	"": true, "guest_absent": true, "accommodation_report": true,
+}
+
+// Each transition declares which reason codes it accepts. Check-in and
+// check-out carry none; cancel requires one from the closed catalogue.
+var transitionReasonRules = map[TransitionKind]func(TransitionCommand) bool{
+	TransitionCheckIn:  noReasonTransition,
+	TransitionCheckOut: noReasonTransition,
+	TransitionCancel: func(command TransitionCommand) bool {
 		return CancelReason(command.ReasonCode).Valid()
-	case TransitionNoShow:
-		return command.ReasonCode == "" ||
-			command.ReasonCode == "guest_absent" ||
-			command.ReasonCode == "accommodation_report"
-	default:
-		return false
-	}
+	},
+	TransitionNoShow: func(command TransitionCommand) bool {
+		return noShowReasons[command.ReasonCode]
+	},
+}
+
+func noReasonTransition(command TransitionCommand) bool {
+	return command.ReasonCode == "" && !command.Correction
 }
 
 func validTransitionIdentity(command TransitionCommand) bool {
