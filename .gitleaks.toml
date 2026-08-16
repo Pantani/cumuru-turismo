@@ -4,6 +4,16 @@ title = "Cumuru secret scanning"
 useDefault = true
 
 [[allowlists]]
+description = "runtime.env.example carries only SUBSTITUIR-POR placeholders"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^deploy/runtime\.env\.example$''']
+regexTarget = "match"
+# The base64 prefix decodes to "SUBSTITUIR-POR-": a real key pasted into the
+# template does not match it, so the scan still fails closed on the file.
+regexes = ['''U1VCU1RJVFVJUi1QT1It[A-Za-z0-9+/=]*''']
+
+[[allowlists]]
 description = "Generated API image SHA references are not credentials"
 targetRules = ["generic-api-key"]
 condition = "AND"

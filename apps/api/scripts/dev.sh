@@ -10,9 +10,24 @@ set -eu
 
 target="${CUMURU_DEV_TARGET:-api}"
 interval="${CUMURU_DEV_POLL_INTERVAL:-2}"
-binary="/tmp/cumuru-${target}"
+# Not /tmp: the runtime services mount it as noexec tmpfs, and the overlay
+# inherits that mount, so a binary written there cannot be started.
+bin_dir="${CUMURU_DEV_BIN_DIR:-/home/cumuru/.cache/bin}"
+binary="${bin_dir}/cumuru-${target}"
 server_pid=""
 snapshot=""
+
+mkdir -p "${bin_dir}"
+
+# The binaries reject absent build metadata, so the reload loop stamps the same
+# fields the release build stamps. The values name this stack explicitly: a
+# /platform/build response from here must not be mistaken for a real build.
+build_version="${CUMURU_BUILD_VERSION:-0.0.0-dev}"
+build_revision="${CUMURU_BUILD_REVISION:-development}"
+build_time="${CUMURU_BUILD_TIME:-1970-01-01T00:00:00Z}"
+ldflags="-X main.version=${build_version}"
+ldflags="${ldflags} -X main.revision=${build_revision}"
+ldflags="${ldflags} -X main.builtAt=${build_time}"
 
 log() {
   echo "[dev-${target}] $1"
@@ -44,7 +59,7 @@ stop_process() {
 # must not take the whole stack down while it is being typed.
 start_process() {
   log "compilando…"
-  if ! go build -o "${binary}" "./cmd/${target}"; then
+  if ! go build -ldflags="${ldflags}" -o "${binary}" "./cmd/${target}"; then
     log "falha ao compilar; mantendo o processo anterior."
     return 0
   fi

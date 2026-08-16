@@ -16,6 +16,29 @@ services:
       - no-new-privileges:true
     cap_drop: [ALL]
 
+  # Runs after the migrations and before the API, and exits. It stays inert
+  # unless runtime.env turns SEED_ENABLED on, and it never resets a password the
+  # administrator already rotated.
+  seed:
+    image: ${CUMURU_API_IMAGE:?CUMURU_API_IMAGE is required}
+    command: ["/app/seed"]
+    env_file:
+      - ./runtime.env
+    volumes:
+      - ./seeds:/seeds:ro
+      - ./secrets/rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks: [private]
+
   api:
     image: ${CUMURU_API_IMAGE:?CUMURU_API_IMAGE is required}
     command: ["/app/api"]

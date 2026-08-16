@@ -48,7 +48,8 @@ export DOCKER_SERVICES DOCKER_LOG_TAIL
 	phase3-integration phase3-proxy-test \
 	phase4-integration phase4-proxy-test phase4-full-stack phase4-benchmark \
 	local-demo-test local-demo-e2e phase4-remediation \
-	docker-dev docker-dev-down docker-dev-logs docker-dev-status seed \
+	docker-dev docker-dev-down docker-dev-logs docker-dev-status \
+	docker-rm docker-renew prod-config-check \
 	post-task-quality lint-shell lint lint-fix images sbom image-sbom scanner-images scan image-scan compose-config up down migrate-up \
 	migrate-down-local smoke ci
 
@@ -461,6 +462,21 @@ docker-dev: ## Sobe a stack Docker com hot reload em 127.0.0.1:5173; projeto cum
 		--wait-timeout 300
 	@echo "hot reload em http://127.0.0.1:5173"
 
+prod-config-check: ## Valida RUNTIME_ENV com os loaders reais de produção; não abre socket nem banco
+	@set -eu; \
+	runtime_env="$(RUNTIME_ENV)"; \
+	test -n "$$runtime_env" || { \
+		echo "RUNTIME_ENV is required" >&2; exit 2; \
+	}; \
+	test -f "$$runtime_env" || { \
+		echo "RUNTIME_ENV file not found: $$runtime_env" >&2; exit 2; \
+	}; \
+	case "$$runtime_env" in \
+		/*) target="$$runtime_env" ;; \
+		*) target="$$PWD/$$runtime_env" ;; \
+	esac; \
+	go -C apps/api run ./cmd/configcheck "$$target"
+
 docker-dev-down: ## Para a stack de hot reload; preserva volumes e a stack estática
 	@"$(WITH_BUILD_METADATA)" $(DEV_COMPOSE) down --remove-orphans
 
@@ -487,6 +503,15 @@ docker-up: ## Alias não destrutivo de up
 
 docker-down: ## Alias não destrutivo de down; preserva volumes
 	@$(MAKE) --no-print-directory down
+
+docker-rm: ## DESTRUTIVO: derruba as duas stacks locais e apaga volumes, banco incluído
+	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) down --remove-orphans --volumes
+	@"$(WITH_BUILD_METADATA)" $(DEV_COMPOSE) down --remove-orphans --volumes
+
+docker-renew: ## DESTRUTIVO: docker-rm seguido de up com rebuild das imagens
+	@$(MAKE) --no-print-directory docker-rm
+	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) build --no-cache
+	@$(MAKE) --no-print-directory up
 
 docker-status: ## Mostra status dos DOCKER_SERVICES validados ou de toda a stack
 	@set -eu; \

@@ -20,6 +20,9 @@ services:
     command: !override ["/bin/sh", "/usr/local/bin/dev.sh"]
     environment:
       CUMURU_DEV_TARGET: api
+      CUMURU_BUILD_VERSION: "${CUMURU_BUILD_VERSION:?build metadata wrapper is required}"
+      CUMURU_BUILD_REVISION: "${CUMURU_BUILD_REVISION:?build metadata wrapper is required}"
+      CUMURU_BUILD_TIME: "${CUMURU_BUILD_TIME:?build metadata wrapper is required}"
       # The invite links and the CORS allowlist must name the port the operator
       # actually has open, otherwise a link opened from the dev server lands on
       # the static stack.
@@ -40,6 +43,9 @@ services:
     command: !override ["/bin/sh", "/usr/local/bin/dev.sh"]
     environment:
       CUMURU_DEV_TARGET: worker
+      CUMURU_BUILD_VERSION: "${CUMURU_BUILD_VERSION:?build metadata wrapper is required}"
+      CUMURU_BUILD_REVISION: "${CUMURU_BUILD_REVISION:?build metadata wrapper is required}"
+      CUMURU_BUILD_TIME: "${CUMURU_BUILD_TIME:?build metadata wrapper is required}"
     read_only: !override false
     volumes:
       - ./apps/api:/src:ro
@@ -60,6 +66,21 @@ services:
       - "127.0.0.1:5173:5173"
     read_only: !override false
     tmpfs: !override []
+    # The inherited check targets the Nginx port and needs curl; this image has
+    # neither. Going through /api/v1 proves the dev server and its proxy to the
+    # API in the same probe.
+    healthcheck: !override
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:5173/api/v1/public/summary')
+          .then((response) => process.exit(response.ok ? 0 : 1))
+          .catch(() => process.exit(1))
+      interval: 2s
+      timeout: 5s
+      retries: 60
     volumes:
       - ./apps/web:/src/apps/web
       - web-node-modules:/src/node_modules

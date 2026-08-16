@@ -92,6 +92,61 @@ PITR, RPO de 15 minutos, RTO de 4 horas, política de retenção/custódia,
 reaplicação de exclusões nem exercício institucional. Esses requisitos
 continuam bloqueados até existirem provedor, responsáveis e evidências reais.
 
+## Ambientes, semeadura e hot reload
+
+Três stacks locais, todas sobre `compose.yaml`:
+
+- `make up`: stack estática comprovada em `127.0.0.1:4173`, com Nginx servindo o
+  build e as fixtures do `local-demo`. PostgreSQL publica em
+  `127.0.0.1:${POSTGRES_HOST_PORT:-5433}`;
+- `make docker-dev`: stack de hot reload em `127.0.0.1:5173`, projeto Compose
+  `cumuru-dev`, subnet `172.30.8.0/24` e banco não publicado, para conviver com
+  a estática. O web roda o Vite com HMR sobre `apps/web` montado; API e worker
+  usam `apps/api/scripts/dev.sh`, que compara checksums a cada dois segundos,
+  recompila e reinicia o processo. Uma compilação que falha preserva o processo
+  anterior. `make docker-dev-logs DOCKER_DEV_SERVICES="api web"` acompanha;
+- `deploy/compose.production.yaml`: runtime remoto, sem banco local.
+
+`make docker-rm` derruba as duas stacks locais **apagando os volumes**, banco
+incluído; `make docker-renew` faz isso e reconstrói as imagens antes de subir de
+novo. Ambos são destrutivos e só recuperam o que o seeder e as fixtures sabem
+recriar.
+
+A stack de produção não é executável nesta máquina, e isso é deliberado:
+`APP_ENV=production` exige `sslmode=verify-full`, `OIDC_MODE=real` com discovery
+no boot, endpoint OTLP e origens HTTPS. Em vez de afrouxar essas regras para
+caber num laptop, `make prod-config-check RUNTIME_ENV=<arquivo>` carrega o
+arquivo pelos loaders reais de `api`, `worker` e `seed` e falha no primeiro
+valor recusado, sem abrir socket nem tocar no banco. `deploy/runtime.env.example`
+documenta as chaves; a mesma checagem roda dentro do container por
+`/app/configcheck`. O arquivo é lido pelo próprio binário, e não por `source`,
+porque o shell quebraria a DSN no `&` que separa `sslmode` de `sslrootcert` e
+validaria um valor truncado.
+
+O binário `/app/seed` faz a semeadura de bootstrap dos três ambientes e é
+governado por duas variáveis:
+
+- `SEED_ENABLED`: verdadeiro por padrão em `local|test`, falso em `staging|production`;
+- `SEED_PROFILE`: `admin+demo` por padrão em `local|test`, `admin` nos demais.
+  `admin+demo` é recusado fora de `local|test`; `none` deixa o seeder inerte.
+
+Com um perfil ativo o seeder exige `SEED_ADMIN_EMAIL` e `SEED_ADMIN_PASSWORD` e
+falha fechado sem eles, em vez de criar conta com credencial adivinhável. Fora
+de `local|test` a conta nasce com `password_must_change`, e
+`SEED_ADMIN_MUST_CHANGE_PASSWORD=false` é recusado ali: enquanto a marca existir
+a sessão só alcança `POST /api/v1/auth/password`, `POST /api/v1/auth/logout` e
+`GET /api/v1/auth/session`; qualquer rota com escopo responde 401. A troca
+revoga todas as sessões abertas com a senha anterior, inclusive a que pediu a
+troca.
+
+Reexecutar o seeder é idempotente e **não** repõe a senha de bootstrap: o
+`ON CONFLICT` da conta atualiza apenas nome e escopos. Os estabelecimentos vêm
+de um catálogo versionado apontado por `SEED_ACCOMMODATION_CATALOG`, cujo
+modelo é `seeds/accommodations.example.json`. O arquivo declara os próprios
+identificadores, então uma reexecução atualiza as mesmas linhas em vez de criar
+estabelecimentos duplicados; o decodificador é estrito e recusa chave
+desconhecida, categoria fora da constraint e identificador repetido.
+
 ## Infraestrutura e deploy
 
 - `terraform/bootstrap-state`: backend S3/KMS do state;
