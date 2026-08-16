@@ -1,10 +1,10 @@
 {
   "organization": {
-    "id": "019fae10-0000-7000-8000-000000000001",
+    "id": "019fb000-0000-7000-8000-000000000001",
     "name": "Nome da organização responsável pelo observatório",
     "accommodations": [
       {
-        "id": "019fae11-0000-7000-8000-000000000001",
+        "id": "019fb001-0000-7000-8000-000000000001",
         "name": "Nome do estabelecimento",
         "category": "formal_lodging",
         "capacity": 24,
@@ -12,7 +12,7 @@
         "cadastur_id": null
       },
       {
-        "id": "019fae11-0000-7000-8000-000000000002",
+        "id": "019fb001-0000-7000-8000-000000000002",
         "name": "Outro estabelecimento",
         "category": "seasonal_rental",
         "capacity": 8,

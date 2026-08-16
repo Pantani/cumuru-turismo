@@ -48,8 +48,9 @@ export DOCKER_SERVICES DOCKER_LOG_TAIL
 	phase3-integration phase3-proxy-test \
 	phase4-integration phase4-proxy-test phase4-full-stack phase4-benchmark \
 	local-demo-test local-demo-e2e phase4-remediation \
+	phase7-integration phase7-full-stack phase7-build \
 	docker-dev docker-dev-down docker-dev-logs docker-dev-status \
-	docker-rm docker-renew prod-config-check \
+	docker-rm docker-renew seed prod-config-check \
 	post-task-quality lint-shell lint lint-fix images sbom image-sbom scanner-images scan image-scan compose-config up down migrate-up \
 	migrate-down-local smoke ci
 
@@ -154,6 +155,18 @@ phase4-remediation: ## Executa o build reproduzível de remediação do runtime 
 	@$(MAKE) --no-print-directory generated-check
 	@$(MAKE) --no-print-directory local-demo-test
 	@$(MAKE) --no-print-directory phase4-full-stack
+	@$(MAKE) --no-print-directory local-demo-e2e
+
+phase7-integration: ## Executa a integração PostgreSQL da Fase 7 via Docker
+	@bash deploy/scripts/test-phase7-integration.sh
+
+phase7-full-stack: ## Testa a stack completa da Fase 7 via Docker
+	@bash deploy/scripts/test-phase7-full-stack.sh
+
+phase7-build: ## Executa o build reproduzível da Fase 7 de autoatendimento
+	@$(MAKE) --no-print-directory generated-check
+	@$(MAKE) --no-print-directory phase7-integration
+	@$(MAKE) --no-print-directory phase7-full-stack
 	@$(MAKE) --no-print-directory local-demo-e2e
 
 build: ## Compila API, worker e web
@@ -461,6 +474,11 @@ docker-dev: ## Sobe a stack Docker com hot reload em 127.0.0.1:5173; projeto cum
 	@"$(WITH_BUILD_METADATA)" $(DEV_COMPOSE) up --build --detach --wait \
 		--wait-timeout 300
 	@echo "hot reload em http://127.0.0.1:5173"
+
+seed: ## Semeia administrador e catálogo na stack local; idempotente, não repõe senha trocada
+	@# Sem --no-deps: o serviço espera migrate concluir, e migrate espera o banco
+	@# saudável. Sem essa espera o Ping de três segundos falha logo após um up.
+	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) run --rm seed
 
 prod-config-check: ## Valida RUNTIME_ENV com os loaders reais de produção; não abre socket nem banco
 	@set -eu; \

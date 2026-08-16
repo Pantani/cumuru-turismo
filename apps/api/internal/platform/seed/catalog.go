@@ -24,6 +24,13 @@ var validCategories = map[string]bool{
 	"unclassified":    true,
 }
 
+// reservedIDPrefixes are the identifier ranges the local-demo fixtures own:
+// 019fae10 for its organization, 019fae11 for its accommodations and 019fae12
+// for its memberships. A catalog that reuses one of them overwrites a fixture
+// row, and the next local-demo run fails with a conflict it cannot resolve —
+// which is exactly the mistake this check turns into a startup error.
+var reservedIDPrefixes = []string{"019fae10", "019fae11", "019fae12"}
+
 // catalogFile is the on-disk shape of a versioned establishment catalog. Every
 // identifier is declared by the file so a re-run updates the same rows.
 type catalogFile struct {
@@ -70,11 +77,9 @@ func loadCatalog(path string) (store.SeedOrganization, error) {
 func convertCatalog(
 	organization catalogOrganization,
 ) (store.SeedOrganization, error) {
-	id, err := uuid.Parse(strings.TrimSpace(organization.ID))
+	id, err := parseCatalogID(organization.ID)
 	if err != nil {
-		return store.SeedOrganization{}, errors.New(
-			"catalog organization id is not a uuid",
-		)
+		return store.SeedOrganization{}, fmt.Errorf("catalog organization id: %w", err)
 	}
 	if strings.TrimSpace(organization.Name) == "" {
 		return store.SeedOrganization{}, errors.New(
@@ -115,10 +120,10 @@ func convertAccommodations(
 func convertAccommodation(
 	entry catalogAccommodation,
 ) (store.SeedAccommodation, error) {
-	id, err := uuid.Parse(strings.TrimSpace(entry.ID))
+	id, err := parseCatalogID(entry.ID)
 	if err != nil {
 		return store.SeedAccommodation{}, fmt.Errorf(
-			"catalog accommodation %q has no valid id", entry.Name,
+			"catalog accommodation %q: %w", entry.Name, err,
 		)
 	}
 	if err := validateAccommodationFields(entry); err != nil {
@@ -132,6 +137,22 @@ func convertAccommodation(
 		Capacity:       entry.Capacity,
 		PublicAreaCode: entry.PublicAreaCode,
 	}, nil
+}
+
+func parseCatalogID(value string) (uuid.UUID, error) {
+	id, err := uuid.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return uuid.Nil, errors.New("not a uuid")
+	}
+	text := id.String()
+	for _, prefix := range reservedIDPrefixes {
+		if strings.HasPrefix(text, prefix) {
+			return uuid.Nil, fmt.Errorf(
+				"%s is reserved for the local-demo fixtures", text,
+			)
+		}
+	}
+	return id, nil
 }
 
 func validateAccommodationFields(entry catalogAccommodation) error {

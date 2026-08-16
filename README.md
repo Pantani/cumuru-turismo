@@ -261,9 +261,8 @@ custódia, retenção, reaplicação de exclusões ou restore institucional.
 ## Plataforma da Fase 2 — contrato e onboarding local
 
 A baseline `000001_initial_schema` materializa acomodações, memberships,
-estadias, grupos, convites e comandos de estado. A migration incremental
-`000002_accommodation_onboarding` acrescenta o onboarding local contratado na
-versão `0.6.0`, sem exigir CNPJ, CPF, Cadastur ou chave FNRH. Consumidores só
+estadias, grupos, convites, comandos de estado e o onboarding local contratado
+na versão `0.6.0`, sem exigir CNPJ, CPF, Cadastur ou chave FNRH. Consumidores só
 podem ser considerados integrados depois do QA cruzar OpenAPI, PostgreSQL, Go,
 cliente gerado e React.
 
@@ -326,10 +325,11 @@ projeto descartável, valida timezone, service worker, proxy e rota autenticada,
 derruba/restaura a API para o canário de logs e confirma a remoção de
 containers, rede e volume.
 
-A cadeia pré-lançamento original foi consolidada em `000001_initial_schema`.
-O onboarding local é a migration incremental `000002_accommodation_onboarding`;
-a suíte exige os dois pares e exercita fresh install, upgrade, rollback para a
-baseline, reaplicação e rejeição fail-closed de fixture reservada divergente.
+Toda a cadeia pré-lançamento — incluindo onboarding local, autenticação por
+e-mail e senha e rotação da senha semeada — está consolidada no único par
+`000001_initial_schema`. A suíte exige exatamente esse par e exercita
+`zero → 1 → zero → 1`, grants, categorias fechadas e isolamento de tenant
+fictício.
 
 ## Plataforma da Fase 3 — contrato congelado
 

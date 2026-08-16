@@ -1,3 +1,74 @@
+-- Consolidated from 000004_admin_seed_password_rotation.down.sql (second pre-launch wave).
+BEGIN;
+
+REVOKE UPDATE (
+  password_hash,
+  password_changed_at,
+  password_must_change
+) ON TABLE auth.accounts FROM app_runtime;
+
+ALTER TABLE auth.accounts
+  DROP COLUMN password_must_change;
+
+COMMIT;
+
+-- Consolidated from 000003_local_password_auth.down.sql (second pre-launch wave).
+BEGIN;
+
+DROP TABLE auth.sessions;
+DROP TABLE auth.accounts;
+DROP SCHEMA auth;
+
+COMMIT;
+
+-- Consolidated from 000002_accommodation_onboarding.down.sql (second pre-launch wave).
+BEGIN;
+
+REVOKE INSERT (
+  id,
+  name
+) ON TABLE core.organizations
+FROM app_runtime;
+
+REVOKE INSERT (
+  id,
+  organization_id,
+  name,
+  category,
+  status,
+  capacity,
+  onboarding_submission_id
+) ON TABLE core.accommodations
+FROM app_runtime;
+
+GRANT UPDATE (cadastur_id) ON TABLE core.accommodations
+TO app_runtime;
+
+REVOKE SELECT (
+  id,
+  name,
+  legal_name,
+  created_at,
+  updated_at,
+  version
+) ON TABLE core.organizations
+FROM app_runtime, worker_runtime;
+
+GRANT SELECT ON TABLE core.organizations
+TO app_runtime, worker_runtime;
+
+DROP INDEX core.accommodations_onboarding_submission_idx;
+
+ALTER TABLE core.accommodations
+  DROP CONSTRAINT accommodations_category_valid;
+
+ALTER TABLE core.accommodations
+  DROP COLUMN onboarding_submission_id;
+
+COMMENT ON COLUMN core.accommodations.cadastur_id IS NULL;
+
+COMMIT;
+
 -- Consolidated from 000019_select_single_current_quality_snapshot.down.sql.
 BEGIN;
 

@@ -9,7 +9,7 @@ services:
         BUILD_REVISION: "${CUMURU_BUILD_REVISION:?build metadata wrapper is required}"
         BUILD_TIME: "${CUMURU_BUILD_TIME:?build metadata wrapper is required}"
     command: ["/app/local-demo"]
-    environment:
+    environment: &local-demo-environment
       APP_ENV: local
       OIDC_MODE: fake
       OIDC_ISSUER: https://oidc.invalid/local
@@ -54,6 +54,41 @@ services:
       PHASE4_PRE_REGISTERED_WEIGHT: "0.80"
       PHASE4_INCREMENTAL_INTERVAL: 15m
       PHASE4_FULL_RECONCILIATION_INTERVAL: 24h
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs: [/tmp]
+    restart: "no"
+    networks: [private]
+
+  # Semeadura de bootstrap sob demanda: `make seed`. Fica fora do perfil padrão
+  # porque `make up` já aplica as fixtures pelo local-demo; este serviço existe
+  # para exercitar localmente o mesmo binário que staging e produção executam.
+  seed:
+    profiles: [seed]
+    image: "cumuru-api:${CUMURU_IMAGE_TAG:-0.2.0}"
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        BUILD_VERSION: "${CUMURU_BUILD_VERSION:?build metadata wrapper is required}"
+        BUILD_REVISION: "${CUMURU_BUILD_REVISION:?build metadata wrapper is required}"
+        BUILD_TIME: "${CUMURU_BUILD_TIME:?build metadata wrapper is required}"
+    command: ["/app/seed"]
+    environment:
+      <<: *local-demo-environment
+      SEED_ENABLED: "true"
+      SEED_PROFILE: "${SEED_PROFILE:-admin}"
+      SEED_ADMIN_EMAIL: "${SEED_ADMIN_EMAIL:?SEED_ADMIN_EMAIL is required}"
+      SEED_ADMIN_PASSWORD: "${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD is required}"
+      SEED_ADMIN_DISPLAY_NAME: "${SEED_ADMIN_DISPLAY_NAME:-Administração Cumuru}"
+      SEED_ADMIN_MUST_CHANGE_PASSWORD: "${SEED_ADMIN_MUST_CHANGE_PASSWORD:-false}"
+      # Caminho dentro do container: o catálogo é montado abaixo, então o valor
+      # de host presente no .env não vale aqui.
+      SEED_ACCOMMODATION_CATALOG: "/seeds/${SEED_LOCAL_CATALOG:-accommodations.example.json}"
+    volumes:
+      - ./seeds:/seeds:ro
     depends_on:
       migrate:
         condition: service_completed_successfully

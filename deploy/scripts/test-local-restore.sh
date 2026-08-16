@@ -187,7 +187,7 @@ VALUES (
 SQL
 
 source_fingerprint="$(database_fingerprint "${SOURCE_DATABASE}")"
-test "${source_fingerprint}" = "2:false:1:1:1:1:6:4"
+test "${source_fingerprint}" = "1:false:1:1:1:1:6:4"
 
 "${COMPOSE[@]}" exec -T \
   -e "PGPASSWORD=${ADMIN_PASSWORD}" \

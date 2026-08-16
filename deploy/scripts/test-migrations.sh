@@ -88,21 +88,12 @@ expect_psql_failure() {
   fi
 }
 
-expect_migrate_failure() {
-  local description="$1"
-  shift
-  if run_migrate "$@" >/dev/null 2>&1; then
-    echo "${description}" >&2
-    exit 1
-  fi
-}
-
 migration_files="$(
   find "${ROOT_DIR}/apps/api/migrations" \
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_accommodation_onboarding.down.sql\n000002_accommodation_onboarding.up.sql\n000003_local_password_auth.down.sql\n000003_local_password_auth.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
@@ -145,37 +136,34 @@ VALUES
     '019fae11-0000-7000-8000-000000000001',
     '019fae10-0000-7000-8000-000000000001',
     'Pousada Farol Fictícia',
-    'pousada',
+    'formal_lodging',
     'active'
   ),
   (
     '019fae11-0000-7000-8000-000000000002',
     '019fae10-0000-7000-8000-000000000001',
     'Hospedaria Rio Fictícia',
-    'hospedaria',
+    'formal_lodging',
     'active'
   ),
   (
     '019fae11-0000-7000-8000-000000000003',
     '019fae10-0000-7000-8000-000000000001',
     'Chalés Areia Fictícios',
-    'chale',
+    'seasonal_rental',
     'active'
   ),
   (
     '019fae11-0000-7000-8000-000000000004',
     '019fae10-0000-7000-8000-000000000001',
     'Casa Silenciosa Fictícia',
-    'casa',
-    'active'
-  ),
-  (
-    '00000000-0000-7000-8000-000000000099',
-    '00000000-0000-7000-8000-000000000001',
-    'Categoria desconhecida deve bloquear',
-    'legacy-unknown',
+    'family_hosting',
     'active'
   );
+
+UPDATE core.accommodations
+SET cadastur_id = 'CADASTUR-FICTICIO-NAO-VALIDO'
+WHERE id = '019fae11-0000-7000-8000-000000000001';
 
 INSERT INTO core.memberships (
   id,
@@ -220,45 +208,12 @@ VALUES (
 );
 SQL
 
-if run_migrate up 1 >/dev/null 2>&1; then
-  echo "migration 000002 unexpectedly inferred an unknown legacy category" >&2
-  exit 1
-fi
-
-failed_upgrade_state="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
-)"
-test "${failed_upgrade_state}" = "2:true"
-
-run_migrate force 1
-psql_as cumuru_migration cumuru-local-migration-only \
-  --command="DELETE FROM core.accommodations
-    WHERE id = '00000000-0000-7000-8000-000000000099'"
-run_migrate up 1
-
-upgraded_migration_state="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
-)"
-test "${upgraded_migration_state}" = "2:false"
-
-run_migrate up 1
-auth_migration_state="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
-)"
-test "${auth_migration_state}" = "3:false"
-
 # The application role reads the hash to verify a login; no other role may.
 auth_hash_grants="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="
-      SELECT coalesce(string_agg(grantee, ',' ORDER BY grantee), 'none')
+      SELECT coalesce(string_agg(DISTINCT grantee, ',' ORDER BY grantee), 'none')
       FROM information_schema.column_privileges
       WHERE table_schema = 'auth'
         AND table_name = 'accounts'
@@ -293,19 +248,6 @@ auth_digest_constraint="$(
     "
 )"
 test "${auth_digest_constraint}" = "1"
-
-run_migrate down 1
-auth_schema_after_down="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="
-      SELECT count(*)
-      FROM information_schema.schemata
-      WHERE schema_name = 'auth'
-    "
-)"
-test "${auth_schema_after_down}" = "0"
-
 
 fixture_categories_and_cadastur="$(
   psql_as cumuru_migration cumuru-local-migration-only \
@@ -1523,61 +1465,6 @@ psql_as cumuru_migration cumuru-local-migration-only \
     WHERE operation_key LIKE 'cleanupExpired%';
   "
 
-psql_as cumuru_migration cumuru-local-migration-only \
-  --command="UPDATE core.accommodations
-    SET name = 'Pousada Farol divergente'
-    WHERE id = '019fae11-0000-7000-8000-000000000001'"
-
-expect_migrate_failure \
-  "migration 000002 down unexpectedly accepted a divergent reserved fixture" \
-  down 1
-
-failed_down_state="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
-)"
-test "${failed_down_state}" = "1:true"
-
-run_migrate force 2
-psql_as cumuru_migration cumuru-local-migration-only \
-  --command="UPDATE core.accommodations
-    SET name = 'Pousada Farol Fictícia'
-    WHERE id = '019fae11-0000-7000-8000-000000000001'"
-
-run_migrate down 1
-down_to_baseline_state="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
-)"
-test "${down_to_baseline_state}" = "1:false"
-
-onboarding_columns_after_down="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="
-      SELECT count(*)
-      FROM information_schema.columns
-      WHERE table_schema = 'core'
-        AND table_name = 'accommodations'
-        AND column_name = 'onboarding_submission_id'
-    "
-)"
-test "${onboarding_columns_after_down}" = "0"
-
-restored_fixture_categories="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="
-      SELECT string_agg(category, ',' ORDER BY id)
-      FROM core.accommodations
-      WHERE organization_id =
-        '019fae10-0000-7000-8000-000000000001'
-    "
-)"
-test "${restored_fixture_categories}" = "pousada,hospedaria,chale,casa"
-
 run_migrate down 1
 schemas_left="$(
   psql_as cumuru_migration cumuru-local-migration-only \
@@ -1591,7 +1478,8 @@ schemas_left="$(
         'survey',
         'analytics',
         'public_data',
-        'platform'
+        'platform',
+        'auth'
       )
     "
 )"
@@ -1603,6 +1491,6 @@ final_version="$(
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${final_version}" = "3:false"
+test "${final_version}" = "1:false"
 
-echo "migrations zero-to-latest, 1-to-3 upgrade, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
+echo "migrations zero-to-one, rollback to zero, reapply, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"

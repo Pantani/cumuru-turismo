@@ -31,14 +31,15 @@ func main() {
 	)
 	defer stop()
 	if err := seed.Run(ctx, cfg, os.Stdout); err != nil {
-		// The reason is logged as a fixed code: the failure path must never echo
-		// a value that could carry the bootstrap secret.
+		// The reason is safe to log: every error the seeder builds names the step
+		// that failed and never carries a credential, and an operator debugging a
+		// failed bootstrap needs to know which step it was.
 		logger.Error(
 			"seed failed",
 			"error_code",
 			"seed_failed",
 			"reason",
-			"bootstrap_failed",
+			err.Error(),
 		)
 		os.Exit(1)
 	}

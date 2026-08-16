@@ -9,11 +9,11 @@ import (
 
 const validCatalog = `{
   "organization": {
-    "id": "019fae10-0000-7000-8000-000000000001",
+    "id": "019fb000-0000-7000-8000-000000000001",
     "name": "Organização de exemplo",
     "accommodations": [
       {
-        "id": "019fae11-0000-7000-8000-000000000001",
+        "id": "019fb001-0000-7000-8000-000000000001",
         "name": "Pousada de exemplo",
         "category": "formal_lodging",
         "capacity": 24,
@@ -58,7 +58,7 @@ func TestLoadCatalogRejectsMalformedInput(t *testing.T) {
 		},
 		{
 			name:    "organization id is not a uuid",
-			content: strings.Replace(validCatalog, "019fae10-0000-7000-8000-000000000001", "primeira", 1),
+			content: strings.Replace(validCatalog, "019fb000-0000-7000-8000-000000000001", "primeira", 1),
 			wantErr: "organization id",
 		},
 		{
@@ -73,7 +73,7 @@ func TestLoadCatalogRejectsMalformedInput(t *testing.T) {
 		},
 		{
 			name:    "no accommodation",
-			content: `{"organization":{"id":"019fae10-0000-7000-8000-000000000001","name":"Vazia","accommodations":[]}}`,
+			content: `{"organization":{"id":"019fb000-0000-7000-8000-000000000001","name":"Vazia","accommodations":[]}}`,
 			wantErr: "no accommodation",
 		},
 	}
@@ -100,7 +100,7 @@ func TestLoadCatalogRejectsRepeatedIdentifier(t *testing.T) {
 		`"cadastur_id": "EXEMPLO"
       },
       {
-        "id": "019fae11-0000-7000-8000-000000000001",
+        "id": "019fb001-0000-7000-8000-000000000001",
         "name": "Outra pousada",
         "category": "camping",
         "capacity": 10,
@@ -112,6 +112,23 @@ func TestLoadCatalogRejectsRepeatedIdentifier(t *testing.T) {
 	_, err := loadCatalog(writeCatalog(t, repeated))
 	if err == nil || !strings.Contains(err.Error(), "repeats accommodation") {
 		t.Fatalf("loadCatalog() error = %v, want repeated identifier", err)
+	}
+}
+
+// Reusing a fixture range silently overwrites a local-demo row and breaks the
+// next demo run, so the catalog is refused while it is read.
+func TestLoadCatalogRejectsReservedIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	reserved := strings.Replace(
+		validCatalog,
+		"019fb001-0000-7000-8000-000000000001",
+		"019fae11-0000-7000-8000-000000000001",
+		1,
+	)
+	_, err := loadCatalog(writeCatalog(t, reserved))
+	if err == nil || !strings.Contains(err.Error(), "reserved for the local-demo") {
+		t.Fatalf("loadCatalog() error = %v, want reserved range", err)
 	}
 }
 

@@ -70,6 +70,25 @@ Depois que a primeira baseline for lançada ou aplicada em ambiente
 persistente, `000001` torna-se imutável. Toda evolução posterior volta a usar
 migrations append-only a partir de `000002`.
 
+### Segunda onda de consolidação
+
+Nenhum banco persistente foi montado ou lançado depois da primeira onda, e a
+cadeia voltou a crescer durante o desenvolvimento até `000004`. A mesma decisão
+é reaplicada: `000002_accommodation_onboarding`,
+`000003_local_password_auth` e `000004_admin_seed_password_rotation` passam a
+integrar o par `000001_initial_schema`, na mesma ordem no `up` e em ordem
+reversa no `down`, com os comentários de proveniência marcados como
+`second pre-launch wave`.
+
+Só dois blocos foram omitidos, e ambos migram dados preexistentes, não schema:
+a guarda `DO` de categoria legada e o backfill `UPDATE` de
+`000002_accommodation_onboarding`, mais o `DO` simétrico do `down`
+correspondente. Em uma baseline única `core.accommodations` é criada vazia no
+mesmo arquivo e o CHECK `accommodations_category_valid` passa a valer desde a
+instalação, de modo que nenhuma linha legada pode existir para ser convertida.
+Os seeds versionados já usam as categorias finais. O schema final, os grants e
+os comentários permanecem idênticos.
+
 ## Consequências
 
 - instalações novas executam uma única versão de migration;
