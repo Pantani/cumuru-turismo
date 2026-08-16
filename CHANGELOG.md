@@ -26,7 +26,16 @@ arquivo.
   baixado;
 - grade, eixo de valores e rótulos de data no gráfico de presença, com escala
   arredondada para intervalos legíveis, e barra proporcional por categoria nas
-  preferências agregadas.
+  preferências agregadas;
+- leitura dia a dia no gráfico de presença por ponteiro e por teclado (setas,
+  `Home`, `End` e `Esc`), com tooltip e leitura viva equivalentes, faixa de fim
+  de semana, linha de média da janela e rótulos de data intermediários;
+- seis indicadores derivados da janela exibida — média diária, dia mais cheio,
+  dia mais vazio, tendência entre metades iguais, total acumulado e dias
+  publicados —, cada um com a dica que explica o que entra na conta; dias
+  protegidos são pulados, nunca contados como zero;
+- coluna "ante a média" na série dia a dia e dica de interpretação nos cartões
+  de presença de hoje e de pico previsto.
 
 ### Alterado
 

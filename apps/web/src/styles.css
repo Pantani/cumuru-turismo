@@ -164,6 +164,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible,
+[tabindex="0"]:focus-visible,
 [tabindex="-1"]:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 3px;
@@ -677,6 +678,57 @@ h3 {
   color: var(--ink-2);
   font-size: 0.88rem;
   font-weight: 550;
+}
+
+/* Dica de leitura: sempre visível, nunca escondida atrás de hover — o número
+   sozinho não diz o que entra na conta nem o que fica de fora. */
+.metric-hint {
+  margin: 0.15rem 0 0;
+  max-width: 46ch;
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+/* Cartões independentes em vez de uma malha de 1px: com seis indicadores a
+   última linha fica incompleta, e uma célula vazia de malha lê como defeito. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
+  gap: 0.75rem;
+  margin: 1.35rem 0 1.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.stat-tile {
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.stat-value {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0;
+  font-family: var(--font-num);
+  font-size: 1.15rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.stat-when {
+  color: var(--ink-3);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .analytics-section {
@@ -2003,8 +2055,56 @@ h3 {
   border-radius: var(--radius);
 }
 
+/* Âncora do tooltip: ele é posicionado em % da largura do próprio quadro. */
+.chart-frame {
+  position: relative;
+  min-width: 0;
+}
+
+.chart-tooltip {
+  position: absolute;
+  z-index: 2;
+  top: 0.6rem;
+  display: grid;
+  gap: 0.15rem;
+  max-width: 16rem;
+  padding: 0.6rem 0.75rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  transform: translateX(-50%);
+  pointer-events: none;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.chart-tooltip strong {
+  font-size: 0.84rem;
+  font-weight: 650;
+  text-transform: capitalize;
+}
+
+.chart-tooltip span {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Leitura viva do dia ativo: é por aqui que teclado e leitor de tela recebem
+   exatamente o que o tooltip mostra ao ponteiro. */
+.chart-readout {
+  margin: 0.65rem 0 0;
+  min-height: 2.4em;
+  color: var(--ink-2);
+  font-size: 0.84rem;
+  font-weight: 550;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
 .presence-chart figcaption {
-  margin-top: 0.65rem;
+  margin-top: 0.35rem;
   color: var(--ink-3);
   font-size: 0.8rem;
   line-height: 1.5;
@@ -2028,6 +2128,47 @@ h3 {
   font-family: var(--font-num);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+/* Fim de semana ao fundo: o ritmo semanal aparece sem precisar da tabela.
+   Opacidade sobre a tinta do tema, e não uma superfície fixa, para pesar o
+   mesmo no claro e no escuro. */
+.chart-weekend {
+  fill: var(--ink-3);
+  opacity: 0.09;
+}
+
+.chart-average {
+  stroke: var(--ink-3);
+  stroke-width: 1;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-average-label {
+  fill: var(--ink-3);
+  font-family: var(--font-num);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.chart-active {
+  fill: var(--brand);
+  opacity: 0.12;
+}
+
+.chart-active-line {
+  stroke: var(--brand-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Alvo de leitura em altura cheia: uma barra baixa é tão fácil de apontar
+   quanto uma alta. Precisa de fill transparent, não fill none, para receber
+   o ponteiro. */
+.chart-hit {
+  fill: transparent;
+  cursor: crosshair;
 }
 
 .chart-observed {
@@ -2077,6 +2218,17 @@ h3 {
 
 .legend-gap::before {
   background: var(--muted-mark);
+}
+
+.legend-average::before {
+  height: 0;
+  border-top: 2px dashed var(--ink-3);
+  border-radius: 0;
+}
+
+.legend-weekend::before {
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
 }
 
 .series-details summary,

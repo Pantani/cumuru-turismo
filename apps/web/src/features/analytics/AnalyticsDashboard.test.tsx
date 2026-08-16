@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -59,6 +59,18 @@ const recentPresence: Schemas["PublicPresence"] = {
       kind: "observed",
       status: "protected",
     },
+  ],
+};
+const richPresence: Schemas["PublicPresence"] = {
+  metadata,
+  window: "recent_30_days",
+  series: [
+    { date: "2026-07-20", kind: "observed", status: "published", value: 100 },
+    { date: "2026-07-21", kind: "observed", status: "published", value: 120 },
+    { date: "2026-07-22", kind: "observed", status: "published", value: 80 },
+    { date: "2026-07-23", kind: "observed", status: "protected" },
+    { date: "2026-07-24", kind: "observed", status: "published", value: 140 },
+    { date: "2026-07-25", kind: "observed", status: "published", value: 160 },
   ],
 };
 const forecastPresence: Schemas["PublicPresence"] = {
@@ -193,7 +205,7 @@ describe("dashboard público da Fase 4", () => {
     const user = userEvent.setup();
     const phase4Client = client();
     renderDashboard(phase4Client);
-    await screen.findByText("110 pessoas-dia");
+    await screen.findAllByText("110 pessoas-dia");
 
     await user.selectOptions(
       screen.getByRole("combobox", { name: "Janela da presença" }),
@@ -207,6 +219,53 @@ describe("dashboard público da Fase 4", () => {
     expect(screen.getAllByText("◇ Previsto").length).toBeGreaterThan(0);
     expect(screen.getByText("Dado indisponível")).toBeInTheDocument();
     expect(phase4Client.getPresence).toHaveBeenCalledWith("next_30_days");
+  });
+
+  it("deriva estatísticas da janela e explica cada indicador", async () => {
+    renderDashboard(
+      client({ getPresence: vi.fn(() => result(richPresence)) }),
+    );
+
+    const tiles = await screen.findByRole("list", {
+      name: "Estatísticas dos últimos 30 dias",
+    });
+    expect(within(tiles).getByText("120 pessoas-dia")).toBeInTheDocument();
+    expect(within(tiles).getByText("160 pessoas-dia")).toBeInTheDocument();
+    expect(within(tiles).getByText("80 pessoas-dia")).toBeInTheDocument();
+    expect(within(tiles).getByText("600 pessoas-dia")).toBeInTheDocument();
+    expect(
+      within(tiles).getByText("+50% ante os 2 dias anteriores"),
+    ).toBeInTheDocument();
+    expect(within(tiles).getByText("5 de 6")).toBeInTheDocument();
+    expect(
+      within(tiles).getByText(/Dias protegidos são pulados/),
+    ).toBeInTheDocument();
+  });
+
+  it("permite ler cada dia do gráfico pelo teclado", async () => {
+    const user = userEvent.setup();
+    renderDashboard(
+      client({ getPresence: vi.fn(() => result(richPresence)) }),
+    );
+
+    const chart = await screen.findByRole("img", {
+      name: /Série de 6 dias em pessoas-dia/,
+    });
+    chart.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Observado: 100 pessoas-dia. 17% abaixo da média da janela.",
+    );
+
+    await user.keyboard("{End}");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Observado: 160 pessoas-dia. 33% acima da média da janela.",
+    );
+
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "use as setas ← → do teclado",
+    );
   });
 
   it("anuncia carregamento e oferece retry seguro após erro", async () => {

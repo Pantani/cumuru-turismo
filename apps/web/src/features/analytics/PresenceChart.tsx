@@ -1,22 +1,24 @@
-import type { components } from "../../generated/schema";
+import { useState, type KeyboardEvent } from "react";
 
-type Schemas = components["schemas"];
-type PresencePoint =
-  | Schemas["ObservedPresencePoint"]
-  | Schemas["ForecastPresencePoint"];
+import { formatDay, slotLines } from "./presence-format";
+import { isWeekend, type PresencePoint, type SeriesStats } from "./presence-stats";
 
 interface PresenceChartProps {
   series: readonly PresencePoint[];
+  stats: SeriesStats;
 }
 
 const VIEW_WIDTH = 960;
-const VIEW_HEIGHT = 260;
+const VIEW_HEIGHT = 280;
 const PADDING_LEFT = 46;
 const PADDING_RIGHT = 12;
 const PADDING_TOP = 18;
-const BASELINE = VIEW_HEIGHT - 34;
+const BASELINE = VIEW_HEIGHT - 40;
 const GRID_STEPS = 4;
 const PLOT_WIDTH = VIEW_WIDTH - PADDING_LEFT - PADDING_RIGHT;
+const AXIS_LABELS = 6;
+/** Keeps the tooltip inside the frame when the active day sits at an edge. */
+const TOOLTIP_MARGIN_PERCENT = 12;
 
 const axisDateFormatter = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -83,6 +85,30 @@ function axisDate(value: string) {
   return axisDateFormatter.format(new Date(`${value}T12:00:00-03:00`));
 }
 
+function centreOf(slot: Plotted) {
+  return slot.x + slot.width / 2;
+}
+
+/** Weekends shaded behind the series: the weekly rhythm reads without a table. */
+function WeekendBands({ slots }: { slots: readonly Plotted[] }) {
+  return (
+    <g aria-hidden="true">
+      {slots
+        .filter((slot) => isWeekend(slot.point.date))
+        .map((slot) => (
+          <rect
+            className="chart-weekend"
+            key={slot.point.date}
+            x={slot.x}
+            y={PADDING_TOP}
+            width={slot.width}
+            height={BASELINE - PADDING_TOP}
+          />
+        ))}
+    </g>
+  );
+}
+
 /** Horizontal rules with their value, so a bar can be read without the table. */
 function ValueGrid({ bound }: { bound: number }) {
   const steps = Array.from({ length: GRID_STEPS + 1 }, (_, index) => index);
@@ -110,26 +136,52 @@ function ValueGrid({ bound }: { bound: number }) {
   );
 }
 
-/** Only the ends of the window are labelled; a tick per day would be noise. */
-function DateAxis({ slots }: { slots: readonly Plotted[] }) {
-  const first = slots[0];
-  const last = slots[slots.length - 1];
-  if (first === undefined || last === undefined) {
+/** The window average as a reference every bar can be compared against. */
+function AverageLine({
+  average,
+  bound,
+}: {
+  average: number | null;
+  bound: number;
+}) {
+  if (average === null) {
     return null;
   }
+  const y = scaleY(average, bound);
   return (
     <g aria-hidden="true">
-      <text className="chart-tick" x={PADDING_LEFT} y={BASELINE + 18}>
-        {axisDate(first.point.date)}
+      <line
+        className="chart-average"
+        x1={PADDING_LEFT}
+        y1={y}
+        x2={VIEW_WIDTH - PADDING_RIGHT}
+        y2={y}
+      />
+      <text className="chart-average-label" x={PADDING_LEFT + 6} y={y - 6}>
+        média {Math.round(average)}
       </text>
-      <text
-        className="chart-tick"
-        x={VIEW_WIDTH - PADDING_RIGHT}
-        y={BASELINE + 18}
-        textAnchor="end"
-      >
-        {axisDate(last.point.date)}
-      </text>
+    </g>
+  );
+}
+
+/** Roughly six labels: one tick per day would collide at any usable width. */
+function DateAxis({ slots }: { slots: readonly Plotted[] }) {
+  const step = Math.max(Math.ceil(slots.length / AXIS_LABELS), 1);
+  return (
+    <g aria-hidden="true">
+      {slots
+        .filter((_, index) => index % step === 0)
+        .map((slot) => (
+          <text
+            className="chart-tick"
+            key={slot.point.date}
+            x={centreOf(slot)}
+            y={BASELINE + 18}
+            textAnchor="middle"
+          >
+            {axisDate(slot.point.date)}
+          </text>
+        ))}
     </g>
   );
 }
@@ -195,6 +247,91 @@ function ProtectedTick({ slot }: { slot: Plotted }) {
   );
 }
 
+function ActiveGuide({ slot }: { slot: Plotted | null }) {
+  if (slot === null) {
+    return null;
+  }
+  return (
+    <g aria-hidden="true">
+      <rect
+        className="chart-active"
+        x={slot.x}
+        y={PADDING_TOP}
+        width={slot.width}
+        height={BASELINE - PADDING_TOP}
+      />
+      <line
+        className="chart-active-line"
+        x1={centreOf(slot)}
+        y1={PADDING_TOP}
+        x2={centreOf(slot)}
+        y2={BASELINE}
+      />
+    </g>
+  );
+}
+
+/** Full-height targets: a short bar stays as easy to point at as a tall one. */
+function HoverTargets({
+  slots,
+  onEnter,
+}: {
+  slots: readonly Plotted[];
+  onEnter: (index: number) => void;
+}) {
+  return (
+    <g aria-hidden="true">
+      {slots.map((slot, index) => (
+        <rect
+          className="chart-hit"
+          key={slot.point.date}
+          x={slot.x}
+          y={PADDING_TOP}
+          width={slot.width}
+          height={BASELINE - PADDING_TOP}
+          onMouseEnter={() => onEnter(index)}
+        />
+      ))}
+    </g>
+  );
+}
+
+function tooltipPercent(slot: Plotted) {
+  const raw = (centreOf(slot) / VIEW_WIDTH) * 100;
+  return Math.min(
+    Math.max(raw, TOOLTIP_MARGIN_PERCENT),
+    100 - TOOLTIP_MARGIN_PERCENT,
+  );
+}
+
+/**
+ * Decoration for pointer users: the same facts reach assistive technology
+ * through the live readout below the chart.
+ */
+function ChartTooltip({
+  average,
+  slot,
+}: {
+  average: number | null;
+  slot: Plotted | null;
+}) {
+  if (slot === null) {
+    return null;
+  }
+  return (
+    <div
+      aria-hidden="true"
+      className="chart-tooltip"
+      style={{ left: `${tooltipPercent(slot)}%` }}
+    >
+      <strong>{formatDay(slot.point.date)}</strong>
+      {slotLines(slot.point, average).map((line) => (
+        <span key={line}>{line}</span>
+      ))}
+    </div>
+  );
+}
+
 function summarize(series: readonly PresencePoint[]) {
   const published = series.filter((point) => point.status === "published");
   const withheld = series.length - published.length;
@@ -204,37 +341,103 @@ function summarize(series: readonly PresencePoint[]) {
   return `Série de ${series.length} dias em pessoas-dia. ${published.length} dias com valor publicado e ${withheld} protegidos ou indisponíveis, exibidos como falha na base do gráfico.`;
 }
 
-export function PresenceChart({ series }: PresenceChartProps) {
+const KEY_STEPS: Record<string, number> = {
+  ArrowRight: 1,
+  ArrowLeft: -1,
+};
+
+function clampIndex(index: number, length: number) {
+  return Math.min(Math.max(index, 0), length - 1);
+}
+
+/** Entering the series from the left starts at the first day, and vice versa. */
+function startIndex(step: number, length: number) {
+  return step > 0 ? -1 : length;
+}
+
+/** Returns null when the key is not a navigation key and the event stands. */
+function movedIndex(key: string, current: number | null, length: number) {
+  if (key === "Home") {
+    return 0;
+  }
+  if (key === "End") {
+    return length - 1;
+  }
+  const step = KEY_STEPS[key];
+  if (step === undefined) {
+    return null;
+  }
+  return clampIndex((current ?? startIndex(step, length)) + step, length);
+}
+
+function readout(slot: Plotted | null, average: number | null) {
+  if (slot === null) {
+    return "Aponte um dia no gráfico ou use as setas ← → do teclado para ler cada dia. Home e End vão ao primeiro e ao último dia.";
+  }
+  return `${formatDay(slot.point.date)}. ${slotLines(slot.point, average).join(". ")}.`;
+}
+
+export function PresenceChart({ series, stats }: PresenceChartProps) {
+  const [active, setActive] = useState<number | null>(null);
   const bound = upperBound(series);
   const slots = plot(series);
+  const activeSlot = active === null ? null : (slots[active] ?? null);
+
+  function handleKeyDown(event: KeyboardEvent<SVGSVGElement>) {
+    if (event.key === "Escape") {
+      setActive(null);
+      return;
+    }
+    const index = movedIndex(event.key, active, slots.length);
+    if (index === null) {
+      return;
+    }
+    event.preventDefault();
+    setActive(index);
+  }
 
   return (
     <figure className="presence-chart">
-      <svg
-        viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
-        role="img"
-        aria-label={summarize(series)}
-      >
-        <ValueGrid bound={bound} />
-        {slots.map((slot) => (
-          <g key={`${slot.point.date}-${slot.point.kind}`}>
-            <ForecastBand bound={bound} slot={slot} />
-            <ObservedBar bound={bound} slot={slot} />
-            <ProtectedTick slot={slot} />
-          </g>
-        ))}
-        <line
-          className="chart-axis"
-          x1={PADDING_LEFT}
-          y1={BASELINE}
-          x2={VIEW_WIDTH - PADDING_RIGHT}
-          y2={BASELINE}
-        />
-        <DateAxis slots={slots} />
-      </svg>
+      <div className="chart-frame">
+        <svg
+          aria-label={summarize(series)}
+          onBlur={() => setActive(null)}
+          onKeyDown={handleKeyDown}
+          onMouseLeave={() => setActive(null)}
+          role="img"
+          tabIndex={0}
+          viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
+        >
+          <WeekendBands slots={slots} />
+          <ValueGrid bound={bound} />
+          <ActiveGuide slot={activeSlot} />
+          {slots.map((slot) => (
+            <g key={`${slot.point.date}-${slot.point.kind}`}>
+              <ForecastBand bound={bound} slot={slot} />
+              <ObservedBar bound={bound} slot={slot} />
+              <ProtectedTick slot={slot} />
+            </g>
+          ))}
+          <AverageLine average={stats.average} bound={bound} />
+          <line
+            className="chart-axis"
+            x1={PADDING_LEFT}
+            y1={BASELINE}
+            x2={VIEW_WIDTH - PADDING_RIGHT}
+            y2={BASELINE}
+          />
+          <DateAxis slots={slots} />
+          <HoverTargets slots={slots} onEnter={setActive} />
+        </svg>
+        <ChartTooltip average={stats.average} slot={activeSlot} />
+      </div>
+      <p className="chart-readout" role="status">
+        {readout(activeSlot, stats.average)}
+      </p>
       <figcaption>
-        Máximo da escala: {bound} pessoas-dia. Dias protegidos aparecem como
-        falha, sem valor substituto.
+        Escala até {bound} pessoas-dia. Fim de semana aparece com fundo
+        sombreado, a linha tracejada marca a média da janela e dias protegidos
+        aparecem como falha, sem valor substituto.
       </figcaption>
     </figure>
   );

@@ -1,42 +1,35 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 
 import type { components } from "../../generated/schema";
 import {
   phase4PublicClient,
   type Phase4Client,
 } from "../../shared/api/phase4-client";
+import {
+  formatCount,
+  formatDate,
+  formatDateTime,
+  formatDelta,
+  formatTrend,
+} from "./presence-format";
 import { PresenceChart } from "./PresenceChart";
+import {
+  centralValue,
+  percentFromAverage,
+  seriesStats,
+  type PresencePoint,
+  type SeriesStats,
+} from "./presence-stats";
 
 type Schemas = components["schemas"];
 type PresenceWindow = components["parameters"]["PresenceWindow"];
-type PresencePoint =
-  | Schemas["ObservedPresencePoint"]
-  | Schemas["ForecastPresencePoint"];
 type ForecastPeak = Schemas["ForecastPeak"];
 type Metadata = Schemas["PublicMetadata"];
 type PreferenceCategory = Schemas["PreferenceCategory"];
 
 interface AnalyticsDashboardProps {
   client?: Phase4Client;
-}
-
-const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
-  dateStyle: "medium",
-  timeZone: "America/Bahia",
-});
-const dateTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
-  dateStyle: "long",
-  timeStyle: "short",
-  timeZone: "America/Bahia",
-});
-
-function formatDate(value: string) {
-  return dateFormatter.format(new Date(`${value}T12:00:00-03:00`));
-}
-
-function formatDateTime(value: string) {
-  return dateTimeFormatter.format(new Date(value));
 }
 
 function coverageText(coverage: Metadata["coverage"]) {
@@ -113,6 +106,10 @@ function SummaryCards({ summary }: { summary: Schemas["PublicSummary"] }) {
         <p className="metric-label">Presença de hoje</p>
         <p className="metric-kind">{kindLabel(summary.presence_today.kind)}</p>
         <PointValue point={summary.presence_today} />
+        <p className="metric-hint">
+          Pessoas presentes hoje, contadas no intervalo [chegada, saída) em
+          America/Bahia. Uma pessoa só conta uma vez por dia.
+        </p>
       </article>
       <article className="summary-card" data-kind="forecast">
         <p className="metric-label">Pico previsto nos próximos 30 dias</p>
@@ -121,15 +118,160 @@ function SummaryCards({ summary }: { summary: Schemas["PublicSummary"] }) {
           <time dateTime={peak.date}>{formatDate(peak.date)}</time>
         ) : null}
         <PointValue point={peak} />
+        <p className="metric-hint">
+          Maior estimativa central do baseline explicável. Planeje pela faixa
+          provável, não pelo número central isolado.
+        </p>
       </article>
     </section>
   );
 }
 
+interface StatTile {
+  hint: string;
+  label: string;
+  value: ReactNode;
+}
+
+const WINDOW_LABELS: Record<PresenceWindow, string> = {
+  recent_30_days: "últimos 30 dias",
+  next_30_days: "próximos 30 dias",
+};
+
+function DayValue({ day }: { day: { date: string; value: number } }) {
+  return (
+    <>
+      <span>{day.value} pessoas-dia</span>
+      <time className="stat-when" dateTime={day.date}>
+        {formatDate(day.date)}
+      </time>
+    </>
+  );
+}
+
+function averageTile(stats: SeriesStats): StatTile {
+  return {
+    label: "Média diária",
+    value:
+      stats.average === null
+        ? "—"
+        : `${Math.round(stats.average)} pessoas-dia`,
+    hint: `Média dos ${stats.published.length} dias com valor publicado. A linha tracejada do gráfico marca esse nível.`,
+  };
+}
+
+function totalTile(stats: SeriesStats): StatTile {
+  return {
+    label: "Total acumulado",
+    value: `${formatCount(stats.total)} pessoas-dia`,
+    hint: "Soma dos dias publicados. Dias protegidos ficam de fora, então o total é um piso, não um censo.",
+  };
+}
+
+function peakTile(stats: SeriesStats): StatTile {
+  return {
+    label: "Dia mais cheio",
+    value: stats.peak === null ? "—" : <DayValue day={stats.peak} />,
+    hint: "Maior valor publicado da janela e o dia em que ocorreu.",
+  };
+}
+
+function troughTile(stats: SeriesStats): StatTile {
+  return {
+    label: "Dia mais vazio",
+    value: stats.trough === null ? "—" : <DayValue day={stats.trough} />,
+    hint: "Menor valor publicado da janela. Compare com o dia mais cheio para dimensionar a variação.",
+  };
+}
+
+function trendTile(stats: SeriesStats): StatTile {
+  const size = stats.trendSize;
+  return {
+    label: "Tendência",
+    value:
+      stats.trendPercent === null
+        ? "—"
+        : formatTrend(stats.trendPercent, size),
+    hint:
+      stats.trendPercent === null
+        ? "São necessários pelo menos dois dias publicados para comparar períodos."
+        : `Média dos ${size} últimos dias publicados ante os ${size} anteriores. Dias protegidos são pulados, nunca contados como zero.`,
+  };
+}
+
+function withheldHint(withheld: number) {
+  if (withheld === 0) {
+    return "Todos os dias da janela têm valor publicado.";
+  }
+  const noun = withheld === 1 ? "dia ficou" : "dias ficaram";
+  return `${withheld} ${noun} sem valor por proteção estatística ou ausência de dado. Nenhum valor substituto é exibido.`;
+}
+
+function publishedTile(stats: SeriesStats): StatTile {
+  return {
+    label: "Dias publicados",
+    value: `${stats.published.length} de ${stats.days}`,
+    hint: withheldHint(stats.withheld),
+  };
+}
+
+function statTiles(stats: SeriesStats): StatTile[] {
+  return [
+    averageTile(stats),
+    peakTile(stats),
+    troughTile(stats),
+    trendTile(stats),
+    totalTile(stats),
+    publishedTile(stats),
+  ];
+}
+
+function WindowStats({
+  stats,
+  window,
+}: {
+  stats: SeriesStats;
+  window: PresenceWindow;
+}) {
+  return (
+    <ul
+      className="stat-grid"
+      aria-label={`Estatísticas dos ${WINDOW_LABELS[window]}`}
+    >
+      {statTiles(stats).map((tile) => (
+        <li className="stat-tile" key={tile.label}>
+          <p className="metric-label">{tile.label}</p>
+          <p className="stat-value">{tile.value}</p>
+          <p className="metric-hint">{tile.hint}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Distance from the window average, so a row is read without doing the math. */
+function ComparisonCell({
+  average,
+  point,
+}: {
+  average: number | null;
+  point: PresencePoint;
+}) {
+  const value = centralValue(point);
+  const percent =
+    value === null ? null : percentFromAverage(value, average);
+  if (percent === null) {
+    return <span className="stat-when">—</span>;
+  }
+  return <span>{formatDelta(percent)}</span>;
+}
+
 function PresenceTable({
   presence,
+  stats,
 }: {
   presence: Schemas["PublicPresence"];
+  stats: SeriesStats;
 }) {
   return (
     <div className="table-scroll">
@@ -139,6 +281,7 @@ function PresenceTable({
             <th scope="col">Data</th>
             <th scope="col">Tipo</th>
             <th scope="col">Resultado</th>
+            <th scope="col">Ante a média</th>
           </tr>
         </thead>
         <tbody>
@@ -150,6 +293,9 @@ function PresenceTable({
               <td>{kindLabel(point.kind)}</td>
               <td>
                 <PointValue point={point} />
+              </td>
+              <td>
+                <ComparisonCell average={stats.average} point={point} />
               </td>
             </tr>
           ))}
@@ -387,6 +533,7 @@ export function AnalyticsDashboard({
       <DashboardPlaceholder onRetry={retry} stage={dashboardStage(queries)} />
     );
   }
+  const stats = seriesStats(loaded.presence.data.series);
 
   return (
     <section className="analytics-dashboard" aria-labelledby="analytics-title">
@@ -428,11 +575,14 @@ export function AnalyticsDashboard({
           <span className="legend-gap">
             Protegido ou indisponível, sem valor substituto
           </span>
+          <span className="legend-average">Média da janela</span>
+          <span className="legend-weekend">Fim de semana</span>
         </p>
-        <PresenceChart series={loaded.presence.data.series} />
+        <WindowStats stats={stats} window={window} />
+        <PresenceChart series={loaded.presence.data.series} stats={stats} />
         <details className="series-details">
           <summary>Ver a série dia a dia</summary>
-          <PresenceTable presence={loaded.presence.data} />
+          <PresenceTable presence={loaded.presence.data} stats={stats} />
         </details>
       </section>
       <Preferences preferences={loaded.preferences.data} />
