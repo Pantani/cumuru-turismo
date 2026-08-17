@@ -82,10 +82,6 @@ arquivo.
 
 ### Corrigido
 
-- `make scan` acusava `nanoid` em `3.3.16`, sob
-  [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8). O
-  pacote chega por `vite → postcss` e não tinha override; passa a `3.3.18`,
-  dentro da mesma major e sem alterar a superfície de `postcss`;
 - navegação para `/registro` depois de "Abrir registro neste navegador": a
   guarda de rota comparava com a URL que `captureInviteCapability` já havia
   reescrito, o que anulava o clique e deixava o fluxo do convite sem saída;
