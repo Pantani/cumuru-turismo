@@ -1524,7 +1524,7 @@ document_guard_after_rollback="$(
 test "${document_guard_after_rollback}" = "0"
 run_migrate up 1
 
-# ADR-039/040/041: a autoatendimento aplica-se sobre a 000002 e volta sem deixar resíduo.
+# ADR-039/040/041: o autoatendimento aplica-se sobre a 000002 e volta sem deixar resíduo.
 run_migrate up 1
 self_service_version="$(
   psql_as cumuru_migration cumuru-local-migration-only \

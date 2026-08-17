@@ -70,11 +70,11 @@ exata no container web.
 Os defaults de Compose e `.env.example` são fixtures deliberadamente públicas,
 únicas por finalidade e exclusivas de `local`/`test`. Produção deve fornecer
 URLs, origins, TTLs, limites e keyrings independentes por secret manager;
-nenhuma fixture local pode ser reutilizada. Na questionário, HMAC de capability e
+nenhuma fixture local pode ser reutilizada. No questionário, HMAC de capability e
 AES-GCM-256 usam material distinto dos cinco keyrings do núcleo; o protótipo
 também exige cleanup e TTL máximo de 24 horas.
 
-Na analytics, `PUBLIC_DATABASE_URL` é obrigatório e distinto de `DATABASE_URL`
+Em analytics, `PUBLIC_DATABASE_URL` é obrigatório e distinto de `DATABASE_URL`
 para o processo API. O login público lê exclusivamente as views
 `public_data.current_summary`, `current_presence`, `current_preferences` e
 `current_methodology`. `make analytics-remediation` combina código gerado, guardas
