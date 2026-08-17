@@ -21,8 +21,16 @@ export CUMURU_BUILD_VERSION="${build_metadata[0]}"
 export CUMURU_BUILD_REVISION="${build_metadata[1]}"
 export CUMURU_BUILD_TIME="${build_metadata[2]}"
 
+# Compose lê `.env` do diretório do projeto, e o serviço de seed exige as
+# credenciais fictícias do demo local. Em clone limpo — e na CI — esse arquivo
+# não existe, então o exemplo versionado entra como origem explícita. Um `.env`
+# do desenvolvedor continua tendo precedência.
+LOCAL_ENV_FILE="${ROOT_DIR}/.env"
+test -f "${LOCAL_ENV_FILE}" || LOCAL_ENV_FILE="${ROOT_DIR}/.env.example"
+
 COMPOSE=(
   docker compose
+  --env-file "${LOCAL_ENV_FILE}"
   --file "${ROOT_DIR}/compose.yaml"
   --file "${ROOT_DIR}/compose.local.yaml"
   --file "${ROOT_DIR}/deploy/compose.phase4-full-stack.yaml"
