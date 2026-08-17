@@ -87,7 +87,13 @@ function civilDateIssues(field: string, value: string, label: string) {
     : [{ field, message: `Informe a data de ${label}.` }];
 }
 
-function dateOrderIssues(value: CreateStayRequest) {
+/** The planned window is the same civil-date pair in every stay-shaped body. */
+export interface PlannedStayWindow {
+  planned_arrival_on: string;
+  planned_departure_on: string;
+}
+
+function dateOrderIssues(value: PlannedStayWindow) {
   const wellFormed =
     datePattern.test(value.planned_arrival_on) &&
     datePattern.test(value.planned_departure_on);
@@ -102,7 +108,9 @@ function dateOrderIssues(value: CreateStayRequest) {
   ];
 }
 
-function validateDateRange(value: CreateStayRequest): ValidationIssue[] {
+export function validatePlannedDates(
+  value: PlannedStayWindow,
+): ValidationIssue[] {
   return [
     ...civilDateIssues("planned_arrival_on", value.planned_arrival_on, "chegada"),
     ...civilDateIssues("planned_departure_on", value.planned_departure_on, "saída"),
@@ -114,7 +122,7 @@ export function validateCreateStay(value: CreateStayRequest) {
   const issues = [
     ...uuidIssue("accommodation_id", value.accommodation_id),
     ...uuidV7Issue("client_submission_id", value.client_submission_id),
-    ...validateDateRange(value),
+    ...validatePlannedDates(value),
   ];
   if (
     !Number.isInteger(value.expected_guest_count) ||

@@ -28,6 +28,7 @@ type Store struct {
 	pool             *pgxpool.Pool
 	phase2           config.Phase2Config
 	phase3           config.Phase3Config
+	phase7           config.Phase7Config
 	auth             config.AuthConfig
 	surveyCodec      *questionnaire.CapabilityCodec
 	textCipher       *questionnaire.TextCipher
@@ -42,6 +43,15 @@ func WithCurrentTime(now func() time.Time) Option {
 		if now != nil {
 			store.now = now
 		}
+	}
+}
+
+// WithPhase7Config enables the open self-registration channel and the account
+// activation capability. Absent, the surfaces are simply not registered, which
+// is a 404 rather than a half-configured route.
+func WithPhase7Config(phase7 config.Phase7Config) Option {
+	return func(store *Store) {
+		store.phase7 = phase7
 	}
 }
 

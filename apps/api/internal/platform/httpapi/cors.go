@@ -31,7 +31,8 @@ func (d Dependencies) inviteCORS(next http.Handler) http.Handler {
 			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			writer.Header().Set(
 				"Access-Control-Allow-Headers",
-				"Content-Type, Idempotency-Key, Survey-Capability, X-Request-ID",
+				"Content-Type, Idempotency-Key, Survey-Capability, X-Request-ID, "+
+					inviteTokenHeader+", "+activationTokenHeader,
 			)
 			writer.WriteHeader(http.StatusNoContent)
 			return

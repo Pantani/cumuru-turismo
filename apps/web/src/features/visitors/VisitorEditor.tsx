@@ -25,8 +25,26 @@ interface VisitorEditorProps {
   disabled?: boolean;
   issues?: ValidationIssue[];
   onChange: (visitors: VisitorInput[]) => void;
+  /**
+   * The open self-service channel narrows this to responsible and companion:
+   * ADR-040 refuses `minor` there, and a role that cannot be chosen is better
+   * than one that is chosen and then rejected.
+   */
+  roles?: readonly VisitorInput["role"][];
   visitors: VisitorInput[];
 }
+
+export const visitorRoleLabels: Record<VisitorInput["role"], string> = {
+  responsible: "Responsável",
+  companion: "Acompanhante",
+  minor: "Menor",
+};
+
+const allVisitorRoles = [
+  "responsible",
+  "companion",
+  "minor",
+] as const satisfies readonly VisitorInput["role"][];
 
 const ageBands: ReadonlyArray<
   readonly [VisitorInput["age_band"], string]
@@ -147,6 +165,7 @@ interface CoreFieldsProps {
   index: number;
   number: number;
   register: RegisterTarget;
+  roles: readonly VisitorInput["role"][];
   visitor: VisitorInput;
 }
 
@@ -166,9 +185,11 @@ function CoreFields(props: CoreFieldsProps) {
             props.change(props.index, "role", event.target.value)
           }
         >
-          <option value="responsible">Responsável</option>
-          <option value="companion">Acompanhante</option>
-          <option value="minor">Menor</option>
+          {props.roles.map((role) => (
+            <option key={role} value={role}>
+              {visitorRoleLabels[role]}
+            </option>
+          ))}
         </select>
         {props.groupIssue === undefined ? null : (
           <span id={roleErrorId} className="field-error">
@@ -262,6 +283,7 @@ function ResidenceFields(props: ResidenceFieldsProps) {
 interface VisitorFieldsProps extends ResidenceFieldsProps {
   disabled: boolean;
   onRemove: (index: number) => void;
+  roles: readonly VisitorInput["role"][];
   visitorCount: number;
 }
 
@@ -292,7 +314,7 @@ export const VisitorEditor = forwardRef<
   VisitorEditorHandle,
   VisitorEditorProps
 >(function VisitorEditor(
-  { disabled = false, issues = [], onChange, visitors },
+  { disabled = false, issues = [], onChange, roles = allVisitorRoles, visitors },
   forwardedRef,
 ) {
   const targets = useRef<Record<string, FocusTarget | null>>({});
@@ -342,6 +364,7 @@ export const VisitorEditor = forwardRef<
           number={index + 1}
           issues={issues}
           disabled={disabled}
+          roles={roles}
           change={change}
           register={register}
           onRemove={remove}

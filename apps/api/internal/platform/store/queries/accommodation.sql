@@ -328,3 +328,41 @@ RETURNING
   target.version,
   target.created_at,
   target.updated_at;
+
+-- name: CreateActivationManagerMembership :one
+-- Vínculo da conta pendente com a acomodação (ADR-041). Gated em
+-- a.status = 'active' porque issue_activation só existe na acomodação ativa;
+-- CreateAccommodationMembership é mais permissiva (<> 'closed') e não serve.
+INSERT INTO core.memberships (
+  id,
+  accommodation_id,
+  oidc_issuer,
+  oidc_subject,
+  role
+)
+SELECT
+  sqlc.arg(membership_id),
+  a.id,
+  sqlc.arg(target_oidc_issuer),
+  sqlc.arg(target_oidc_subject),
+  'manager'
+FROM core.accommodations AS a
+WHERE a.id = sqlc.arg(accommodation_id)
+  AND a.status = 'active'
+  AND EXISTS (
+    SELECT 1
+    FROM core.memberships AS actor
+    WHERE actor.accommodation_id = a.id
+      AND actor.oidc_issuer = sqlc.arg(oidc_issuer)
+      AND actor.oidc_subject = sqlc.arg(oidc_subject)
+      AND actor.active = true
+      AND actor.role = 'manager'
+  )
+RETURNING
+  id,
+  accommodation_id,
+  role,
+  active,
+  version,
+  created_at,
+  updated_at;

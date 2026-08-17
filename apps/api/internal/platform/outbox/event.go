@@ -17,6 +17,12 @@ const (
 	AggregateQuestionnaire        AggregateType = "questionnaire"
 	AggregateQuestionnaireVersion AggregateType = "questionnaire_version"
 	AggregateSurveyResponse       AggregateType = "survey_response"
+	// A poster and an activation capability are aggregates of their own. Filing
+	// their events under the accommodation would reuse
+	// (aggregate_type, aggregate_id, aggregate_version, event_type) on every
+	// rotation, because issuing one does not bump the accommodation version.
+	AggregateAccommodationInvite     AggregateType = "accommodation_invite"
+	AggregateAccommodationActivation AggregateType = "accommodation_activation"
 )
 
 type EventType string
@@ -34,6 +40,13 @@ const (
 	EventStayCheckedOut                     EventType = "stay.checked_out"
 	EventStayCancelled                      EventType = "stay.cancelled"
 	EventStayNoShow                         EventType = "stay.no_show"
+	EventStayApproved                       EventType = "stay.approved"
+	EventStayRejected                       EventType = "stay.rejected"
+	EventStayApprovalExpired                EventType = "stay.approval_expired"
+	EventAccommodationInvited               EventType = "accommodation.invited"
+	EventAccommodationInviteRevoked         EventType = "accommodation.invite_revoked"
+	EventAccommodationActivationIssued      EventType = "accommodation.activation_issued"
+	EventAccommodationActivationCompleted   EventType = "accommodation.activation_completed"
 	EventStayPresenceRecalculationRequested EventType = "stay.presence_recalculation_requested"
 	EventQuestionnaireCreated               EventType = "questionnaire.created"
 	EventQuestionnaireCloned                EventType = "questionnaire.cloned"
@@ -58,6 +71,13 @@ var eventAggregates = map[EventType]AggregateType{
 	EventStayCheckedIn:                      AggregateStay,
 	EventStayCheckedOut:                     AggregateStay,
 	EventStayCancelled:                      AggregateStay,
+	EventStayApproved:                       AggregateStay,
+	EventStayRejected:                       AggregateStay,
+	EventStayApprovalExpired:                AggregateStay,
+	EventAccommodationInvited:               AggregateAccommodationInvite,
+	EventAccommodationInviteRevoked:         AggregateAccommodationInvite,
+	EventAccommodationActivationIssued:      AggregateAccommodationActivation,
+	EventAccommodationActivationCompleted:   AggregateAccommodationActivation,
 	EventStayNoShow:                         AggregateStay,
 	EventStayPresenceRecalculationRequested: AggregateStay,
 	EventQuestionnaireCreated:               AggregateQuestionnaire,

@@ -51,7 +51,7 @@ phase_dependencies() {
     4) echo "Fase 3 PASS" ;;
     5) echo "Fase 4 PASS + cinco gates externos FNRH" ;;
     6) echo "Fases 1-4 PASS; Fase 5 PASS ou BLOCKED documentado" ;;
-    7) echo "Fases 2 e 3 PASS; gate THIRD_PARTY_IDENTITY_BASIS para dados reais" ;;
+    7) echo "Fases 2 e 3 PASS; gate SELF_SERVICE_LEGAL_BASIS para dados reais" ;;
   esac
 }
 
@@ -175,7 +175,7 @@ external_gates_status() {
 # absent data subject. The gate governs real data only; the prototype stays
 # implementable with fictional data and reports REAL_DATA=BLOCKED.
 self_service_gate_status() {
-  gates_status_for 7 THIRD_PARTY_IDENTITY_BASIS
+  gates_status_for 7 SELF_SERVICE_LEGAL_BASIS
 }
 
 scm_state() {

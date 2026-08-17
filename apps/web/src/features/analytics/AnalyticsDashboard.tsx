@@ -2,18 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, type CSSProperties, type ReactNode } from "react";
 
 import type { components } from "../../generated/schema";
+import { useLocale } from "../../shared/i18n/LocaleProvider";
+import type { MessageKey, Translate } from "../../shared/i18n/translate";
 import {
   phase4PublicClient,
   type Phase4Client,
 } from "../../shared/api/phase4-client";
-import {
-  formatCount,
-  formatDate,
-  formatDateTime,
-  formatDelta,
-  formatTrend,
-} from "./presence-format";
+import { coverageText } from "./coverage";
+import { usePresenceFormat, type PresenceFormat } from "./presence-format";
 import { PresenceChart } from "./PresenceChart";
+import { PUBLIC_STALE_TIME, usePublicSummary } from "./public-summary";
 import {
   centralValue,
   percentFromAverage,
@@ -30,100 +28,122 @@ type ForecastPeak = Schemas["ForecastPeak"];
 type Metadata = Schemas["PublicMetadata"];
 type PreferenceCategory = Schemas["PreferenceCategory"];
 
+/** Média móvel desenhada pelo gráfico; a legenda precisa citar o mesmo número. */
+const SMOOTH_DAYS = 7;
+
 interface AnalyticsDashboardProps {
   client?: Phase4Client;
 }
 
-function coverageText(coverage: Metadata["coverage"]) {
-  if (coverage.status === "published") {
-    return `Cobertura estimada: ${coverage.ratio}%`;
-  }
-  return coverage.status === "protected"
-    ? "Cobertura protegida pela política de publicação"
-    : "Cobertura indisponível";
+/** Reúne o que todo painel interno precisa sem repetir dois hooks por bloco. */
+interface Copy {
+  format: PresenceFormat;
+  t: Translate;
 }
 
-function MetadataPanel({ metadata }: { metadata: Metadata }) {
+function MetadataPanel({
+  copy,
+  metadata,
+}: {
+  copy: Copy;
+  metadata: Metadata;
+}) {
+  const { format, t } = copy;
   return (
-    <dl className="analytics-metadata" aria-label="Contexto dos indicadores">
+    <dl className="analytics-metadata" aria-label={t("analytics.metadata.aria")}>
       <div>
-        <dt>Atualização</dt>
-        <dd>{formatDateTime(metadata.updated_at)}</dd>
+        <dt>{t("analytics.metadata.updated")}</dt>
+        <dd>{format.dateTime(metadata.updated_at)}</dd>
       </div>
       <div>
-        <dt>Cobertura</dt>
-        <dd>{coverageText(metadata.coverage)}</dd>
+        <dt>{t("analytics.metadata.coverage")}</dt>
+        <dd>{coverageText(t, metadata.coverage)}</dd>
       </div>
       <div>
-        <dt>Unidade</dt>
+        <dt>{t("analytics.metadata.unit")}</dt>
         <dd>
           {metadata.unit === "person_day"
-            ? "Pessoas-dia"
-            : "Respostas de pesquisa"}
+            ? t("analytics.unit.personDay")
+            : t("analytics.unit.surveyAnswer")}
         </dd>
       </div>
       <div>
-        <dt>Modo dos dados</dt>
-        <dd>Dados fictícios de protótipo</dd>
+        <dt>{t("analytics.metadata.mode")}</dt>
+        <dd>{t("analytics.prototypeBadge")}</dd>
       </div>
     </dl>
   );
 }
 
-function kindLabel(kind: PresencePoint["kind"]) {
-  return kind === "observed" ? "● Observado" : "◇ Previsto";
+function kindLabel(t: Translate, kind: PresencePoint["kind"]) {
+  return kind === "observed"
+    ? t("analytics.kind.observed")
+    : t("analytics.kind.forecast");
 }
 
-function protectedLabel(status: "protected" | "unavailable") {
-  return status === "protected" ? "Dado protegido" : "Dado indisponível";
+function protectedLabel(t: Translate, status: "protected" | "unavailable") {
+  return status === "protected"
+    ? t("analytics.state.protected")
+    : t("analytics.state.unavailable");
 }
 
-function PointValue({ point }: { point: PresencePoint | ForecastPeak }) {
+function PointValue({
+  point,
+  t,
+}: {
+  point: PresencePoint | ForecastPeak;
+  t: Translate;
+}) {
   if (point.status !== "published") {
     return (
       <span className={`data-state data-state-${point.status}`}>
-        {protectedLabel(point.status)}
+        {protectedLabel(t, point.status)}
       </span>
     );
   }
   if (point.kind === "observed") {
-    return <strong>{point.value} pessoas-dia</strong>;
+    return <strong>{t("analytics.value.observed", { value: point.value })}</strong>;
   }
   return (
     <span className="forecast-value">
-      <strong>Estimativa central: {point.central} pessoas-dia</strong>
-      <span>Faixa provável: {point.lower} a {point.upper}</span>
+      <strong>{t("analytics.value.central", { value: point.central })}</strong>
+      <span>
+        {t("analytics.value.band", { lower: point.lower, upper: point.upper })}
+      </span>
     </span>
   );
 }
 
-function SummaryCards({ summary }: { summary: Schemas["PublicSummary"] }) {
+function SummaryCards({
+  copy,
+  summary,
+}: {
+  copy: Copy;
+  summary: Schemas["PublicSummary"];
+}) {
+  const { format, t } = copy;
   const peak = summary.forecast_peak_next_30_days;
   return (
     <section className="summary-grid" aria-labelledby="summary-title">
       <h3 id="summary-title" className="visually-hidden">
-        Resumo da presença
+        {t("analytics.summary.aria")}
       </h3>
       <article className="summary-card" data-kind={summary.presence_today.kind}>
-        <p className="metric-label">Presença de hoje</p>
-        <p className="metric-kind">{kindLabel(summary.presence_today.kind)}</p>
-        <PointValue point={summary.presence_today} />
-        <p className="metric-hint">
-          Pessoas presentes hoje, contadas no intervalo [chegada, saída) em
-          America/Bahia. Uma pessoa só conta uma vez por dia.
+        <p className="metric-label">{t("analytics.summary.today")}</p>
+        <p className="metric-kind">
+          {kindLabel(t, summary.presence_today.kind)}
         </p>
+        <PointValue point={summary.presence_today} t={t} />
+        <p className="metric-hint">{t("analytics.summary.todayHint")}</p>
       </article>
       <article className="summary-card" data-kind="forecast">
-        <p className="metric-label">Pico previsto nos próximos 30 dias</p>
-        <p className="metric-kind">◇ Previsto</p>
+        <p className="metric-label">{t("analytics.summary.peak")}</p>
+        <p className="metric-kind">{t("analytics.kind.forecast")}</p>
         {"date" in peak ? (
-          <time dateTime={peak.date}>{formatDate(peak.date)}</time>
+          <time dateTime={peak.date}>{format.date(peak.date)}</time>
         ) : null}
-        <PointValue point={peak} />
-        <p className="metric-hint">
-          Maior estimativa central do baseline explicável. Planeje pela faixa
-          provável, não pelo número central isolado.
-        </p>
+        <PointValue point={peak} t={t} />
+        <p className="metric-hint">{t("analytics.summary.peakHint")}</p>
       </article>
     </section>
   );
@@ -139,10 +159,10 @@ interface StatTile {
 type DisplayWindow = PresenceWindow | "combined";
 
 /** Names the scope of the tiles, which is never the forecast half of a join. */
-const WINDOW_LABELS: Record<DisplayWindow, string> = {
-  recent_30_days: "últimos 30 dias",
-  next_30_days: "próximos 30 dias",
-  combined: "últimos 30 dias observados",
+const WINDOW_SCOPES: Record<DisplayWindow, MessageKey> = {
+  recent_30_days: "analytics.window.scope.recent",
+  next_30_days: "analytics.window.scope.next",
+  combined: "analytics.window.scope.combined",
 };
 
 function displayedSeries(
@@ -172,107 +192,142 @@ function referenceSeries(
   return window === "next_30_days" ? predicted : observed;
 }
 
-function DayValue({ day }: { day: { date: string; value: number } }) {
+function DayValue({
+  day,
+  copy,
+}: {
+  day: { date: string; value: number };
+  copy: Copy;
+}) {
   return (
     <>
-      <span>{day.value} pessoas-dia</span>
+      <span>
+        {copy.t("analytics.value.observed", {
+          value: copy.format.count(day.value),
+        })}
+      </span>
       <time className="stat-when" dateTime={day.date}>
-        {formatDate(day.date)}
+        {copy.format.date(day.date)}
       </time>
     </>
   );
 }
 
-function averageTile(stats: SeriesStats): StatTile {
+function averageTile(copy: Copy, stats: SeriesStats): StatTile {
+  const { format, t } = copy;
   return {
-    label: "Média diária",
+    label: t("analytics.tile.average"),
     value:
       stats.average === null
-        ? "—"
-        : `${Math.round(stats.average)} pessoas-dia`,
-    hint: `Média dos ${stats.published.length} dias com valor publicado. A linha tracejada do gráfico marca esse nível.`,
+        ? t("analytics.empty")
+        : t("analytics.value.observed", {
+            value: format.count(Math.round(stats.average)),
+          }),
+    hint: t("analytics.tile.averageHint", { count: stats.published.length }),
   };
 }
 
-function totalTile(stats: SeriesStats): StatTile {
+function totalTile(copy: Copy, stats: SeriesStats): StatTile {
+  const { format, t } = copy;
   return {
-    label: "Total acumulado",
-    value: `${formatCount(stats.total)} pessoas-dia`,
-    hint: "Soma dos dias publicados. Dias protegidos ficam de fora, então o total é um piso, não um censo.",
+    label: t("analytics.tile.total"),
+    value: t("analytics.value.observed", { value: format.count(stats.total) }),
+    hint: t("analytics.tile.totalHint"),
   };
 }
 
-function peakTile(stats: SeriesStats): StatTile {
+function peakTile(copy: Copy, stats: SeriesStats): StatTile {
   return {
-    label: "Dia mais cheio",
-    value: stats.peak === null ? "—" : <DayValue day={stats.peak} />,
-    hint: "Maior valor publicado da janela e o dia em que ocorreu.",
+    label: copy.t("analytics.tile.peak"),
+    value:
+      stats.peak === null ? (
+        copy.t("analytics.empty")
+      ) : (
+        <DayValue day={stats.peak} copy={copy} />
+      ),
+    hint: copy.t("analytics.tile.peakHint"),
   };
 }
 
-function troughTile(stats: SeriesStats): StatTile {
+function troughTile(copy: Copy, stats: SeriesStats): StatTile {
   return {
-    label: "Dia mais vazio",
-    value: stats.trough === null ? "—" : <DayValue day={stats.trough} />,
-    hint: "Menor valor publicado da janela. Compare com o dia mais cheio para dimensionar a variação.",
+    label: copy.t("analytics.tile.trough"),
+    value:
+      stats.trough === null ? (
+        copy.t("analytics.empty")
+      ) : (
+        <DayValue day={stats.trough} copy={copy} />
+      ),
+    hint: copy.t("analytics.tile.troughHint"),
   };
 }
 
-function trendTile(stats: SeriesStats): StatTile {
+function trendTile(copy: Copy, stats: SeriesStats): StatTile {
+  const { format, t } = copy;
   const size = stats.trendSize;
   return {
-    label: "Tendência",
+    label: t("analytics.tile.trend"),
     value:
       stats.trendPercent === null
-        ? "—"
-        : formatTrend(stats.trendPercent, size),
+        ? t("analytics.empty")
+        : format.trend(stats.trendPercent, size),
     hint:
       stats.trendPercent === null
-        ? "São necessários pelo menos dois dias publicados para comparar períodos."
-        : `Média dos ${size} últimos dias publicados ante os ${size} anteriores. Dias protegidos são pulados, nunca contados como zero.`,
+        ? t("analytics.tile.trendNone")
+        : t("analytics.tile.trendHint", { count: size }),
   };
 }
 
-function withheldHint(withheld: number) {
+function withheldHint(t: Translate, withheld: number) {
   if (withheld === 0) {
-    return "Todos os dias da janela têm valor publicado.";
+    return t("analytics.withheld.none");
   }
-  const noun = withheld === 1 ? "dia ficou" : "dias ficaram";
-  return `${withheld} ${noun} sem valor por proteção estatística ou ausência de dado. Nenhum valor substituto é exibido.`;
+  return withheld === 1
+    ? t("analytics.withheld.one")
+    : t("analytics.withheld.other", { count: withheld });
 }
 
-function publishedTile(stats: SeriesStats): StatTile {
+function publishedTile(copy: Copy, stats: SeriesStats): StatTile {
+  const { t } = copy;
   return {
-    label: "Dias publicados",
-    value: `${stats.published.length} de ${stats.days}`,
-    hint: withheldHint(stats.withheld),
+    label: t("analytics.tile.published"),
+    value: t("analytics.tile.publishedValue", {
+      days: stats.days,
+      published: stats.published.length,
+    }),
+    hint: withheldHint(t, stats.withheld),
   };
 }
 
-function statTiles(stats: SeriesStats): StatTile[] {
+function statTiles(copy: Copy, stats: SeriesStats): StatTile[] {
   return [
-    averageTile(stats),
-    peakTile(stats),
-    troughTile(stats),
-    trendTile(stats),
-    totalTile(stats),
-    publishedTile(stats),
+    averageTile(copy, stats),
+    peakTile(copy, stats),
+    troughTile(copy, stats),
+    trendTile(copy, stats),
+    totalTile(copy, stats),
+    publishedTile(copy, stats),
   ];
 }
 
 function WindowStats({
+  copy,
   stats,
   window,
 }: {
+  copy: Copy;
   stats: SeriesStats;
   window: DisplayWindow;
 }) {
+  const { t } = copy;
   return (
     <ul
       className="stat-grid"
-      aria-label={`Estatísticas dos ${WINDOW_LABELS[window]}`}
+      aria-label={t("analytics.stats.aria", {
+        scope: t(WINDOW_SCOPES[window]),
+      })}
     >
-      {statTiles(stats).map((tile) => (
+      {statTiles(copy, stats).map((tile) => (
         <li className="stat-tile" key={tile.label}>
           <p className="metric-label">{tile.label}</p>
           <p className="stat-value">{tile.value}</p>
@@ -286,29 +341,20 @@ function WindowStats({
 /** Distance from the window average, so a row is read without doing the math. */
 function ComparisonCell({
   average,
+  copy,
   point,
 }: {
   average: number | null;
+  copy: Copy;
   point: PresencePoint;
 }) {
   const value = centralValue(point);
-  const percent =
-    value === null ? null : percentFromAverage(value, average);
+  const percent = value === null ? null : percentFromAverage(value, average);
   if (percent === null) {
-    return <span className="stat-when">—</span>;
+    return <span className="stat-when">{copy.t("analytics.empty")}</span>;
   }
-  return <span>{formatDelta(percent)}</span>;
+  return <span>{copy.format.delta(percent)}</span>;
 }
-
-const WEEKDAY_LABELS = [
-  "domingo",
-  "segunda",
-  "terça",
-  "quarta",
-  "quinta",
-  "sexta",
-  "sábado",
-];
 
 /** The bar is proportional to the busiest weekday, filled through --share. */
 function weekdayShare(entry: WeekdayAverage, busiest: number): CSSProperties {
@@ -319,37 +365,52 @@ function weekdayShare(entry: WeekdayAverage, busiest: number): CSSProperties {
   return { "--share": share } as CSSProperties;
 }
 
-function WeekdayValue({ entry }: { entry: WeekdayAverage }) {
+function WeekdayValue({
+  entry,
+  copy,
+}: {
+  entry: WeekdayAverage;
+  copy: Copy;
+}) {
+  const { format, t } = copy;
   if (entry.average === null) {
-    return <span className="stat-when">sem dia publicado</span>;
+    return <span className="stat-when">{t("analytics.weekday.none")}</span>;
   }
   return (
     <span>
-      <strong>{Math.round(entry.average)} pessoas-dia</strong>
+      <strong>
+        {t("analytics.value.observed", {
+          value: format.count(Math.round(entry.average)),
+        })}
+      </strong>
       <span className="stat-when">
-        {" "}
-        · {entry.days} {entry.days === 1 ? "dia" : "dias"}
+        {entry.days === 1
+          ? t("analytics.weekday.days.one")
+          : t("analytics.weekday.days.other", { count: entry.days })}
       </span>
     </span>
   );
 }
 
-function WeekdayPattern({ series }: { series: readonly PresencePoint[] }) {
+function WeekdayPattern({
+  copy,
+  series,
+}: {
+  copy: Copy;
+  series: readonly PresencePoint[];
+}) {
+  const { format, t } = copy;
   const averages = weekdayAverages(series);
   const busiest = Math.max(...averages.map((entry) => entry.average ?? 0));
   return (
     <div className="weekday-pattern">
-      <h4>Ritmo da semana</h4>
-      <p className="metric-hint">
-        Média por dia da semana sobre os dias publicados da janela observada.
-        Mostra o padrão semanal que a série dia a dia esconde; com poucos dias
-        publicados, uma única data pode responder por todo o dia da semana.
-      </p>
-      <ul className="weekday-list" aria-label="Média por dia da semana">
+      <h4>{t("analytics.weekday.title")}</h4>
+      <p className="metric-hint">{t("analytics.weekday.hint")}</p>
+      <ul className="weekday-list" aria-label={t("analytics.weekday.aria")}>
         {averages.map((entry) => (
           <li key={entry.weekday} style={weekdayShare(entry, busiest)}>
-            <span>{WEEKDAY_LABELS[entry.weekday]}</span>
-            <WeekdayValue entry={entry} />
+            <span>{format.weekdayName(entry.weekday)}</span>
+            <WeekdayValue entry={entry} copy={copy} />
           </li>
         ))}
       </ul>
@@ -358,35 +419,42 @@ function WeekdayPattern({ series }: { series: readonly PresencePoint[] }) {
 }
 
 function PresenceTable({
+  copy,
   series,
   stats,
 }: {
+  copy: Copy;
   series: readonly PresencePoint[];
   stats: SeriesStats;
 }) {
+  const { format, t } = copy;
   return (
     <div className="table-scroll">
-      <table aria-label="Presença observada e prevista">
+      <table aria-label={t("analytics.table.aria")}>
         <thead>
           <tr>
-            <th scope="col">Data</th>
-            <th scope="col">Tipo</th>
-            <th scope="col">Resultado</th>
-            <th scope="col">Ante a média</th>
+            <th scope="col">{t("analytics.table.date")}</th>
+            <th scope="col">{t("analytics.table.kind")}</th>
+            <th scope="col">{t("analytics.table.result")}</th>
+            <th scope="col">{t("analytics.table.delta")}</th>
           </tr>
         </thead>
         <tbody>
           {series.map((point) => (
             <tr key={`${point.date}-${point.kind}`}>
               <th scope="row">
-                <time dateTime={point.date}>{formatDate(point.date)}</time>
+                <time dateTime={point.date}>{format.date(point.date)}</time>
               </th>
-              <td>{kindLabel(point.kind)}</td>
+              <td>{kindLabel(t, point.kind)}</td>
               <td>
-                <PointValue point={point} />
+                <PointValue point={point} t={t} />
               </td>
               <td>
-                <ComparisonCell average={stats.average} point={point} />
+                <ComparisonCell
+                  average={stats.average}
+                  copy={copy}
+                  point={point}
+                />
               </td>
             </tr>
           ))}
@@ -396,8 +464,13 @@ function PresenceTable({
   );
 }
 
-function categoryLabel(category: PreferenceCategory["category_code"]) {
-  return category === "first_visit" ? "Primeira visita" : "Visitante recorrente";
+function categoryLabel(
+  t: Translate,
+  category: PreferenceCategory["category_code"],
+) {
+  return category === "first_visit"
+    ? t("analytics.preferences.firstVisit")
+    : t("analytics.preferences.returning");
 }
 
 /**
@@ -409,107 +482,127 @@ function shareStyle(category: PreferenceCategory): CSSProperties {
   return { "--share": share } as CSSProperties;
 }
 
-function PreferenceValue({ category }: { category: PreferenceCategory }) {
+function PreferenceValue({
+  category,
+  t,
+}: {
+  category: PreferenceCategory;
+  t: Translate;
+}) {
   if (category.status === "published") {
-    return <strong>{category.share_percent}% das respostas elegíveis</strong>;
+    return (
+      <strong>
+        {t("analytics.preferences.share", { percent: category.share_percent })}
+      </strong>
+    );
   }
   return (
     <span className={`data-state data-state-${category.status}`}>
-      {protectedLabel(category.status)}
+      {protectedLabel(t, category.status)}
     </span>
+  );
+}
+
+function PreferenceList({
+  metric,
+  t,
+}: {
+  metric: Schemas["PublicPreferences"]["metrics"][number] | undefined;
+  t: Translate;
+}) {
+  if (metric === undefined) {
+    return (
+      <p className="data-state data-state-unavailable">
+        {t("analytics.state.unavailable")}
+      </p>
+    );
+  }
+  return (
+    <ul className="preference-list">
+      {metric.categories.map((category) => (
+        <li key={category.category_code} style={shareStyle(category)}>
+          <span>{categoryLabel(t, category.category_code)}</span>
+          <PreferenceValue category={category} t={t} />
+        </li>
+      ))}
+    </ul>
   );
 }
 
 function Preferences({
   preferences,
+  t,
 }: {
   preferences: Schemas["PublicPreferences"];
+  t: Translate;
 }) {
-  const metric = preferences.metrics[0];
   return (
     <section className="analytics-section" aria-labelledby="preferences-title">
       <div className="section-heading">
         <div>
-          <p className="section-kicker">Pesquisa voluntária</p>
-          <h3 id="preferences-title">Perfil de visita agregado</h3>
+          <p className="section-kicker">{t("analytics.preferences.kicker")}</p>
+          <h3 id="preferences-title">{t("analytics.preferences.title")}</h3>
         </div>
         <label>
-          Período das preferências
+          {t("analytics.preferences.periodLabel")}
           <select value={preferences.period} disabled>
-            <option value="last_complete_month">Último mês completo</option>
+            <option value="last_complete_month">
+              {t("analytics.preferences.lastCompleteMonth")}
+            </option>
           </select>
         </label>
       </div>
-      <p>
-        Unidade: respostas de pesquisa estruturadas e consentidas. Uma resposta
-        de grupo não é multiplicada pela quantidade de visitantes.
-      </p>
-      {metric === undefined ? (
-        <p className="data-state data-state-unavailable">Dado indisponível</p>
-      ) : (
-        <ul className="preference-list">
-          {metric.categories.map((category) => (
-            <li key={category.category_code} style={shareStyle(category)}>
-              <span>{categoryLabel(category.category_code)}</span>
-              <PreferenceValue category={category} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <p>{t("analytics.preferences.lead")}</p>
+      <PreferenceList metric={preferences.metrics[0]} t={t} />
     </section>
   );
 }
 
+function forecastBody(t: Translate, methodology: Schemas["PublicMethodology"]) {
+  return t("analytics.methodology.forecastBody", {
+    fallbackHigh: methodology.forecast_fallback_bounds_percent[1],
+    fallbackLow: methodology.forecast_fallback_bounds_percent[0],
+    high: methodology.forecast_bounds_percent[1],
+    low: methodology.forecast_bounds_percent[0],
+  });
+}
+
 function Methodology({
   methodology,
+  t,
 }: {
   methodology: Schemas["PublicMethodology"];
+  t: Translate;
 }) {
   return (
     <section
       className="analytics-section methodology"
       aria-labelledby="methodology-title"
     >
-      <p className="section-kicker">Como interpretar</p>
-      <h3 id="methodology-title">Metodologia e limitações</h3>
+      <p className="section-kicker">{t("analytics.methodology.kicker")}</p>
+      <h3 id="methodology-title">{t("analytics.methodology.title")}</h3>
       <div className="methodology-grid">
         <article>
-          <h4>Presença observada</h4>
+          <h4>{t("analytics.methodology.observed")}</h4>
+          <p>{t("analytics.methodology.observedBody")}</p>
+        </article>
+        <article>
+          <h4>{t("analytics.methodology.forecast")}</h4>
+          <p>{forecastBody(t, methodology)}</p>
+        </article>
+        <article>
+          <h4>{t("analytics.methodology.protection")}</h4>
           <p>
-            Cada pessoa contribui no intervalo civil [chegada, saída), em
-            America/Bahia. A saída não conta como novo dia de presença.
+            {t("analytics.methodology.protectionBody", {
+              accommodations: methodology.minimum_reporting_accommodations,
+              rounding: methodology.rounding_base,
+              threshold: methodology.primary_threshold,
+            })}
           </p>
         </article>
         <article>
-          <h4>Presença prevista</h4>
-          <p>
-            O baseline explicável combina reservas já conhecidas e histórico
-            sazonal. A faixa normal usa limites de{" "}
-            {methodology.forecast_bounds_percent[0]}% a{" "}
-            {methodology.forecast_bounds_percent[1]}%. Quando não há histórico
-            elegível suficiente, o baseline usa fallback mais amplo, de{" "}
-            {methodology.forecast_fallback_bounds_percent[0]}% a{" "}
-            {methodology.forecast_fallback_bounds_percent[1]}%. O contrato
-            público não identifica qual faixa foi aplicada a cada ponto; por
-            isso a interface não atribui esse estado a valores individuais.
-          </p>
-        </article>
-        <article>
-          <h4>Proteção estatística</h4>
-          <p>
-            Células abaixo de {methodology.primary_threshold} contribuições ou
-            de {methodology.minimum_reporting_accommodations} acomodações são
-            protegidas. Há supressão complementar e arredondamento em base{" "}
-            {methodology.rounding_base}.
-          </p>
-        </article>
-        <article>
-          <h4>Limitações</h4>
-          <p>
-            A cobertura é parcial e não representa um censo. Os dados são
-            fictícios de protótipo; acurácia operacional, política municipal e
-            uso com dados reais permanecem não verificados.
-          </p>
+          <h4>{t("analytics.methodology.limits")}</h4>
+          <p>{t("analytics.methodology.limitsBody")}</p>
         </article>
       </div>
     </section>
@@ -549,83 +642,157 @@ function loadedPayloads<S, P, F, M>(
     M | undefined
   >,
 ): DashboardPayloads<S, P, F, M> | null {
-  const complete = Object.values(parts).every(
-    (value) => value !== undefined,
-  );
+  const complete = Object.values(parts).every((value) => value !== undefined);
   return complete ? (parts as DashboardPayloads<S, P, F, M>) : null;
 }
 
 function DashboardPlaceholder({
   onRetry,
   stage,
+  t,
 }: {
   onRetry: () => void;
   stage: DashboardStage;
+  t: Translate;
 }) {
   return (
     <section className="analytics-dashboard" aria-labelledby="analytics-title">
-      <h2 id="analytics-title">Indicadores públicos</h2>
+      <h2 id="analytics-title">{t("analytics.title")}</h2>
       {stage === "failed" ? (
         <div className="analytics-error" role="alert">
-          <p>Não foi possível carregar os indicadores públicos.</p>
+          <p>{t("analytics.error")}</p>
           <button type="button" onClick={onRetry}>
-            Tentar novamente
+            {t("analytics.retry")}
           </button>
         </div>
       ) : (
         <p role="status" aria-live="polite">
-          Atualizando indicadores públicos…
+          {t("analytics.loading")}
         </p>
       )}
     </section>
   );
 }
 
-export function AnalyticsDashboard({
-  client = phase4PublicClient,
-}: AnalyticsDashboardProps) {
-  const [window, setWindow] = useState<DisplayWindow>("recent_30_days");
-  const summary = useQuery({
-    queryKey: ["analytics", "public", "summary"],
-    queryFn: () => client.getSummary(),
-    staleTime: 300_000,
-  });
+function SeriesLegend({ t }: { t: Translate }) {
+  return (
+    <p className="legend" aria-label={t("analytics.legend.aria")}>
+      <span className="legend-observed">{t("analytics.legend.observed")}</span>
+      <span className="legend-forecast">{t("analytics.legend.forecast")}</span>
+      <span className="legend-gap">{t("analytics.legend.gap")}</span>
+      <span className="legend-average">{t("analytics.legend.average")}</span>
+      <span className="legend-trend">
+        {t("analytics.legend.trend", { days: SMOOTH_DAYS })}
+      </span>
+      <span className="legend-weekend">{t("analytics.legend.weekend")}</span>
+    </p>
+  );
+}
+
+interface PresenceSectionProps {
+  displayed: readonly PresencePoint[];
+  copy: Copy;
+  observed: readonly PresencePoint[];
+  onWindowChange: (next: DisplayWindow) => void;
+  stats: SeriesStats;
+  window: DisplayWindow;
+}
+
+function PresenceSection({
+  displayed,
+  copy,
+  observed,
+  onWindowChange,
+  stats,
+  window,
+}: PresenceSectionProps) {
+  const { t } = copy;
+  return (
+    <section className="analytics-section" aria-labelledby="presence-title">
+      <div className="section-heading">
+        <div>
+          <p className="section-kicker">{t("analytics.presence.kicker")}</p>
+          <h3 id="presence-title">{t("analytics.presence.title")}</h3>
+        </div>
+        <label>
+          {t("analytics.window.label")}
+          <select
+            value={window}
+            onChange={(event) =>
+              onWindowChange(event.target.value as DisplayWindow)
+            }
+          >
+            <option value="recent_30_days">{t("analytics.window.recent")}</option>
+            <option value="next_30_days">{t("analytics.window.next")}</option>
+            <option value="combined">{t("analytics.window.combined")}</option>
+          </select>
+        </label>
+      </div>
+      <SeriesLegend t={t} />
+      <WindowStats copy={copy} stats={stats} window={window} />
+      <PresenceChart series={displayed} stats={stats} />
+      <WeekdayPattern copy={copy} series={observed} />
+      <details className="series-details">
+        <summary>{t("analytics.details")}</summary>
+        <PresenceTable copy={copy} series={displayed} stats={stats} />
+      </details>
+    </section>
+  );
+}
+
+function usePublicAnalytics(client: Phase4Client) {
+  const summary = usePublicSummary(client);
   const presence = useQuery({
     queryKey: ["analytics", "public", "presence", "recent_30_days"],
     queryFn: () => client.getPresence("recent_30_days"),
-    staleTime: 300_000,
+    staleTime: PUBLIC_STALE_TIME,
   });
   const forecast = useQuery({
     queryKey: ["analytics", "public", "presence", "next_30_days"],
     queryFn: () => client.getPresence("next_30_days"),
-    staleTime: 300_000,
+    staleTime: PUBLIC_STALE_TIME,
   });
   const preferences = useQuery({
     queryKey: ["analytics", "public", "preferences", "last_complete_month"],
     queryFn: () => client.getPreferences(),
-    staleTime: 300_000,
+    staleTime: PUBLIC_STALE_TIME,
   });
   const methodology = useQuery({
     queryKey: ["analytics", "public", "methodology"],
     queryFn: () => client.getMethodology(),
-    staleTime: 300_000,
+    staleTime: PUBLIC_STALE_TIME,
   });
-  const queries = [summary, presence, forecast, preferences, methodology];
+  return { forecast, methodology, preferences, presence, summary };
+}
+
+export function AnalyticsDashboard({
+  client = phase4PublicClient,
+}: AnalyticsDashboardProps) {
+  const { t } = useLocale();
+  const format = usePresenceFormat();
+  const [window, setWindow] = useState<DisplayWindow>("recent_30_days");
+  const sources = usePublicAnalytics(client);
+  const queries = Object.values(sources);
+  const copy: Copy = { format, t };
 
   function retry() {
     void Promise.all(queries.map((query) => query.refetch()));
   }
 
   const loaded = loadedPayloads({
-    summary: summary.data,
-    observed: presence.data,
-    predicted: forecast.data,
-    preferences: preferences.data,
-    methodology: methodology.data,
+    summary: sources.summary.data,
+    observed: sources.presence.data,
+    predicted: sources.forecast.data,
+    preferences: sources.preferences.data,
+    methodology: sources.methodology.data,
   });
   if (loaded === null) {
     return (
-      <DashboardPlaceholder onRetry={retry} stage={dashboardStage(queries)} />
+      <DashboardPlaceholder
+        onRetry={retry}
+        stage={dashboardStage(queries)}
+        t={t}
+      />
     );
   }
   const observed = loaded.observed.data.series;
@@ -637,57 +804,24 @@ export function AnalyticsDashboard({
     <section className="analytics-dashboard" aria-labelledby="analytics-title">
       <div className="dashboard-heading">
         <div>
-          <p className="section-kicker">Publicação protegida</p>
-          <h2 id="analytics-title">Indicadores públicos</h2>
-          <p>
-            Tendências agregadas para planejamento, sem microdados, IDs ou
-            recortes por estabelecimento.
-          </p>
+          <p className="section-kicker">{t("analytics.kicker")}</p>
+          <h2 id="analytics-title">{t("analytics.title")}</h2>
+          <p>{t("analytics.lead")}</p>
         </div>
-        <span className="prototype-badge">Dados fictícios de protótipo</span>
+        <span className="prototype-badge">{t("analytics.prototypeBadge")}</span>
       </div>
-      <MetadataPanel metadata={loaded.summary.data.metadata} />
-      <SummaryCards summary={loaded.summary.data} />
-      <section className="analytics-section" aria-labelledby="presence-title">
-        <div className="section-heading">
-          <div>
-            <p className="section-kicker">Série em pessoas-dia</p>
-            <h3 id="presence-title">Presença ao longo do tempo</h3>
-          </div>
-          <label>
-            Janela da presença
-            <select
-              value={window}
-              onChange={(event) =>
-                setWindow(event.target.value as DisplayWindow)
-              }
-            >
-              <option value="recent_30_days">Últimos 30 dias</option>
-              <option value="next_30_days">Próximos 30 dias</option>
-              <option value="combined">Últimos 30 e próximos 30 dias</option>
-            </select>
-          </label>
-        </div>
-        <p className="legend" aria-label="Legenda da série">
-          <span className="legend-observed">Observado</span>
-          <span className="legend-forecast">Previsto, com faixa provável</span>
-          <span className="legend-gap">
-            Protegido ou indisponível, sem valor substituto
-          </span>
-          <span className="legend-average">Média de referência</span>
-          <span className="legend-trend">Média móvel de 7 dias</span>
-          <span className="legend-weekend">Fim de semana</span>
-        </p>
-        <WindowStats stats={stats} window={window} />
-        <PresenceChart series={displayed} stats={stats} />
-        <WeekdayPattern series={observed} />
-        <details className="series-details">
-          <summary>Ver a série dia a dia</summary>
-          <PresenceTable series={displayed} stats={stats} />
-        </details>
-      </section>
-      <Preferences preferences={loaded.preferences.data} />
-      <Methodology methodology={loaded.methodology.data} />
+      <MetadataPanel copy={copy} metadata={loaded.summary.data.metadata} />
+      <SummaryCards copy={copy} summary={loaded.summary.data} />
+      <PresenceSection
+        displayed={displayed}
+        copy={copy}
+        observed={observed}
+        onWindowChange={setWindow}
+        stats={stats}
+        window={window}
+      />
+      <Preferences preferences={loaded.preferences.data} t={t} />
+      <Methodology methodology={loaded.methodology.data} t={t} />
     </section>
   );
 }

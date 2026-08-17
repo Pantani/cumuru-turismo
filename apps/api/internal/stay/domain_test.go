@@ -209,6 +209,7 @@ func TestGroupValidationRejectsInvalidResidenceShapes(t *testing.T) {
 func fixtureStay(status stay.Status) stay.Stay {
 	return stay.Stay{
 		Status:           status,
+		Approval:         stay.ApprovalNotRequired,
 		PlannedArrival:   stay.MustCivilDate("2026-12-10"),
 		PlannedDeparture: stay.MustCivilDate("2026-12-12"),
 	}

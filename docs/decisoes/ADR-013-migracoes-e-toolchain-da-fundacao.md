@@ -65,7 +65,7 @@ Versões iniciais fixadas:
 
 | Componente | Versão |
 | --- | --- |
-| Go | 1.26.5 |
+| Go | 1.26.6 |
 | PostgreSQL | 17.10 |
 | React / React DOM | 19.2.8 |
 | Vite | 8.1.5 |

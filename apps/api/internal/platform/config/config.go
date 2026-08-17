@@ -69,6 +69,7 @@ type Config struct {
 	Phase2            Phase2Config
 	Phase3            Phase3Config
 	Phase4            Phase4Config
+	Phase7            Phase7Config
 }
 
 type LookupEnv func(string) (string, bool)
@@ -178,6 +179,7 @@ func baseConfig(
 		Phase2: phases.phase2,
 		Phase3: phases.phase3,
 		Phase4: phases.phase4,
+		Phase7: phases.phase7,
 	}
 }
 
@@ -197,6 +199,7 @@ type phaseConfigs struct {
 	phase2 Phase2Config
 	phase3 Phase3Config
 	phase4 Phase4Config
+	phase7 Phase7Config
 }
 
 func loadPhases(environment Environment, process Process, lookup LookupEnv) (phaseConfigs, error) {
@@ -212,7 +215,13 @@ func loadPhases(environment Environment, process Process, lookup LookupEnv) (pha
 	if err != nil {
 		return phaseConfigs{}, err
 	}
-	return phaseConfigs{phase2: phase2, phase3: phase3, phase4: phase4}, nil
+	phase7, err := loadPhase7(environment, phase2, lookup)
+	if err != nil {
+		return phaseConfigs{}, err
+	}
+	return phaseConfigs{
+		phase2: phase2, phase3: phase3, phase4: phase4, phase7: phase7,
+	}, nil
 }
 
 func (c Config) validate() error {
@@ -232,6 +241,7 @@ func (c Config) validate() error {
 			)
 		},
 		c.Phase3.validate,
+		c.Phase7.validate,
 		func() error {
 			return c.Phase4.validate(
 				c.Process,

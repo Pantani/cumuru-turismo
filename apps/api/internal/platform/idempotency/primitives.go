@@ -2,19 +2,23 @@
 // with: which operation is being retried, how a request body is reduced to a
 // comparable hash, and how a still-running attempt is reported to the caller.
 //
-// Keying and response storage deliberately live in the store instead: the store
-// probes every key version under one transaction, which the caller cannot do
-// from here without reproducing the transaction itself.
+// Key derivation and response storage deliberately live in the store instead:
+// the store probes every key version under one transaction, which the caller
+// cannot do from here without reproducing the transaction itself.
 package idempotency
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"time"
 )
 
-var ErrProcessing = errors.New("idempotency request processing")
+var (
+	ErrInvalidKey = errors.New("invalid idempotency key")
+	ErrProcessing = errors.New("idempotency request processing")
+)
 
 // ProcessingError reports that an identical request is still in flight, and how
 // long the caller should wait before retrying it.
@@ -39,16 +43,30 @@ func (e *ProcessingError) Unwrap() error {
 	return ErrProcessing
 }
 
-// RequestHash reduces a typed request to the value a replay is compared against.
+// RequestHash keys the digest of the request body. The key is not optional and
+// there is no unkeyed variant: the same digest is persisted in
+// platform.idempotency_records and core.group_submissions, and an unkeyed
+// SHA-256 over a body would let anyone holding the dump confirm a guess about
+// data the rejection or the expiry already erased. The erasure has to survive
+// the digest, otherwise it is fiction (ADR-040).
+//
 // Encoding a struct rather than free-form input is what makes the comparison
 // stable: encoding/json orders struct fields by declaration and map keys by sort
 // order, so two semantically equal requests always hash alike.
-func RequestHash(value any) ([sha256.Size]byte, error) {
+func RequestHash(key []byte, value any) ([sha256.Size]byte, error) {
+	if len(key) < 32 {
+		return [sha256.Size]byte{}, ErrInvalidKey
+	}
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		return [sha256.Size]byte{}, err
 	}
-	return sha256.Sum256(encoded), nil
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte("idempotency-request\x00"))
+	_, _ = mac.Write(encoded)
+	var digest [sha256.Size]byte
+	copy(digest[:], mac.Sum(nil))
+	return digest, nil
 }
 
 // Operation names the mutation a key replays. It is part of the stored identity,
@@ -74,6 +92,12 @@ const (
 	OperationPublishQuestionnaire        Operation = "publishQuestionnaireVersion"
 	OperationRetireQuestionnaire         Operation = "retireQuestionnaireVersion"
 	OperationSubmitSurveyResponse        Operation = "submitSurveyResponse"
+	OperationCreateAccommodationInvite   Operation = "createAccommodationInvite"
+	OperationRevokeAccommodationInvite   Operation = "revokeAccommodationInvite"
+	OperationSubmitSelfRegistration      Operation = "submitAccommodationSelfRegistration"
+	OperationApproveStay                 Operation = "approveStay"
+	OperationRejectStay                  Operation = "rejectStay"
+	OperationCreateActivation            Operation = "createAccommodationActivation"
 )
 
 // The allow-list is explicit rather than derived, so adding a constant without
@@ -97,6 +121,12 @@ var validOperations = map[Operation]bool{
 	OperationPublishQuestionnaire:        true,
 	OperationRetireQuestionnaire:         true,
 	OperationSubmitSurveyResponse:        true,
+	OperationCreateAccommodationInvite:   true,
+	OperationRevokeAccommodationInvite:   true,
+	OperationSubmitSelfRegistration:      true,
+	OperationApproveStay:                 true,
+	OperationRejectStay:                  true,
+	OperationCreateActivation:            true,
 }
 
 // Valid reports whether the operation may be recorded against an idempotency

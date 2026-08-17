@@ -100,7 +100,10 @@ SELECT
   )::bigint AS idempotency_records,
   (
     pg_catalog.to_jsonb(cleanup_result) ->> 'rate_limit_buckets'
-  )::bigint AS rate_limit_buckets
+  )::bigint AS rate_limit_buckets,
+  (
+    pg_catalog.to_jsonb(cleanup_result) ->> 'proof_of_work_spends'
+  )::bigint AS proof_of_work_spends
 FROM platform.cleanup_expired_operational_records(
   sqlc.arg(expired_before),
   sqlc.arg(batch_size)::integer

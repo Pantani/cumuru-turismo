@@ -97,7 +97,11 @@ func TestRunIdempotentNeverExecutesWorkerCleanup(t *testing.T) {
 	request := struct {
 		Value string `json:"value"`
 	}{"same"}
-	requestHash, err := idempotency.RequestHash(request)
+	keyring := config.KeyringConfig{
+		CurrentVersion: "v1",
+		Keys:           map[string][]byte{"v1": []byte("key-material-is-at-least-32-bytes")},
+	}
+	requestHash, err := idempotency.RequestHash(keyring.Keys["v1"], request)
 	if err != nil {
 		t.Fatalf("RequestHash() error = %v", err)
 	}
@@ -106,10 +110,6 @@ func TestRunIdempotentNeverExecutesWorkerCleanup(t *testing.T) {
 		State:       "processing",
 		ExpiresAt:   pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 	}}
-	keyring := config.KeyringConfig{
-		CurrentVersion: "v1",
-		Keys:           map[string][]byte{"v1": []byte("key-material-is-at-least-32-bytes")},
-	}
 	subject := &Store{phase2: config.Phase2Config{
 		ActorKeys: keyring, IdempotencyKeys: keyring,
 	}}

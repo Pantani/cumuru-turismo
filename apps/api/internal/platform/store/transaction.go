@@ -101,11 +101,36 @@ func (s *Store) runIdempotent(
 	if !spec.operation.Valid() {
 		return idempotencyResult{}, errIdempotencyConflict
 	}
-	requestHash, err := idempotency.RequestHash(spec.request)
+	requestHash, err := s.hashRequest(spec.request)
 	if err != nil {
 		return idempotencyResult{}, errIdempotencyConflict
 	}
-	return s.replayOrExecute(ctx, q, spec, requestHash[:], work)
+	return s.replayOrExecute(ctx, q, spec, requestHash, work)
+}
+
+// hashRequest keys the body digest with the current idempotency key. A rotation
+// invalidates the outstanding records, which is the correct trade: the window
+// is the idempotency TTL, and the alternative is a digest that outlives the
+// erasure of what it summarizes.
+func (s *Store) hashRequest(value any) ([]byte, error) {
+	key, err := s.requestHashKey()
+	if err != nil {
+		return nil, err
+	}
+	digest, err := idempotency.RequestHash(key, value)
+	if err != nil {
+		return nil, err
+	}
+	return digest[:], nil
+}
+
+func (s *Store) requestHashKey() ([]byte, error) {
+	keyring := s.phase2.IdempotencyKeys
+	key, ok := keyring.Key(keyring.CurrentVersion)
+	if !ok {
+		return nil, ErrUnavailable
+	}
+	return key, nil
 }
 
 func (s *Store) replayOrExecute(
@@ -349,13 +374,17 @@ func isUniqueViolation(err error) bool {
 }
 
 type eventSpec struct {
-	actorType     audit.ActorType
-	actorIssuer   string
-	actorSubject  string
-	organization  uuid.UUID
-	action        audit.Action
-	entityType    audit.EntityType
-	entityID      uuid.UUID
+	actorType    audit.ActorType
+	actorIssuer  string
+	actorSubject string
+	organization uuid.UUID
+	action       audit.Action
+	entityType   audit.EntityType
+	entityID     uuid.UUID
+	// aggregateID is the outbox aggregate when it differs from the audit
+	// entity. Zero means they are the same, which is the case everywhere except
+	// where the acting entity and the changing aggregate are not one thing.
+	aggregateID   uuid.UUID
 	requestID     string
 	changedFields []audit.ChangedField
 	version       int64
@@ -385,6 +414,13 @@ func (s *Store) recordEvents(
 		return ErrUnavailable
 	}
 	return nil
+}
+
+func outboxAggregateID(spec eventSpec) uuid.UUID {
+	if spec.aggregateID != uuid.Nil {
+		return spec.aggregateID
+	}
+	return spec.entityID
 }
 
 func (s *Store) pseudonymizeActor(issuer, subject string) (audit.ActorDigest, error) {
@@ -453,7 +489,7 @@ func newOutboxEvent(spec eventSpec) (outbox.Event, error) {
 	}
 	event := outbox.Event{
 		ID: id, AggregateType: spec.aggregateType,
-		AggregateID: spec.entityID, AggregateVersion: spec.version,
+		AggregateID: outboxAggregateID(spec), AggregateVersion: spec.version,
 		Type: spec.eventType,
 	}
 	return event, event.Validate()

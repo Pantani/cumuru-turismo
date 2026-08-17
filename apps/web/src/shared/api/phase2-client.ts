@@ -122,6 +122,20 @@ const successContracts = {
 export const strongEtagPattern = /^"[1-9][0-9]*"$/;
 const relativeLocationPattern = /^\/api\/v1\/\S+$/;
 
+/**
+ * Phase 7 adds the approval queue as two filters on the very same listing, so
+ * there is no second listing endpoint and cursor, limit, ordering and
+ * membership isolation stay exactly the ones of Phase 2.
+ */
+export interface StayListFilters {
+  accommodationId?: string;
+  approvalState?: Schemas["StayApprovalState"];
+  cursor?: string;
+  limit?: number;
+  provenance?: Schemas["StayProvenance"];
+  status?: Schemas["StayStatus"];
+}
+
 export interface ApiResult<T> {
   data: T;
   etag: string | null;
@@ -486,15 +500,17 @@ export function createPhase2Client(options: ClientOptions) {
         contentType: "application/merge-patch+json",
         headers: concurrencyHeaders(etag),
       }),
-    listStays: (
-      accommodationId?: string,
-      status?: Schemas["StayStatus"],
-      cursor?: string,
-      limit?: number,
-    ) =>
+    listStays: (filters: StayListFilters = {}) =>
       authenticatedGet(
         "listStays",
-        `/api/v1/stays${queryString({ accommodation_id: accommodationId, status, cursor, limit })}`,
+        `/api/v1/stays${queryString({
+          accommodation_id: filters.accommodationId,
+          status: filters.status,
+          approval_state: filters.approvalState,
+          provenance: filters.provenance,
+          cursor: filters.cursor,
+          limit: filters.limit,
+        })}`,
       ),
     createStay: (
       body: JsonRequest<"createStay">,

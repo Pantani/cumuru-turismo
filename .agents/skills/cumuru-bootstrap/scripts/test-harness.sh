@@ -46,7 +46,7 @@ for phase in 1 2 3 4 5 6 7; do
 done
 prompt_seven="$(run_harness prompt 7)"
 grep -q 'Implemente somente a Fase 7' <<<"${prompt_seven}"
-grep -q 'THIRD_PARTY_IDENTITY_BASIS' <<<"${prompt_seven}"
+grep -q 'SELF_SERVICE_LEGAL_BASIS' <<<"${prompt_seven}"
 grep -q 'Esta fase não sucede a Fase 6' <<<"${prompt_seven}"
 grep -q 'Implemente somente a Fase 1' <<<"$(run_harness prompt 1)"
 grep -q 'React 19.2' <<<"$(run_harness prompt 1)"
@@ -156,10 +156,10 @@ grep -q 'ELIGIBILITY=ELIGIBLE' <<<"$(run_harness dry-run 5)"
 
 mkdir -p "${TEST_WORKSPACE}/phase-7"
 printf 'Verified legal basis attestation.\n' \
-  >"${TEST_WORKSPACE}/evidence/third-party-identity-basis.md"
+  >"${TEST_WORKSPACE}/evidence/self-service-legal-basis.md"
 printf '%s\n' \
-  'THIRD_PARTY_IDENTITY_BASIS=PASS' \
-  'THIRD_PARTY_IDENTITY_BASIS_EVIDENCE=evidence/third-party-identity-basis.md' \
+  'SELF_SERVICE_LEGAL_BASIS=PASS' \
+  'SELF_SERVICE_LEGAL_BASIS_EVIDENCE=evidence/self-service-legal-basis.md' \
   >"${TEST_WORKSPACE}/phase-7/external-gates.env"
 dry_run_seven="$(run_harness dry-run 7)"
 grep -q '^EXTERNAL_GATES_STATUS=PASS$' <<<"${dry_run_seven}"

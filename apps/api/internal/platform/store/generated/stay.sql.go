@@ -121,6 +121,92 @@ func (q *Queries) ApplyStayTransition(ctx context.Context, arg ApplyStayTransiti
 	return i, err
 }
 
+const approveSelfServiceStay = `-- name: ApproveSelfServiceStay :one
+UPDATE core.stays AS s
+SET
+  approval_state = 'approved',
+  approved_at = $1,
+  approval_decided_by_membership_id = $2,
+  approval_expires_at = NULL,
+  updated_at = $1,
+  version = s.version + 1
+WHERE s.id = $3
+  AND s.version = $4
+  AND s.provenance = 'self_service'
+  AND s.approval_state = 'pending'
+  AND EXISTS (
+    SELECT 1
+    FROM core.accommodations AS a
+    WHERE a.id = s.accommodation_id
+      AND a.status = 'active'
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM core.memberships AS m
+    WHERE m.accommodation_id = s.accommodation_id
+      AND m.id = $2
+      AND m.oidc_issuer = $5
+      AND m.oidc_subject = $6
+      AND m.active = true
+      AND m.role = 'manager'
+  )
+RETURNING
+  s.id,
+  s.accommodation_id,
+  s.status,
+  s.provenance,
+  s.approval_state,
+  s.approved_at,
+  s.version,
+  s.updated_at
+`
+
+type ApproveSelfServiceStayParams struct {
+	ApprovedAt            pgtype.Timestamptz `json:"approved_at"`
+	DecidedByMembershipID pgtype.UUID        `json:"decided_by_membership_id"`
+	StayID                pgtype.UUID        `json:"stay_id"`
+	ExpectedVersion       int64              `json:"expected_version"`
+	OidcIssuer            string             `json:"oidc_issuer"`
+	OidcSubject           string             `json:"oidc_subject"`
+}
+
+type ApproveSelfServiceStayRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	AccommodationID pgtype.UUID        `json:"accommodation_id"`
+	Status          CoreStayStatus     `json:"status"`
+	Provenance      string             `json:"provenance"`
+	ApprovalState   *string            `json:"approval_state"`
+	ApprovedAt      pgtype.Timestamptz `json:"approved_at"`
+	Version         int64              `json:"version"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Exige manager ativa e acomodação ativa. O status da estadia NÃO muda: a
+// espera de aprovação é proveniência mais carimbo, nunca um estado novo da
+// máquina de estadia.
+func (q *Queries) ApproveSelfServiceStay(ctx context.Context, arg ApproveSelfServiceStayParams) (ApproveSelfServiceStayRow, error) {
+	row := q.db.QueryRow(ctx, approveSelfServiceStay,
+		arg.ApprovedAt,
+		arg.DecidedByMembershipID,
+		arg.StayID,
+		arg.ExpectedVersion,
+		arg.OidcIssuer,
+		arg.OidcSubject,
+	)
+	var i ApproveSelfServiceStayRow
+	err := row.Scan(
+		&i.ID,
+		&i.AccommodationID,
+		&i.Status,
+		&i.Provenance,
+		&i.ApprovalState,
+		&i.ApprovedAt,
+		&i.Version,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const consumeInvite = `-- name: ConsumeInvite :one
 UPDATE core.invites AS i
 SET
@@ -130,7 +216,12 @@ WHERE i.id = $2
   AND i.token_hmac = $3
   AND i.revoked_at IS NULL
   AND i.expires_at > $1
-  AND i.use_count < i.max_uses
+  -- O teste de nulidade vem antes da comparação. Escrito como
+  -- ` + "`" + `i.use_count < i.max_uses` + "`" + `, o predicado avalia UNKNOWN quando max_uses é
+  -- nulo, o UPDATE afeta zero linhas e o convite ilimitado passa a se comportar
+  -- como convite já consumido — falha silenciosa que nenhuma suíte de convite
+  -- limitado detecta.
+  AND (i.max_uses IS NULL OR i.use_count < i.max_uses)
 RETURNING id, stay_id, use_count, max_uses, updated_at
 `
 
@@ -144,7 +235,7 @@ type ConsumeInviteRow struct {
 	ID        pgtype.UUID        `json:"id"`
 	StayID    pgtype.UUID        `json:"stay_id"`
 	UseCount  int32              `json:"use_count"`
-	MaxUses   int32              `json:"max_uses"`
+	MaxUses   *int32             `json:"max_uses"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
@@ -157,6 +248,103 @@ func (q *Queries) ConsumeInvite(ctx context.Context, arg ConsumeInviteParams) (C
 		&i.UseCount,
 		&i.MaxUses,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createAccommodationInvite = `-- name: CreateAccommodationInvite :one
+INSERT INTO core.invites (
+  id,
+  accommodation_id,
+  token_hmac,
+  token_key_version,
+  purpose,
+  privacy_notice_version,
+  expires_at,
+  max_uses
+)
+SELECT
+  $1,
+  a.id,
+  $2,
+  $3,
+  'accommodation_self_registration',
+  $4,
+  $5,
+  $6::integer
+FROM core.accommodations AS a
+WHERE a.id = $7
+  AND a.status = 'active'
+  AND EXISTS (
+    SELECT 1
+    FROM core.memberships AS m
+    WHERE m.accommodation_id = a.id
+      AND m.oidc_issuer = $8
+      AND m.oidc_subject = $9
+      AND m.active = true
+      AND m.role = 'manager'
+  )
+RETURNING
+  id,
+  accommodation_id,
+  token_hmac,
+  token_key_version,
+  privacy_notice_version,
+  expires_at,
+  max_uses,
+  use_count,
+  revoked_at
+`
+
+type CreateAccommodationInviteParams struct {
+	InviteID             pgtype.UUID        `json:"invite_id"`
+	TokenHmac            []byte             `json:"token_hmac"`
+	TokenKeyVersion      string             `json:"token_key_version"`
+	PrivacyNoticeVersion string             `json:"privacy_notice_version"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	MaxUses              *int32             `json:"max_uses"`
+	AccommodationID      pgtype.UUID        `json:"accommodation_id"`
+	OidcIssuer           string             `json:"oidc_issuer"`
+	OidcSubject          string             `json:"oidc_subject"`
+}
+
+type CreateAccommodationInviteRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	AccommodationID      pgtype.UUID        `json:"accommodation_id"`
+	TokenHmac            []byte             `json:"token_hmac"`
+	TokenKeyVersion      string             `json:"token_key_version"`
+	PrivacyNoticeVersion string             `json:"privacy_notice_version"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	MaxUses              *int32             `json:"max_uses"`
+	UseCount             int32              `json:"use_count"`
+	RevokedAt            pgtype.Timestamptz `json:"revoked_at"`
+}
+
+// Cartaz reutilizável da acomodação (ADR-039). max_uses nulo significa uso
+// ilimitado; stay_id fica nulo e invites_target_valid garante a exclusividade.
+func (q *Queries) CreateAccommodationInvite(ctx context.Context, arg CreateAccommodationInviteParams) (CreateAccommodationInviteRow, error) {
+	row := q.db.QueryRow(ctx, createAccommodationInvite,
+		arg.InviteID,
+		arg.TokenHmac,
+		arg.TokenKeyVersion,
+		arg.PrivacyNoticeVersion,
+		arg.ExpiresAt,
+		arg.MaxUses,
+		arg.AccommodationID,
+		arg.OidcIssuer,
+		arg.OidcSubject,
+	)
+	var i CreateAccommodationInviteRow
+	err := row.Scan(
+		&i.ID,
+		&i.AccommodationID,
+		&i.TokenHmac,
+		&i.TokenKeyVersion,
+		&i.PrivacyNoticeVersion,
+		&i.ExpiresAt,
+		&i.MaxUses,
+		&i.UseCount,
+		&i.RevokedAt,
 	)
 	return i, err
 }
@@ -294,7 +482,7 @@ type CreateInviteRow struct {
 	TokenKeyVersion      string             `json:"token_key_version"`
 	PrivacyNoticeVersion string             `json:"privacy_notice_version"`
 	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
-	MaxUses              int32              `json:"max_uses"`
+	MaxUses              *int32             `json:"max_uses"`
 	UseCount             int32              `json:"use_count"`
 	RevokedAt            pgtype.Timestamptz `json:"revoked_at"`
 }
@@ -391,6 +579,183 @@ func (q *Queries) CreateInviteGroupSubmission(ctx context.Context, arg CreateInv
 	return i, err
 }
 
+const createSelfServiceGroupSubmission = `-- name: CreateSelfServiceGroupSubmission :one
+INSERT INTO core.group_submissions (
+  id,
+  stay_id,
+  client_submission_id,
+  request_hash,
+  privacy_notice_version,
+  collection_channel,
+  submitted_at
+)
+SELECT
+  $1,
+  $2,
+  $3,
+  $4,
+  i.privacy_notice_version,
+  'self_service',
+  $5
+FROM core.invites AS i
+WHERE i.id = $6
+  AND i.token_hmac = $7
+  AND i.purpose = 'accommodation_self_registration'
+  AND i.revoked_at IS NULL
+  AND i.expires_at > $5
+RETURNING id, stay_id, client_submission_id, privacy_notice_version, submitted_at
+`
+
+type CreateSelfServiceGroupSubmissionParams struct {
+	SubmissionID       pgtype.UUID        `json:"submission_id"`
+	StayID             pgtype.UUID        `json:"stay_id"`
+	ClientSubmissionID pgtype.UUID        `json:"client_submission_id"`
+	RequestHash        []byte             `json:"request_hash"`
+	SubmittedAt        pgtype.Timestamptz `json:"submitted_at"`
+	InviteID           pgtype.UUID        `json:"invite_id"`
+	TokenHmac          []byte             `json:"token_hmac"`
+}
+
+type CreateSelfServiceGroupSubmissionRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	StayID               pgtype.UUID        `json:"stay_id"`
+	ClientSubmissionID   pgtype.UUID        `json:"client_submission_id"`
+	PrivacyNoticeVersion string             `json:"privacy_notice_version"`
+	SubmittedAt          pgtype.Timestamptz `json:"submitted_at"`
+}
+
+func (q *Queries) CreateSelfServiceGroupSubmission(ctx context.Context, arg CreateSelfServiceGroupSubmissionParams) (CreateSelfServiceGroupSubmissionRow, error) {
+	row := q.db.QueryRow(ctx, createSelfServiceGroupSubmission,
+		arg.SubmissionID,
+		arg.StayID,
+		arg.ClientSubmissionID,
+		arg.RequestHash,
+		arg.SubmittedAt,
+		arg.InviteID,
+		arg.TokenHmac,
+	)
+	var i CreateSelfServiceGroupSubmissionRow
+	err := row.Scan(
+		&i.ID,
+		&i.StayID,
+		&i.ClientSubmissionID,
+		&i.PrivacyNoticeVersion,
+		&i.SubmittedAt,
+	)
+	return i, err
+}
+
+const createSelfServiceStay = `-- name: CreateSelfServiceStay :one
+INSERT INTO core.stays (
+  id,
+  accommodation_id,
+  status,
+  client_submission_id,
+  planned_arrival_on,
+  planned_departure_on,
+  expected_guest_count,
+  provenance,
+  approval_state,
+  approval_expires_at
+)
+SELECT
+  $1,
+  i.accommodation_id,
+  'pre_registered',
+  $2,
+  $3,
+  $4,
+  $5,
+  'self_service',
+  'pending',
+  $6
+FROM core.invites AS i
+JOIN core.accommodations AS a
+  ON a.id = i.accommodation_id
+WHERE i.id = $7
+  AND i.token_hmac = $8
+  AND i.purpose = 'accommodation_self_registration'
+  AND i.revoked_at IS NULL
+  AND i.expires_at > $9
+  AND a.status = 'active'
+RETURNING
+  id,
+  accommodation_id,
+  status,
+  client_submission_id,
+  planned_arrival_on,
+  planned_departure_on,
+  expected_guest_count,
+  provenance,
+  approval_state,
+  approval_expires_at,
+  version,
+  created_at,
+  updated_at
+`
+
+type CreateSelfServiceStayParams struct {
+	StayID             pgtype.UUID        `json:"stay_id"`
+	ClientSubmissionID pgtype.UUID        `json:"client_submission_id"`
+	PlannedArrivalOn   pgtype.Date        `json:"planned_arrival_on"`
+	PlannedDepartureOn pgtype.Date        `json:"planned_departure_on"`
+	ExpectedGuestCount int32              `json:"expected_guest_count"`
+	ApprovalExpiresAt  pgtype.Timestamptz `json:"approval_expires_at"`
+	InviteID           pgtype.UUID        `json:"invite_id"`
+	TokenHmac          []byte             `json:"token_hmac"`
+	Now                pgtype.Timestamptz `json:"now"`
+}
+
+type CreateSelfServiceStayRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	AccommodationID    pgtype.UUID        `json:"accommodation_id"`
+	Status             CoreStayStatus     `json:"status"`
+	ClientSubmissionID pgtype.UUID        `json:"client_submission_id"`
+	PlannedArrivalOn   pgtype.Date        `json:"planned_arrival_on"`
+	PlannedDepartureOn pgtype.Date        `json:"planned_departure_on"`
+	ExpectedGuestCount int32              `json:"expected_guest_count"`
+	Provenance         string             `json:"provenance"`
+	ApprovalState      *string            `json:"approval_state"`
+	ApprovalExpiresAt  pgtype.Timestamptz `json:"approval_expires_at"`
+	Version            int64              `json:"version"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+// created_by_membership_id é omitido de propósito: não existe autora, e
+// stays_provenance_author_valid exige exatamente isso quando a proveniência é
+// self_service. Nenhuma membership sintética de sistema é fabricada.
+func (q *Queries) CreateSelfServiceStay(ctx context.Context, arg CreateSelfServiceStayParams) (CreateSelfServiceStayRow, error) {
+	row := q.db.QueryRow(ctx, createSelfServiceStay,
+		arg.StayID,
+		arg.ClientSubmissionID,
+		arg.PlannedArrivalOn,
+		arg.PlannedDepartureOn,
+		arg.ExpectedGuestCount,
+		arg.ApprovalExpiresAt,
+		arg.InviteID,
+		arg.TokenHmac,
+		arg.Now,
+	)
+	var i CreateSelfServiceStayRow
+	err := row.Scan(
+		&i.ID,
+		&i.AccommodationID,
+		&i.Status,
+		&i.ClientSubmissionID,
+		&i.PlannedArrivalOn,
+		&i.PlannedDepartureOn,
+		&i.ExpectedGuestCount,
+		&i.Provenance,
+		&i.ApprovalState,
+		&i.ApprovalExpiresAt,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createStay = `-- name: CreateStay :one
 INSERT INTO core.stays (
   id,
@@ -400,7 +765,8 @@ INSERT INTO core.stays (
   client_submission_id,
   planned_arrival_on,
   planned_departure_on,
-  expected_guest_count
+  expected_guest_count,
+  provenance
 )
 SELECT
   $1,
@@ -410,7 +776,10 @@ SELECT
   $2,
   $3,
   $4,
-  $5
+  $5,
+  -- Explícito em vez de depender do DEFAULT: a proveniência do fluxo nominal
+  -- passa a ser legível na própria query.
+  'assisted'
 FROM core.accommodations AS a
 JOIN core.memberships AS m
   ON m.accommodation_id = a.id
@@ -502,6 +871,97 @@ func (q *Queries) CreateStay(ctx context.Context, arg CreateStayParams) (CreateS
 	return i, err
 }
 
+const deleteSelfServiceStayVisitors = `-- name: DeleteSelfServiceStayVisitors :execrows
+DELETE FROM core.visitors AS v
+USING core.stays AS s
+WHERE v.stay_id = s.id
+  AND s.id = $1
+  AND s.provenance = 'self_service'
+`
+
+// Rejeição e expiração eliminam os visitantes generalizados e preservam a
+// casca auditável em core.stays. Não há restrição de "pelo menos um visitante",
+// então a estadia sobrevive sem violar invariante.
+func (q *Queries) DeleteSelfServiceStayVisitors(ctx context.Context, stayID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSelfServiceStayVisitors, stayID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const expirePendingSelfServiceStays = `-- name: ExpirePendingSelfServiceStays :many
+WITH candidates AS (
+  SELECT s.id, a.organization_id
+  FROM core.stays AS s
+  JOIN core.accommodations AS a
+    ON a.id = s.accommodation_id
+  WHERE s.approval_state = 'pending'
+    AND s.approval_expires_at <= $1
+  ORDER BY s.approval_expires_at, s.id
+  LIMIT $2
+  FOR UPDATE OF s SKIP LOCKED
+)
+UPDATE core.stays AS s
+SET
+  approval_state = 'expired',
+  approval_expires_at = NULL,
+  status = 'cancelled',
+  cancelled_at = $1,
+  cancellation_reason_code = 'correction',
+  updated_at = $1,
+  version = s.version + 1
+FROM candidates
+WHERE s.id = candidates.id
+RETURNING s.id, s.accommodation_id, candidates.organization_id, s.version
+`
+
+type ExpirePendingSelfServiceStaysParams struct {
+	Cutoff    pgtype.Timestamptz `json:"cutoff"`
+	BatchSize int32              `json:"batch_size"`
+}
+
+type ExpirePendingSelfServiceStaysRow struct {
+	ID              pgtype.UUID `json:"id"`
+	AccommodationID pgtype.UUID `json:"accommodation_id"`
+	OrganizationID  pgtype.UUID `json:"organization_id"`
+	Version         int64       `json:"version"`
+}
+
+// Varredura do worker. Eliminar somente na rejeição permitiria retenção
+// indefinida por inação, então a expiração carimba e o chamador executa a mesma
+// purga de visitantes (ADR-040). Não há membership decisora: o ramo 'expired'
+// de stays_approval_fields_valid exige exatamente isso.
+// A organização é projetada porque a varredura precisa gravar auditoria e
+// audit.Event.Validate exige organization_id não nulo para EntityStay. Como a
+// varredura não tem ator por definição, nenhuma query a resolve por membership:
+// o vínculo tem de vir da própria acomodação. O bloqueio é FOR UPDATE OF s para
+// não travar linhas de core.accommodations.
+func (q *Queries) ExpirePendingSelfServiceStays(ctx context.Context, arg ExpirePendingSelfServiceStaysParams) ([]ExpirePendingSelfServiceStaysRow, error) {
+	rows, err := q.db.Query(ctx, expirePendingSelfServiceStays, arg.Cutoff, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExpirePendingSelfServiceStaysRow{}
+	for rows.Next() {
+		var i ExpirePendingSelfServiceStaysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccommodationID,
+			&i.OrganizationID,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const finalizeInviteSubmission = `-- name: FinalizeInviteSubmission :one
 UPDATE core.stays AS s
 SET
@@ -515,7 +975,9 @@ WHERE i.id = $3
   AND i.token_hmac = $4
   AND i.revoked_at IS NULL
   AND i.expires_at > $2
-  AND i.use_count = i.max_uses
+  -- Mesma falha silenciosa do ConsumeInvite, pelo mesmo motivo: com max_uses
+  -- nulo a igualdade avalia UNKNOWN e a estadia nunca sai de 'invited'.
+  AND (i.max_uses IS NULL OR i.use_count = i.max_uses)
   AND s.id = $5
   AND s.version = $6
   AND s.status IN ('draft', 'invited')
@@ -583,6 +1045,9 @@ SELECT
   s.no_show_at,
   s.cancellation_reason_code,
   s.no_show_reason_code,
+  s.provenance,
+  s.approval_state,
+  s.approval_expires_at,
   s.version,
   s.created_at,
   s.updated_at,
@@ -621,6 +1086,9 @@ type GetAccessibleStayRow struct {
 	NoShowAt               pgtype.Timestamptz      `json:"no_show_at"`
 	CancellationReasonCode *string                 `json:"cancellation_reason_code"`
 	NoShowReasonCode       *string                 `json:"no_show_reason_code"`
+	Provenance             string                  `json:"provenance"`
+	ApprovalState          *string                 `json:"approval_state"`
+	ApprovalExpiresAt      pgtype.Timestamptz      `json:"approval_expires_at"`
 	Version                int64                   `json:"version"`
 	CreatedAt              pgtype.Timestamptz      `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz      `json:"updated_at"`
@@ -647,6 +1115,9 @@ func (q *Queries) GetAccessibleStay(ctx context.Context, arg GetAccessibleStayPa
 		&i.NoShowAt,
 		&i.CancellationReasonCode,
 		&i.NoShowReasonCode,
+		&i.Provenance,
+		&i.ApprovalState,
+		&i.ApprovalExpiresAt,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -654,6 +1125,119 @@ func (q *Queries) GetAccessibleStay(ctx context.Context, arg GetAccessibleStayPa
 		&i.AccommodationStatus,
 		&i.ActorMembershipID,
 		&i.ActorRole,
+	)
+	return i, err
+}
+
+const getAccommodationInviteForCapability = `-- name: GetAccommodationInviteForCapability :one
+SELECT
+  i.id,
+  i.accommodation_id,
+  i.token_hmac,
+  i.token_key_version,
+  i.privacy_notice_version,
+  i.expires_at,
+  i.max_uses,
+  i.use_count,
+  i.revoked_at,
+  a.name AS accommodation_name,
+  a.status AS accommodation_status,
+  a.organization_id
+FROM core.invites AS i
+JOIN core.accommodations AS a
+  ON a.id = i.accommodation_id
+WHERE i.id = $1
+  AND i.purpose = 'accommodation_self_registration'
+`
+
+type GetAccommodationInviteForCapabilityRow struct {
+	ID                   pgtype.UUID             `json:"id"`
+	AccommodationID      pgtype.UUID             `json:"accommodation_id"`
+	TokenHmac            []byte                  `json:"token_hmac"`
+	TokenKeyVersion      string                  `json:"token_key_version"`
+	PrivacyNoticeVersion string                  `json:"privacy_notice_version"`
+	ExpiresAt            pgtype.Timestamptz      `json:"expires_at"`
+	MaxUses              *int32                  `json:"max_uses"`
+	UseCount             int32                   `json:"use_count"`
+	RevokedAt            pgtype.Timestamptz      `json:"revoked_at"`
+	AccommodationName    string                  `json:"accommodation_name"`
+	AccommodationStatus  CoreAccommodationStatus `json:"accommodation_status"`
+	OrganizationID       pgtype.UUID             `json:"organization_id"`
+}
+
+func (q *Queries) GetAccommodationInviteForCapability(ctx context.Context, inviteID pgtype.UUID) (GetAccommodationInviteForCapabilityRow, error) {
+	row := q.db.QueryRow(ctx, getAccommodationInviteForCapability, inviteID)
+	var i GetAccommodationInviteForCapabilityRow
+	err := row.Scan(
+		&i.ID,
+		&i.AccommodationID,
+		&i.TokenHmac,
+		&i.TokenKeyVersion,
+		&i.PrivacyNoticeVersion,
+		&i.ExpiresAt,
+		&i.MaxUses,
+		&i.UseCount,
+		&i.RevokedAt,
+		&i.AccommodationName,
+		&i.AccommodationStatus,
+		&i.OrganizationID,
+	)
+	return i, err
+}
+
+const getActiveAccommodationInvite = `-- name: GetActiveAccommodationInvite :one
+SELECT
+  i.id,
+  i.accommodation_id,
+  i.privacy_notice_version,
+  i.expires_at,
+  i.max_uses,
+  i.use_count,
+  i.revoked_at
+FROM core.invites AS i
+WHERE i.accommodation_id = $1
+  AND i.purpose = 'accommodation_self_registration'
+  AND i.revoked_at IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM core.memberships AS m
+    WHERE m.accommodation_id = i.accommodation_id
+      AND m.oidc_issuer = $2
+      AND m.oidc_subject = $3
+      AND m.active = true
+      AND m.role = 'manager'
+  )
+`
+
+type GetActiveAccommodationInviteParams struct {
+	AccommodationID pgtype.UUID `json:"accommodation_id"`
+	OidcIssuer      string      `json:"oidc_issuer"`
+	OidcSubject     string      `json:"oidc_subject"`
+}
+
+type GetActiveAccommodationInviteRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	AccommodationID      pgtype.UUID        `json:"accommodation_id"`
+	PrivacyNoticeVersion string             `json:"privacy_notice_version"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	MaxUses              *int32             `json:"max_uses"`
+	UseCount             int32              `json:"use_count"`
+	RevokedAt            pgtype.Timestamptz `json:"revoked_at"`
+}
+
+// Sem token e sem HMAC na projeção: a URL só existe na criação e no replay
+// idempotente exato (ADR-019).
+func (q *Queries) GetActiveAccommodationInvite(ctx context.Context, arg GetActiveAccommodationInviteParams) (GetActiveAccommodationInviteRow, error) {
+	row := q.db.QueryRow(ctx, getActiveAccommodationInvite, arg.AccommodationID, arg.OidcIssuer, arg.OidcSubject)
+	var i GetActiveAccommodationInviteRow
+	err := row.Scan(
+		&i.ID,
+		&i.AccommodationID,
+		&i.PrivacyNoticeVersion,
+		&i.ExpiresAt,
+		&i.MaxUses,
+		&i.UseCount,
+		&i.RevokedAt,
 	)
 	return i, err
 }
@@ -692,7 +1276,7 @@ type GetInviteForCapabilityRow struct {
 	TokenKeyVersion      string                  `json:"token_key_version"`
 	PrivacyNoticeVersion string                  `json:"privacy_notice_version"`
 	ExpiresAt            pgtype.Timestamptz      `json:"expires_at"`
-	MaxUses              int32                   `json:"max_uses"`
+	MaxUses              *int32                  `json:"max_uses"`
 	UseCount             int32                   `json:"use_count"`
 	RevokedAt            pgtype.Timestamptz      `json:"revoked_at"`
 	StayStatus           CoreStayStatus          `json:"stay_status"`
@@ -948,6 +1532,86 @@ func (q *Queries) InsertInviteVisitor(ctx context.Context, arg InsertInviteVisit
 	return i, err
 }
 
+const insertSelfServiceVisitor = `-- name: InsertSelfServiceVisitor :one
+INSERT INTO core.visitors (
+  id,
+  stay_id,
+  client_id,
+  role,
+  age_band,
+  residence_country,
+  residence_state,
+  residence_city_code
+)
+SELECT
+  $1,
+  s.id,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7
+FROM core.stays AS s
+WHERE s.id = $8
+  AND s.provenance = 'self_service'
+  AND s.approval_state = 'pending'
+RETURNING id, stay_id, client_id, role, age_band, residence_country,
+  residence_state, residence_city_code, version
+`
+
+type InsertSelfServiceVisitorParams struct {
+	VisitorID         pgtype.UUID     `json:"visitor_id"`
+	ClientID          pgtype.UUID     `json:"client_id"`
+	VisitorRole       CoreVisitorRole `json:"visitor_role"`
+	AgeBand           string          `json:"age_band"`
+	ResidenceCountry  string          `json:"residence_country"`
+	ResidenceState    *string         `json:"residence_state"`
+	ResidenceCityCode *string         `json:"residence_city_code"`
+	StayID            pgtype.UUID     `json:"stay_id"`
+}
+
+type InsertSelfServiceVisitorRow struct {
+	ID                pgtype.UUID     `json:"id"`
+	StayID            pgtype.UUID     `json:"stay_id"`
+	ClientID          pgtype.UUID     `json:"client_id"`
+	Role              CoreVisitorRole `json:"role"`
+	AgeBand           string          `json:"age_band"`
+	ResidenceCountry  string          `json:"residence_country"`
+	ResidenceState    *string         `json:"residence_state"`
+	ResidenceCityCode *string         `json:"residence_city_code"`
+	Version           int64           `json:"version"`
+}
+
+// Somente dados generalizados. O canal aberto não aceita nome, documento,
+// e-mail nem telefone (ADR-040), e role='minor' é recusado na aplicação antes
+// de chegar aqui.
+func (q *Queries) InsertSelfServiceVisitor(ctx context.Context, arg InsertSelfServiceVisitorParams) (InsertSelfServiceVisitorRow, error) {
+	row := q.db.QueryRow(ctx, insertSelfServiceVisitor,
+		arg.VisitorID,
+		arg.ClientID,
+		arg.VisitorRole,
+		arg.AgeBand,
+		arg.ResidenceCountry,
+		arg.ResidenceState,
+		arg.ResidenceCityCode,
+		arg.StayID,
+	)
+	var i InsertSelfServiceVisitorRow
+	err := row.Scan(
+		&i.ID,
+		&i.StayID,
+		&i.ClientID,
+		&i.Role,
+		&i.AgeBand,
+		&i.ResidenceCountry,
+		&i.ResidenceState,
+		&i.ResidenceCityCode,
+		&i.Version,
+	)
+	return i, err
+}
+
 const listAccessibleStays = `-- name: ListAccessibleStays :many
 SELECT
   s.id,
@@ -967,6 +1631,9 @@ SELECT
   s.no_show_at,
   s.cancellation_reason_code,
   s.no_show_reason_code,
+  s.provenance,
+  s.approval_state,
+  s.approval_expires_at,
   s.version,
   s.created_at,
   s.updated_at
@@ -984,23 +1651,34 @@ WHERE m.oidc_issuer = $1
     $4::core.stay_status IS NULL
     OR s.status = $4::core.stay_status
   )
+  -- A fila de aprovação é GET /stays?accommodation_id=…&approval_state=pending.
+  -- Nenhum endpoint novo de listagem: cursor, limite, ordenação e isolamento
+  -- por membership continuam sendo os já provados na Fase 2.
   AND (
-    $5::date IS NULL
-    OR s.planned_arrival_on >= $5::date
+    $5::text IS NULL
+    OR s.approval_state = $5::text
   )
   AND (
-    $6::date IS NULL
-    OR s.planned_arrival_on <= $6::date
+    $6::text IS NULL
+    OR s.provenance = $6::text
   )
   AND (
-    $7::timestamptz IS NULL
+    $7::date IS NULL
+    OR s.planned_arrival_on >= $7::date
+  )
+  AND (
+    $8::date IS NULL
+    OR s.planned_arrival_on <= $8::date
+  )
+  AND (
+    $9::timestamptz IS NULL
     OR (s.created_at, s.id) < (
-      $7::timestamptz,
-      $8::uuid
+      $9::timestamptz,
+      $10::uuid
     )
   )
 ORDER BY s.created_at DESC, s.id DESC
-LIMIT $9
+LIMIT $11
 `
 
 type ListAccessibleStaysParams struct {
@@ -1008,6 +1686,8 @@ type ListAccessibleStaysParams struct {
 	OidcSubject     string             `json:"oidc_subject"`
 	AccommodationID pgtype.UUID        `json:"accommodation_id"`
 	StayStatus      *CoreStayStatus    `json:"stay_status"`
+	ApprovalState   *string            `json:"approval_state"`
+	Provenance      *string            `json:"provenance"`
 	ArrivalFrom     pgtype.Date        `json:"arrival_from"`
 	ArrivalTo       pgtype.Date        `json:"arrival_to"`
 	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
@@ -1029,6 +1709,9 @@ type ListAccessibleStaysRow struct {
 	NoShowAt               pgtype.Timestamptz `json:"no_show_at"`
 	CancellationReasonCode *string            `json:"cancellation_reason_code"`
 	NoShowReasonCode       *string            `json:"no_show_reason_code"`
+	Provenance             string             `json:"provenance"`
+	ApprovalState          *string            `json:"approval_state"`
+	ApprovalExpiresAt      pgtype.Timestamptz `json:"approval_expires_at"`
 	Version                int64              `json:"version"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
@@ -1040,6 +1723,8 @@ func (q *Queries) ListAccessibleStays(ctx context.Context, arg ListAccessibleSta
 		arg.OidcSubject,
 		arg.AccommodationID,
 		arg.StayStatus,
+		arg.ApprovalState,
+		arg.Provenance,
 		arg.ArrivalFrom,
 		arg.ArrivalTo,
 		arg.CursorCreatedAt,
@@ -1067,6 +1752,9 @@ func (q *Queries) ListAccessibleStays(ctx context.Context, arg ListAccessibleSta
 			&i.NoShowAt,
 			&i.CancellationReasonCode,
 			&i.NoShowReasonCode,
+			&i.Provenance,
+			&i.ApprovalState,
+			&i.ApprovalExpiresAt,
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1163,6 +1851,9 @@ SELECT
   s.no_show_at,
   s.cancellation_reason_code,
   s.no_show_reason_code,
+  s.provenance,
+  s.approval_state,
+  s.approval_expires_at,
   s.version,
   s.created_at,
   s.updated_at,
@@ -1209,6 +1900,9 @@ type LockStayForCommandRow struct {
 	NoShowAt               pgtype.Timestamptz      `json:"no_show_at"`
 	CancellationReasonCode *string                 `json:"cancellation_reason_code"`
 	NoShowReasonCode       *string                 `json:"no_show_reason_code"`
+	Provenance             string                  `json:"provenance"`
+	ApprovalState          *string                 `json:"approval_state"`
+	ApprovalExpiresAt      pgtype.Timestamptz      `json:"approval_expires_at"`
 	Version                int64                   `json:"version"`
 	CreatedAt              pgtype.Timestamptz      `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz      `json:"updated_at"`
@@ -1240,6 +1934,9 @@ func (q *Queries) LockStayForCommand(ctx context.Context, arg LockStayForCommand
 		&i.NoShowAt,
 		&i.CancellationReasonCode,
 		&i.NoShowReasonCode,
+		&i.Provenance,
+		&i.ApprovalState,
+		&i.ApprovalExpiresAt,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1250,6 +1947,135 @@ func (q *Queries) LockStayForCommand(ctx context.Context, arg LockStayForCommand
 		&i.VisitorCount,
 	)
 	return i, err
+}
+
+const rejectSelfServiceStay = `-- name: RejectSelfServiceStay :one
+UPDATE core.stays AS s
+SET
+  approval_state = 'rejected',
+  approval_reason_code = $1,
+  approval_decided_by_membership_id = $2,
+  approval_expires_at = NULL,
+  status = 'cancelled',
+  cancelled_at = $3,
+  cancellation_reason_code = 'accommodation_request',
+  updated_at = $3,
+  version = s.version + 1
+WHERE s.id = $4
+  AND s.version = $5
+  AND s.provenance = 'self_service'
+  AND s.approval_state = 'pending'
+  AND EXISTS (
+    SELECT 1
+    FROM core.accommodations AS a
+    WHERE a.id = s.accommodation_id
+      AND a.status = 'active'
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM core.memberships AS m
+    WHERE m.accommodation_id = s.accommodation_id
+      AND m.id = $2
+      AND m.oidc_issuer = $6
+      AND m.oidc_subject = $7
+      AND m.active = true
+      AND m.role = 'manager'
+  )
+RETURNING
+  s.id,
+  s.accommodation_id,
+  s.status,
+  s.provenance,
+  s.approval_state,
+  s.approval_reason_code,
+  s.version,
+  s.updated_at
+`
+
+type RejectSelfServiceStayParams struct {
+	ReasonCode            *string            `json:"reason_code"`
+	DecidedByMembershipID pgtype.UUID        `json:"decided_by_membership_id"`
+	RejectedAt            pgtype.Timestamptz `json:"rejected_at"`
+	StayID                pgtype.UUID        `json:"stay_id"`
+	ExpectedVersion       int64              `json:"expected_version"`
+	OidcIssuer            string             `json:"oidc_issuer"`
+	OidcSubject           string             `json:"oidc_subject"`
+}
+
+type RejectSelfServiceStayRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	AccommodationID    pgtype.UUID        `json:"accommodation_id"`
+	Status             CoreStayStatus     `json:"status"`
+	Provenance         string             `json:"provenance"`
+	ApprovalState      *string            `json:"approval_state"`
+	ApprovalReasonCode *string            `json:"approval_reason_code"`
+	Version            int64              `json:"version"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Aprovação e cancelamento numa única sentença: a estadia rejeitada sai da
+// presença por dois caminhos independentes (approval_state e status).
+func (q *Queries) RejectSelfServiceStay(ctx context.Context, arg RejectSelfServiceStayParams) (RejectSelfServiceStayRow, error) {
+	row := q.db.QueryRow(ctx, rejectSelfServiceStay,
+		arg.ReasonCode,
+		arg.DecidedByMembershipID,
+		arg.RejectedAt,
+		arg.StayID,
+		arg.ExpectedVersion,
+		arg.OidcIssuer,
+		arg.OidcSubject,
+	)
+	var i RejectSelfServiceStayRow
+	err := row.Scan(
+		&i.ID,
+		&i.AccommodationID,
+		&i.Status,
+		&i.Provenance,
+		&i.ApprovalState,
+		&i.ApprovalReasonCode,
+		&i.Version,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const revokeActiveAccommodationInvites = `-- name: RevokeActiveAccommodationInvites :execrows
+UPDATE core.invites AS i
+SET revoked_at = $1, updated_at = $1
+WHERE i.accommodation_id = $2
+  AND i.purpose = 'accommodation_self_registration'
+  AND i.revoked_at IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM core.memberships AS m
+    WHERE m.accommodation_id = i.accommodation_id
+      AND m.oidc_issuer = $3
+      AND m.oidc_subject = $4
+      AND m.active = true
+      AND m.role = 'manager'
+  )
+`
+
+type RevokeActiveAccommodationInvitesParams struct {
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+	AccommodationID pgtype.UUID        `json:"accommodation_id"`
+	OidcIssuer      string             `json:"oidc_issuer"`
+	OidcSubject     string             `json:"oidc_subject"`
+}
+
+// A rotação revoga o cartaz anterior na mesma transação: o índice parcial
+// invites_accommodation_single_active_idx torna dois ativos impossíveis.
+func (q *Queries) RevokeActiveAccommodationInvites(ctx context.Context, arg RevokeActiveAccommodationInvitesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeActiveAccommodationInvites,
+		arg.RevokedAt,
+		arg.AccommodationID,
+		arg.OidcIssuer,
+		arg.OidcSubject,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeActiveInvites = `-- name: RevokeActiveInvites :execrows

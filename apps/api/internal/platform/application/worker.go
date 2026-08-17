@@ -116,12 +116,18 @@ func runWorkerWithResources(
 		Name:      "poller_shutdown_timeouts_total",
 		Help:      "Total de deadlines excedidos ao aguardar pollers no shutdown.",
 	})
+	approvalExpiry := newApprovalExpiryMetrics()
+	approvals, err := approvalSweeper(platformStore, cfg)
+	if err != nil {
+		return errors.New("approval expiry initialization failed")
+	}
 	registry.MustRegister(
 		alive, ready, cleanupFailures, analyticsFailures, analyticsRuns,
 		expiredCleanupRuns, expiredCleanupDeleted,
 		expiredCleanupDuration, expiredCleanupBatches, expiredCleanupSaturated,
 		outboxPending, outboxOldestAge, pollerShutdownTimeouts,
 	)
+	registry.MustRegister(approvalExpiry.collectors()...)
 	alive.Set(1)
 	defer alive.Set(0)
 	updateReadiness(ctx, platformStore, ready)
@@ -142,6 +148,7 @@ func runWorkerWithResources(
 			duration: expiredCleanupDuration, batches: expiredCleanupBatches,
 			saturated: expiredCleanupSaturated,
 		},
+		approvals: approvals, approvalExpiry: approvalExpiry,
 	})
 	logger.Info("worker started", "component", "worker")
 	serveErr := server.Serve(
@@ -161,7 +168,10 @@ func workerServices(
 	pool *pgxpool.Pool,
 	cfg config.Config,
 ) (*store.Store, *questionnaire.Service, error) {
-	platformStore, err := store.NewPhase3(pool, cfg.DatabaseTimeout, cfg.Phase2, cfg.Phase3)
+	platformStore, err := store.NewPhase3(
+		pool, cfg.DatabaseTimeout, cfg.Phase2, cfg.Phase3,
+		store.WithPhase7Config(cfg.Phase7),
+	)
 	if err != nil {
 		return nil, nil, errors.New("worker repository initialization failed")
 	}
@@ -169,6 +179,19 @@ func workerServices(
 		store.NewQuestionnaireRepository(platformStore),
 	)
 	return platformStore, questionnaires, nil
+}
+
+// approvalSweeper is nil when the phase is off. With the phase on and no usable
+// key the repository refuses to exist, and the worker fails to start rather
+// than sweeping for a phase the API is not serving.
+func approvalSweeper(
+	platformStore *store.Store,
+	cfg config.Config,
+) (approvalExpirer, error) {
+	if !cfg.Phase7.Enabled {
+		return nil, nil
+	}
+	return store.NewStayRepository(platformStore)
 }
 
 // Telemetry is shut down explicitly when the pool fails, since the deferred
@@ -203,6 +226,8 @@ type workerPollerSpec struct {
 	analyticsFailures prometheus.Counter
 	analyticsRuns     *prometheus.CounterVec
 	cleanup           expiredCleanupMetrics
+	approvals         approvalExpirer
+	approvalExpiry    approvalExpiryMetrics
 }
 
 // Phase-gated pollers only start when their phase is enabled, so a disabled
@@ -234,6 +259,7 @@ func startPhasePollers(pollers *pollerCoordinator, spec workerPollerSpec) {
 			)
 		})
 	}
+	startApprovalExpiryPoller(pollers, spec)
 	if !spec.cfg.Phase4.Enabled {
 		return
 	}
@@ -242,6 +268,21 @@ func startPhasePollers(pollers *pollerCoordinator, spec workerPollerSpec) {
 		pollAnalytics(
 			pollerContext, analyticsRepository, spec.cfg.Phase4, spec.logger,
 			spec.analyticsFailures, spec.analyticsRuns,
+		)
+	})
+}
+
+// The sweep only runs when the phase is on, and only when the repository could
+// be built: with no usable proof-of-work key the repository refuses to exist,
+// and a worker that swept without one would be operating a phase the API is not
+// serving.
+func startApprovalExpiryPoller(pollers *pollerCoordinator, spec workerPollerSpec) {
+	if !spec.cfg.Phase7.Enabled || spec.approvals == nil {
+		return
+	}
+	pollers.Go(func(pollerContext context.Context) {
+		pollApprovalExpiry(
+			pollerContext, spec.approvals, spec.logger, spec.approvalExpiry,
 		)
 	})
 }

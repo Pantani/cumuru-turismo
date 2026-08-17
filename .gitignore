@@ -28,6 +28,9 @@ _workspace/
 /.idea/
 /.vscode/
 .DS_Store
+# Preview WebP regerado pela ferramenta que exporta o brandkit; o documento
+# fonte é Brandkit Observatorio.dc.html.
+.thumbnail
 
 .env
 .env.*

@@ -89,6 +89,7 @@ func benchmarkSource(
 	return analytics.PresenceSource{
 		StayID:           benchmarkUUID(1, dayIndex, sourceIndex, 0),
 		Status:           stay.StatusCheckedOut,
+		Approval:         stay.ApprovalNotRequired,
 		PlannedArrival:   arrival,
 		PlannedDeparture: departure,
 		CheckedInAt:      &checkedInAt,

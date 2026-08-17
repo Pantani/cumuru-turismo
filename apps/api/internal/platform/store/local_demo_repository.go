@@ -138,11 +138,14 @@ func ensureLocalAccount(
 	q *generated.Queries,
 	account LocalDemoAccount,
 ) error {
+	// A coluna passou a admitir nulo para a conta em pending_activation
+	// (ADR-041). A fixture local nasce com senha, então o ponteiro é sempre
+	// preenchido: aqui nulo seria conta sem credencial, não senha vazia.
 	insert := generated.InsertLocalDemoAccountParams{
 		ID:           pgUUID(account.ID),
 		Email:        account.Email,
 		DisplayName:  account.DisplayName,
-		PasswordHash: account.PasswordHash,
+		PasswordHash: &account.PasswordHash,
 		Scopes:       account.Scopes,
 	}
 	if err := q.InsertLocalDemoAccount(ctx, insert); err != nil {

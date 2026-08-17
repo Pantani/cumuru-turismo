@@ -15,6 +15,7 @@ import (
 
 	"github.com/Pantani/cumuru/apps/api/internal/access"
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
+	"github.com/Pantani/cumuru/apps/api/internal/activation"
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/idempotency"
@@ -53,6 +54,8 @@ type Dependencies struct {
 	Accommodations                 *accommodation.Service
 	AccommodationOnboardingEnabled bool
 	Stays                          *stay.Service
+	SelfServiceEnabled             bool
+	Activation                     *activation.Service
 	Questionnaires                 *questionnaire.Service
 	PublicAnalytics                analytics.PublicReader
 	AnalyticsQuality               analytics.QualityReader
@@ -163,7 +166,19 @@ func (d Dependencies) registerFeatureRoutes(mux *http.ServeMux, metrics *httpMet
 	if d.Questionnaires != nil {
 		d.registerQuestionnaireRoutes(mux, metrics)
 	}
+	d.registerPhase7Routes(mux, metrics)
 	d.registerAnalyticsRoutes(mux, metrics)
+}
+
+// The open channel is registered only when the phase is on, so a disabled phase
+// answers 404 instead of exposing a half-configured route.
+func (d Dependencies) registerPhase7Routes(mux *http.ServeMux, metrics *httpMetrics) {
+	if d.Stays != nil && d.SelfServiceEnabled {
+		d.registerSelfServiceRoutes(mux, metrics)
+	}
+	if d.Activation != nil {
+		d.registerActivationRoutes(mux, metrics)
+	}
 }
 
 func (d Dependencies) health(writer http.ResponseWriter, _ *http.Request) {
@@ -490,17 +505,35 @@ type problemMapping struct {
 // more specific mapping always precedes a broader one.
 var serviceProblems = []problemMapping{
 	{http.StatusForbidden, "forbidden", "Operação não permitida",
-		[]error{accommodation.ErrForbidden}},
+		[]error{accommodation.ErrForbidden, stay.ErrForbidden, activation.ErrForbidden}},
+	// The refusal of a minor gets its own code so the form can point at the
+	// assisted channel. It depends only on the submitted body and never on
+	// pre-existing data about a subject, so it is not an oracle (T-02).
+	{http.StatusUnprocessableEntity, "minor-not-accepted",
+		"Menor de idade só pode ser cadastrado pelo canal assistido",
+		[]error{stay.ErrMinorNotAccepted}},
 	{http.StatusUnprocessableEntity, "validation-failed", "Dados inválidos",
-		[]error{accommodation.ErrInvalidInput, stay.ErrInvalidInput, questionnaire.ErrInvalidInput}},
+		[]error{
+			accommodation.ErrInvalidInput, stay.ErrInvalidInput,
+			questionnaire.ErrInvalidInput, activation.ErrInvalidInput,
+		}},
 	{http.StatusNotFound, "not-found", "Recurso não encontrado",
-		[]error{accommodation.ErrNotFound, stay.ErrNotFound, questionnaire.ErrNotFound, questionnaire.ErrCapabilityInvalid}},
+		[]error{
+			accommodation.ErrNotFound, stay.ErrNotFound, questionnaire.ErrNotFound,
+			questionnaire.ErrCapabilityInvalid, activation.ErrNotFound,
+		}},
 	{http.StatusPreconditionFailed, "precondition-failed", "Versão desatualizada",
-		[]error{accommodation.ErrPreconditionFailed, stay.ErrPreconditionFailed, questionnaire.ErrPreconditionFailed}},
+		[]error{
+			accommodation.ErrPreconditionFailed, stay.ErrPreconditionFailed,
+			questionnaire.ErrPreconditionFailed, activation.ErrPreconditionFailed,
+		}},
 	{http.StatusConflict, "invite-consumed", "Convite já consumido",
 		[]error{stay.ErrInviteConsumed}},
 	{http.StatusConflict, "conflict", "Conflito de estado",
-		[]error{accommodation.ErrConflict, stay.ErrConflict, questionnaire.ErrConflict}},
+		[]error{
+			accommodation.ErrConflict, stay.ErrConflict, questionnaire.ErrConflict,
+			activation.ErrConflict,
+		}},
 }
 
 func serviceProblem(err error) (int, string, string) {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Pantani/cumuru/apps/api/internal/access"
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
+	"github.com/Pantani/cumuru/apps/api/internal/activation"
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/database"
@@ -61,11 +62,11 @@ func runAPIWithTelemetry(
 	if err != nil {
 		return err
 	}
-	publicHandler, operationsHandler, err := httpapi.New(apiDependencies(
+	publicHandler, operationsHandler, err := apiHandlers(
 		cfg, build, logger, tracing, verifier,
 		platformStore, accommodationService, stayService, questionnaireService,
 		publicAnalytics, analyticsQuality,
-	))
+	)
 	if err != nil {
 		return err
 	}
@@ -78,6 +79,34 @@ func runAPIWithTelemetry(
 		listenerHandler{publicListener, publicHandler},
 		listenerHandler{operationsListener, operationsHandler},
 	)
+}
+
+// The handlers are assembled before any listener is opened, so a dependency the
+// API cannot serve correctly — an activation repository that fails to build, or
+// a cursor keyring a paginated surface cannot use — stops the process before it
+// starts accepting connections.
+func apiHandlers(
+	cfg config.Config,
+	build Build,
+	logger *slog.Logger,
+	tracing *telemetry.Provider,
+	verifier access.Verifier,
+	platformStore *store.Store,
+	accommodationService *accommodation.Service,
+	stayService *stay.Service,
+	questionnaireService *questionnaire.Service,
+	publicAnalytics analytics.PublicReader,
+	analyticsQuality analytics.QualityReader,
+) (http.Handler, http.Handler, error) {
+	activations, err := activationService(platformStore, cfg)
+	if err != nil {
+		return nil, nil, errors.New("activation repository initialization failed")
+	}
+	return httpapi.New(apiDependencies(
+		cfg, build, logger, tracing, verifier,
+		platformStore, accommodationService, stayService, questionnaireService,
+		publicAnalytics, analyticsQuality, activations,
+	))
 }
 
 type listenerHandler struct {
@@ -130,6 +159,7 @@ func apiDependencies(
 	questionnaireService *questionnaire.Service,
 	publicAnalytics analytics.PublicReader,
 	analyticsQuality analytics.QualityReader,
+	activationService *activation.Service,
 ) httpapi.Dependencies {
 	return httpapi.Dependencies{
 		Readiness:                      platformStore,
@@ -139,6 +169,8 @@ func apiDependencies(
 		Accommodations:                 accommodationService,
 		AccommodationOnboardingEnabled: cfg.Phase2.AccommodationOnboardingEnabled,
 		Stays:                          stayService,
+		SelfServiceEnabled:             cfg.Phase7.Enabled,
+		Activation:                     activationService,
 		Questionnaires:                 questionnaireService,
 		PublicAnalytics:                publicAnalytics,
 		AnalyticsQuality:               analyticsQuality,
@@ -185,6 +217,22 @@ func services(
 	return accommodationService, stay.NewService(stayRepository), questionnaireService, nil
 }
 
+// activationService is nil when the phase is off, which is what keeps the two
+// public activation routes unregistered instead of half configured.
+func activationService(
+	platformStore *store.Store,
+	cfg config.Config,
+) (*activation.Service, error) {
+	if !cfg.Phase7.Enabled {
+		return nil, nil
+	}
+	repository, err := store.NewActivationRepository(platformStore)
+	if err != nil {
+		return nil, err
+	}
+	return activation.NewService(repository), nil
+}
+
 func openServices(
 	ctx context.Context,
 	cfg config.Config,
@@ -205,6 +253,7 @@ func openServices(
 	platformStore, err := store.NewPhase3(
 		pool, cfg.DatabaseTimeout, cfg.Phase2, cfg.Phase3,
 		store.WithAuthConfig(cfg.Auth),
+		store.WithPhase7Config(cfg.Phase7),
 	)
 	if err != nil {
 		pool.Close()

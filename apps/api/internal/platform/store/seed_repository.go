@@ -199,11 +199,13 @@ func insertSeedAccount(
 	q *generated.Queries,
 	account SeedAccount,
 ) error {
+	// Semeadura sempre traz credencial; nulo na coluna é a conta que ainda
+	// espera ativação por capability (ADR-041), estado que o seed não produz.
 	err := q.InsertSeedAccount(ctx, generated.InsertSeedAccountParams{
 		ID:                 pgUUID(account.ID),
 		Email:              account.Email,
 		DisplayName:        account.DisplayName,
-		PasswordHash:       account.PasswordHash,
+		PasswordHash:       &account.PasswordHash,
 		Scopes:             account.Scopes,
 		PasswordMustChange: account.PasswordMustChange,
 	})

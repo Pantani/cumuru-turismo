@@ -13,6 +13,7 @@ import {
   VisitorEditor,
   type VisitorEditorHandle,
 } from "../visitors/VisitorEditor";
+import { normalizedVisitor } from "../visitors/visitor-input";
 import {
   createPhase2Client,
   Phase2ApiError,
@@ -55,24 +56,6 @@ function updateDraftHash(id: string | null) {
     "",
     `${window.location.pathname}${window.location.search}${hash}`,
   );
-}
-
-function normalizedVisitor(visitor: VisitorInput): VisitorInput {
-  const country = visitor.residence_country.toUpperCase();
-  const common = {
-    client_id: visitor.client_id,
-    role: visitor.role,
-    age_band: visitor.age_band,
-    residence_country: country,
-  };
-  if (country !== "BR") {
-    return common;
-  }
-  return {
-    ...common,
-    residence_state: (visitor.residence_state ?? "").toUpperCase(),
-    residence_city_code: visitor.residence_city_code ?? "",
-  };
 }
 
 function requestFrom(

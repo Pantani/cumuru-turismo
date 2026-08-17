@@ -55,6 +55,34 @@ func TestEnvReaderFallsBackWithoutFailing(t *testing.T) {
 	}
 }
 
+// A value outside the bounds must fail here, because the caller narrows it to
+// uint8 or int32 afterwards and that conversion is silent: 268 would arrive at
+// the range check as 12, a number the operator never wrote.
+func TestEnvReaderRejectsIntegerOutsideRange(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{"268", "256", "0", "-1", "33"} {
+		reader := newEnvReader(lookupMap(map[string]string{"FIELD": value}))
+		reader.integerInRange("FIELD", 12, 1, 32)
+		err := reader.Err()
+		if err == nil || !strings.Contains(err.Error(), "FIELD") {
+			t.Fatalf("integerInRange(%s) error = %v, want a failure naming FIELD", value, err)
+		}
+	}
+}
+
+func TestEnvReaderAcceptsIntegerInsideRange(t *testing.T) {
+	t.Parallel()
+
+	reader := newEnvReader(lookupMap(map[string]string{"FIELD": "18"}))
+	if got := reader.integerInRange("FIELD", 12, 1, 32); got != 18 {
+		t.Fatalf("integerInRange() = %d, want 18", got)
+	}
+	if err := reader.Err(); err != nil {
+		t.Fatalf("Err() = %v, want nil", err)
+	}
+}
+
 // The first failing field is the one reported, so the operator is pointed at the
 // beginning of the problem rather than at whatever tripped last.
 func TestEnvReaderKeepsFirstFailure(t *testing.T) {

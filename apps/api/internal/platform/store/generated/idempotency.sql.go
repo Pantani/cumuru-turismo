@@ -107,7 +107,10 @@ SELECT
   )::bigint AS idempotency_records,
   (
     pg_catalog.to_jsonb(cleanup_result) ->> 'rate_limit_buckets'
-  )::bigint AS rate_limit_buckets
+  )::bigint AS rate_limit_buckets,
+  (
+    pg_catalog.to_jsonb(cleanup_result) ->> 'proof_of_work_spends'
+  )::bigint AS proof_of_work_spends
 FROM platform.cleanup_expired_operational_records(
   $1,
   $2::integer
@@ -122,12 +125,13 @@ type CleanupExpiredOperationalRecordsParams struct {
 type CleanupExpiredOperationalRecordsRow struct {
 	IdempotencyRecords int64 `json:"idempotency_records"`
 	RateLimitBuckets   int64 `json:"rate_limit_buckets"`
+	ProofOfWorkSpends  int64 `json:"proof_of_work_spends"`
 }
 
 func (q *Queries) CleanupExpiredOperationalRecords(ctx context.Context, arg CleanupExpiredOperationalRecordsParams) (CleanupExpiredOperationalRecordsRow, error) {
 	row := q.db.QueryRow(ctx, cleanupExpiredOperationalRecords, arg.ExpiredBefore, arg.BatchSize)
 	var i CleanupExpiredOperationalRecordsRow
-	err := row.Scan(&i.IdempotencyRecords, &i.RateLimitBuckets)
+	err := row.Scan(&i.IdempotencyRecords, &i.RateLimitBuckets, &i.ProofOfWorkSpends)
 	return i, err
 }
 

@@ -47,7 +47,9 @@ CREATE TABLE auth.accounts (
   id uuid PRIMARY KEY,
   email text NOT NULL,
   display_name text NOT NULL,
-  password_hash text NOT NULL,
+  -- Nulo somente no estado pending_activation; ver
+  -- accounts_credential_state_valid (ADR-041).
+  password_hash text,
   scopes text[] NOT NULL,
   status text NOT NULL DEFAULT 'active',
   failed_attempts integer NOT NULL DEFAULT 0,
@@ -123,6 +125,32 @@ CREATE UNIQUE INDEX accommodations_onboarding_submission_idx
   ON core.accommodations (organization_id, onboarding_submission_id)
   WHERE onboarding_submission_id IS NOT NULL;
 
+-- Capability de uso único que transfere o acesso da acomodação a quem a opera
+-- (ADR-041). Armazenada somente por HMAC e nunca reconstruível sem o keyring.
+CREATE TABLE auth.activation_capabilities (
+  id uuid PRIMARY KEY,
+  account_id uuid NOT NULL REFERENCES auth.accounts(id) ON DELETE RESTRICT,
+  accommodation_id uuid NOT NULL
+    REFERENCES core.accommodations(id) ON DELETE RESTRICT,
+  token_hmac bytea NOT NULL UNIQUE,
+  token_key_version text NOT NULL,
+  purpose text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT activation_key_version_not_blank
+    CHECK (btrim(token_key_version) <> ''),
+  CONSTRAINT activation_purpose_valid
+    CHECK (purpose = 'accommodation_activation'),
+  CONSTRAINT activation_expiry_valid
+    CHECK (expires_at > created_at),
+  CONSTRAINT activation_token_hmac_sha256
+    CHECK (octet_length(token_hmac) = 32),
+  CONSTRAINT activation_terminal_state_valid
+    CHECK (consumed_at IS NULL OR revoked_at IS NULL)
+);
+
 CREATE TABLE core.memberships (
   id uuid PRIMARY KEY,
   accommodation_id uuid NOT NULL REFERENCES core.accommodations(id),
@@ -146,7 +174,9 @@ CREATE INDEX memberships_principal_idx
 CREATE TABLE core.stays (
   id uuid PRIMARY KEY,
   accommodation_id uuid NOT NULL REFERENCES core.accommodations(id),
-  created_by_membership_id uuid NOT NULL REFERENCES core.memberships(id),
+  -- Nulo somente quando provenance = 'self_service'; ver
+  -- stays_provenance_author_valid (ADR-040).
+  created_by_membership_id uuid REFERENCES core.memberships(id),
   status core.stay_status NOT NULL DEFAULT 'draft',
   client_submission_id uuid NOT NULL,
   planned_arrival_on date NOT NULL,
@@ -158,11 +188,82 @@ CREATE TABLE core.stays (
   no_show_at timestamptz,
   cancellation_reason_code text,
   no_show_reason_code text,
+  provenance text NOT NULL DEFAULT 'assisted',
+  approval_state text,
+  approved_at timestamptz,
+  approval_decided_by_membership_id uuid REFERENCES core.memberships(id),
+  approval_reason_code text,
+  approval_expires_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   version bigint NOT NULL DEFAULT 1,
   CONSTRAINT stays_dates_valid
     CHECK (planned_departure_on > planned_arrival_on),
+  CONSTRAINT stays_provenance_valid
+    CHECK (provenance IN ('assisted', 'self_service')),
+  CONSTRAINT stays_provenance_author_valid
+    CHECK (
+      (
+        provenance = 'assisted'
+        AND created_by_membership_id IS NOT NULL
+        AND approval_state IS NULL
+        AND approved_at IS NULL
+        AND approval_decided_by_membership_id IS NULL
+        AND approval_reason_code IS NULL
+        AND approval_expires_at IS NULL
+      )
+      OR
+      (
+        provenance = 'self_service'
+        AND created_by_membership_id IS NULL
+        AND approval_state IS NOT NULL
+      )
+    ),
+  CONSTRAINT stays_approval_state_valid
+    CHECK (
+      approval_state IS NULL
+      OR approval_state IN ('pending', 'approved', 'rejected', 'expired')
+    ),
+  CONSTRAINT stays_approval_fields_valid
+    CHECK (
+      approval_state IS NULL
+      OR (
+        approval_state = 'pending'
+        AND approved_at IS NULL
+        AND approval_decided_by_membership_id IS NULL
+        AND approval_reason_code IS NULL
+        AND approval_expires_at IS NOT NULL
+      )
+      OR (
+        approval_state = 'approved'
+        AND approved_at IS NOT NULL
+        AND approval_decided_by_membership_id IS NOT NULL
+        AND approval_reason_code IS NULL
+        AND approval_expires_at IS NULL
+      )
+      OR (
+        approval_state = 'rejected'
+        AND approved_at IS NULL
+        AND approval_decided_by_membership_id IS NOT NULL
+        AND approval_reason_code IS NOT NULL
+        AND approval_expires_at IS NULL
+      )
+      OR (
+        approval_state = 'expired'
+        AND approved_at IS NULL
+        AND approval_decided_by_membership_id IS NULL
+        AND approval_reason_code IS NULL
+        AND approval_expires_at IS NULL
+      )
+    ),
+  CONSTRAINT stays_approval_reason_valid
+    CHECK (
+      approval_reason_code IS NULL
+      OR approval_reason_code IN (
+        'identity_not_verified', 'not_a_guest', 'duplicate',
+        'data_incorrect', 'other'
+      )
+    ),
   CONSTRAINT stays_guest_count_valid
     CHECK (expected_guest_count BETWEEN 1 AND 100),
   CONSTRAINT stays_version_positive
@@ -255,13 +356,16 @@ CREATE TABLE identity.external_credentials (
 
 CREATE TABLE core.invites (
   id uuid PRIMARY KEY,
-  stay_id uuid NOT NULL REFERENCES core.stays(id),
+  stay_id uuid REFERENCES core.stays(id),
+  accommodation_id uuid REFERENCES core.accommodations(id) ON DELETE RESTRICT,
   token_hmac bytea NOT NULL UNIQUE,
   token_key_version text NOT NULL,
   purpose text NOT NULL,
   privacy_notice_version text NOT NULL,
   expires_at timestamptz NOT NULL,
-  max_uses integer NOT NULL DEFAULT 1,
+  -- Nulo é uso ilimitado, permitido somente no convite por acomodação. O
+  -- DEFAULT 1 é preservado porque CreateStayInvite não lista a coluna.
+  max_uses integer DEFAULT 1,
   use_count integer NOT NULL DEFAULT 0,
   revoked_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -269,11 +373,31 @@ CREATE TABLE core.invites (
   CONSTRAINT invites_key_version_not_blank
     CHECK (btrim(token_key_version) <> ''),
   CONSTRAINT invites_purpose_valid
-    CHECK (purpose = 'stay_group_submission'),
+    CHECK (purpose IN ('stay_group_submission', 'accommodation_self_registration')),
   CONSTRAINT invites_notice_not_blank
     CHECK (btrim(privacy_notice_version) <> ''),
+  -- O teste de nulidade precede a comparação, de modo que o CHECK nunca avalia
+  -- UNKNOWN (que passaria) quando max_uses é nulo.
   CONSTRAINT invites_usage_valid
-    CHECK (max_uses > 0 AND use_count >= 0 AND use_count <= max_uses)
+    CHECK (
+      use_count >= 0
+      AND (max_uses IS NULL OR (max_uses > 0 AND use_count <= max_uses))
+    ),
+  CONSTRAINT invites_target_valid
+    CHECK (
+      (
+        purpose = 'stay_group_submission'
+        AND stay_id IS NOT NULL
+        AND accommodation_id IS NULL
+        AND max_uses IS NOT NULL
+      )
+      OR
+      (
+        purpose = 'accommodation_self_registration'
+        AND stay_id IS NULL
+        AND accommodation_id IS NOT NULL
+      )
+    )
 );
 
 CREATE INDEX invites_stay_active_idx
@@ -292,12 +416,16 @@ CREATE TABLE core.group_submissions (
   CONSTRAINT group_submissions_notice_not_blank
     CHECK (btrim(privacy_notice_version) <> ''),
   CONSTRAINT group_submissions_channel_valid
-    CHECK (collection_channel IN ('assisted', 'invite')),
+    CHECK (collection_channel IN ('assisted', 'invite', 'self_service')),
+  -- O nome é preservado de propósito: renomear obrigaria a caçar asserções em
+  -- test-migrations.sh e phase2_postgres_test.go sem ganho proporcional.
   CONSTRAINT group_submissions_assisted_actor_valid
     CHECK (
-      (collection_channel = 'assisted' AND submitted_by_membership_id IS NOT NULL)
+      (collection_channel = 'assisted'     AND submitted_by_membership_id IS NOT NULL)
       OR
-      (collection_channel = 'invite' AND submitted_by_membership_id IS NULL)
+      (collection_channel = 'invite'       AND submitted_by_membership_id IS NULL)
+      OR
+      (collection_channel = 'self_service' AND submitted_by_membership_id IS NULL)
     ),
   UNIQUE (stay_id, client_submission_id)
 );
@@ -1406,7 +1534,11 @@ CREATE TABLE platform.rate_limit_buckets (
   expires_at timestamptz NOT NULL,
   PRIMARY KEY (scope, subject_hmac, window_started_at),
   CONSTRAINT rate_limit_scope_valid
-    CHECK (scope IN ('invite_context', 'invite_submit', 'survey_submit')),
+    CHECK (scope IN (
+      'invite_context', 'invite_submit', 'survey_submit',
+      'accommodation_invite_context', 'accommodation_invite_submit',
+      'activation_context', 'activation_submit'
+    )),
   CONSTRAINT rate_limit_key_version_not_blank
     CHECK (btrim(subject_key_version) <> ''),
   CONSTRAINT rate_limit_count_positive
@@ -1414,6 +1546,19 @@ CREATE TABLE platform.rate_limit_buckets (
   CONSTRAINT rate_limit_expiry_valid
     CHECK (expires_at > window_started_at)
 );
+
+-- Gasto de nonce do proof-of-work. Guarda somente HMAC do desafio e prazo:
+-- nenhuma coluna deriva de IP, token ou titular.
+CREATE TABLE platform.proof_of_work_spends (
+  challenge_hmac bytea PRIMARY KEY,
+  key_version text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  CONSTRAINT proof_of_work_challenge_hmac_sha256
+    CHECK (octet_length(challenge_hmac) = 32),
+  CONSTRAINT proof_of_work_key_version_not_blank
+    CHECK (btrim(key_version) <> '')
+);
+
 
 CREATE INDEX rate_limit_expiry_idx
   ON platform.rate_limit_buckets (expires_at);

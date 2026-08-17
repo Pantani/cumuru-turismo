@@ -20,6 +20,7 @@ func TestMaterializePresenceUsesSourceVersionAndWeights(t *testing.T) {
 	source := analytics.PresenceSource{
 		StayID:           stayID,
 		Status:           stay.StatusPreRegistered,
+		Approval:         stay.ApprovalNotRequired,
 		PlannedArrival:   stay.MustCivilDate("2026-12-10"),
 		PlannedDeparture: stay.MustCivilDate("2026-12-12"),
 		Version:          7,
@@ -52,6 +53,7 @@ func TestMaterializePresenceSplitsCheckedInAtCutoff(t *testing.T) {
 	source := analytics.PresenceSource{
 		StayID:           uuid.MustParse("019f0000-0000-7000-8000-000000000001"),
 		Status:           stay.StatusCheckedIn,
+		Approval:         stay.ApprovalNotRequired,
 		PlannedArrival:   stay.MustCivilDate("2026-12-10"),
 		PlannedDeparture: stay.MustCivilDate("2026-12-13"),
 		CheckedInAt:      &checkedInAt,

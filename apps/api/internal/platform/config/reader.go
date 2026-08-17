@@ -74,6 +74,20 @@ func (r *envReader) integer(field string, fallback int) int {
 	return parsed
 }
 
+// integerInRange refuses a value outside the bounds instead of letting the
+// caller narrow it. A field the caller stores as uint8 or int32 is converted
+// after this returns, and the conversion is silent: PROOF_OF_WORK_DIFFICULTY_BASE
+// set to 268 becomes 12, which then passes the 1..32 range check as a value the
+// operator never wrote. Bounding it here is what makes that impossible.
+func (r *envReader) integerInRange(field string, fallback, minimum, maximum int) int {
+	value := r.integer(field, fallback)
+	if value < minimum || value > maximum {
+		r.fail(field)
+		return fallback
+	}
+	return value
+}
+
 // decimal rejects NaN and the infinities explicitly. ParseFloat accepts "NaN"
 // and "Inf" as valid input, and either one would defeat every range check the
 // validators apply afterwards.

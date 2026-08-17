@@ -181,8 +181,14 @@ if (
 ) {
   throw new Error("forecast methodology bounds drifted");
 }
-if (document.info.version !== "0.6.0") {
-  throw new Error("phase 4 contract version drifted");
+// O literal é proposital: subir a versão do contrato exige revisar este gate.
+// A mensagem nomeia os dois lados porque "drifted" sozinho não diz se a versão
+// subiu de propósito ou se o contrato regrediu.
+const EXPECTED_CONTRACT_VERSION = "0.7.0";
+if (document.info.version !== EXPECTED_CONTRACT_VERSION) {
+  throw new Error(
+    `phase 4 contract version drifted: ${document.info.version}, esperado ${EXPECTED_CONTRACT_VERSION}`,
+  );
 }
 requireRef(
   document.components.schemas.PublicSummary.properties?.presence_today,

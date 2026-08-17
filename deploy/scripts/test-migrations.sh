@@ -93,7 +93,7 @@ migration_files="$(
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_organization_document.down.sql\n000002_organization_document.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_organization_document.down.sql\n000002_organization_document.up.sql\n000003_self_service_and_approval.down.sql\n000003_self_service_and_approval.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
@@ -1485,7 +1485,7 @@ schemas_left="$(
 )"
 test "${schemas_left}" = "0"
 
-run_migrate up
+run_migrate up 2
 final_version="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
@@ -1522,6 +1522,108 @@ document_guard_after_rollback="$(
     "
 )"
 test "${document_guard_after_rollback}" = "0"
+run_migrate up 1
+
+# ADR-039/040/041: a Fase 7 aplica-se sobre a 000002 e volta sem deixar resíduo.
+run_migrate up 1
+phase7_version="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
+)"
+test "${phase7_version}" = "3:false"
+
+# O CREATE em platform é reaberto só para transferir o dono da função de
+# varredura e devolvido na mesma transação. Sem a reabertura o ALTER ... OWNER
+# falha com permission denied; sem a devolução migration_admin sai da migração
+# podendo criar objeto em platform. As duas metades são verificadas aqui.
+phase7_cleanup_owner="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT pg_get_userbyid(cleanup.proowner)
+        || ':' || ('proof_of_work_spends' = ANY (cleanup.proargnames))::text
+        || ':' || has_schema_privilege('migration_admin', 'platform', 'CREATE')::text
+        || ':' || has_schema_privilege('migration_admin', 'platform', 'USAGE')::text
+      FROM pg_proc AS cleanup
+      WHERE cleanup.oid =
+        'platform.cleanup_expired_operational_records(timestamptz, integer)'::regprocedure
+    "
+)"
+test "${phase7_cleanup_owner}" = "migration_admin:true:false:true"
+
+phase7_contract="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT (to_regclass('platform.proof_of_work_spends') IS NOT NULL)::text
+        || ':' || (to_regclass('auth.activation_capabilities') IS NOT NULL)::text
+        || ':' || (
+          SELECT count(*)
+          FROM pg_constraint
+          WHERE conrelid = 'core.invites'::regclass
+            AND conname = 'invites_purpose_valid'
+            AND pg_get_constraintdef(oid)
+              LIKE '%accommodation_self_registration%'
+        )::text
+        || ':' || (
+          SELECT count(*)
+          FROM pg_constraint
+          WHERE conrelid = 'platform.rate_limit_buckets'::regclass
+            AND conname = 'rate_limit_scope_valid'
+            AND pg_get_constraintdef(oid)
+              LIKE '%accommodation_invite_submit%'
+        )::text
+        || ':' || (
+          SELECT count(*)
+          FROM pg_indexes
+          WHERE schemaname = 'core'
+            AND tablename = 'invites'
+            AND indexname = 'invites_accommodation_single_active_idx'
+        )::text
+        || ':' || (
+          SELECT count(*)
+          FROM information_schema.columns
+          WHERE table_schema = 'core'
+            AND table_name = 'stays'
+            AND column_name IN ('provenance', 'approval_state', 'approved_at')
+        )::text
+    "
+)"
+test "${phase7_contract}" = "true:true:1:1:1:3"
+
+run_migrate down 1
+phase7_rollback="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT (to_regclass('platform.proof_of_work_spends') IS NULL)::text
+        || ':' || (to_regclass('auth.activation_capabilities') IS NULL)::text
+        || ':' || pg_get_userbyid(cleanup.proowner)
+        || ':' || ('proof_of_work_spends' = ANY (cleanup.proargnames))::text
+        || ':' || has_schema_privilege('migration_admin', 'platform', 'CREATE')::text
+        || ':' || (
+          SELECT count(*)
+          FROM pg_constraint
+          WHERE conrelid = 'platform.rate_limit_buckets'::regclass
+            AND conname = 'rate_limit_scope_valid'
+            AND pg_get_constraintdef(oid)
+              LIKE '%accommodation_invite_submit%'
+        )::text
+        || ':' || (
+          SELECT count(*)
+          FROM information_schema.columns
+          WHERE table_schema = 'core'
+            AND table_name = 'stays'
+            AND column_name IN ('provenance', 'approval_state', 'approved_at')
+        )::text
+      FROM pg_proc AS cleanup
+      WHERE cleanup.oid =
+        'platform.cleanup_expired_operational_records(timestamptz, integer)'::regprocedure
+    "
+)"
+test "${phase7_rollback}" = "true:true:migration_admin:false:false:0:0"
+
 run_migrate up
 
-echo "migrations zero-to-two, rollback to zero, reapply, reversible document uniqueness, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
+echo "migrations zero-to-three, rollback to zero, reapply, reversible document uniqueness, reversible self-service and approval, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
