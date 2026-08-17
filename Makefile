@@ -112,6 +112,9 @@ generate-sqlc: ## Regenera código Go via sqlc
 generated-check: ## Verifica reprodutibilidade dos arquivos gerados
 	@bash deploy/scripts/check-generated.sh
 
+ci-gate-test: ## Exercita a porta única da CI contra workflows sintéticos; sem Docker
+	@bash deploy/scripts/test-ci-gate.sh
+
 migration-test: ## Testa migrations e grants em PostgreSQL real via Docker
 	@bash deploy/scripts/test-migrations.sh
 
@@ -252,6 +255,7 @@ lint-fix: ## Aplica correções automáticas seguras de lint e formatação no m
 	@$(MAKE) --no-print-directory lint
 
 check: ## Executa o gate local sequencial, sem Docker ou scanners
+	@$(MAKE) --no-print-directory ci-gate-test
 	@$(MAKE) --no-print-directory openapi-lint
 	@$(MAKE) --no-print-directory generated-check
 	@$(MAKE) --no-print-directory test-all
@@ -457,12 +461,7 @@ compose-config: ## Valida o Compose base e o overlay local com metadata reprodut
 	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) config --quiet
 	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
 		-f deploy/compose.local-test.yaml config --quiet
-        # O octeto real é escolhido em tempo de execução por
-        # test-local-demo-e2e.sh, que procura uma sub-rede livre. Aqui só se
-        # valida a interpolação do overlay, então o valor é um placeholder — sem
-        # ele o `:?` do Compose falha e o gate acusa erro de configuração onde
-        # não há nenhum.
-	@LOCAL_E2E_PORT=4174 LOCAL_E2E_SUBNET_OCTET=99 \
+	@LOCAL_E2E_PORT=4174 \
 		"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
 		-f deploy/compose.analytics-full-stack.yaml \
 		-f deploy/compose.local-e2e.yaml config --quiet

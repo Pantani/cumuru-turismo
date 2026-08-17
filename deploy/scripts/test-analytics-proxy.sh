@@ -238,6 +238,8 @@ export CUMURU_BUILD_REVISION="${build_metadata[1]}"
 export CUMURU_BUILD_TIME="${build_metadata[2]}"
 
 PROJECT_NAME="cumuru-analytics-proxy-${PPID}-$$"
+. "${ROOT_DIR}/deploy/scripts/lib/compose-subnet.sh"
+cumuru_acquire_subnet analytics-proxy
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cumuru-analytics-proxy.XXXXXX")"
 COMPOSE=(
   docker compose
@@ -247,6 +249,7 @@ COMPOSE=(
 )
 
 cleanup() {
+  cumuru_release_subnet
   local primary_status=$?
   local cleanup_status=0
   local inspect_status=0

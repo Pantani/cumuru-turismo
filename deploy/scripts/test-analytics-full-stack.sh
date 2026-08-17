@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_NAME="cumuru-analytics-full-stack-${PPID}-$$"
+. "${ROOT_DIR}/deploy/scripts/lib/compose-subnet.sh"
+cumuru_acquire_subnet analytics-full-stack
 CONFIG_FILE="$(mktemp "${TMPDIR:-/tmp}/cumuru-analytics-config.XXXXXX")"
 BEFORE_HEADERS="$(mktemp "${TMPDIR:-/tmp}/cumuru-analytics-before-headers.XXXXXX")"
 BEFORE_BODY="$(mktemp "${TMPDIR:-/tmp}/cumuru-analytics-before-body.XXXXXX")"
@@ -43,6 +45,7 @@ COMPOSE=(
 )
 
 cleanup() {
+  cumuru_release_subnet
   local primary_status=$?
   local cleanup_status=0
   local inspect_status=0

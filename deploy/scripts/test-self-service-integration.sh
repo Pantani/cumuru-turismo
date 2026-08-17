@@ -12,6 +12,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_NAME="cumuru-self-service-integration-${PPID}-$$"
+. "${ROOT_DIR}/deploy/scripts/lib/compose-subnet.sh"
+cumuru_acquire_subnet self-service-integration
 COMPOSE=(
   "${ROOT_DIR}/deploy/scripts/with-build-metadata.sh"
   docker compose
@@ -55,6 +57,7 @@ acquire_gate_lock() {
 }
 
 cleanup() {
+  cumuru_release_subnet
   local primary_status=$?
   trap - EXIT
   set +e

@@ -3,6 +3,7 @@
 package store_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -11,6 +12,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -675,6 +677,37 @@ func assertDecidedStayRefusesASecondDecision(
 	}
 }
 
+// N-34, the other direction. Only "reject an approved stay" was executed; a
+// decision machine can refuse one way and accept the other, so the mirror is
+// its own test rather than a second line in the first one.
+func TestSelfServiceApprovingARejectedStayIsRefused(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	admin, runtime, fixture := openSelfServiceIntegration(t, ctx)
+	repository := newSelfServiceRepository(t, runtime)
+
+	accepted := submitSelfServiceSelfRegistration(t, ctx, repository, fixture)
+	rejected, _, err := repository.Reject(ctx, stay.RejectionCommand{
+		Actor: principal(fixture.subject), StayID: accepted.stayID,
+		ExpectedVersion: accepted.version, ReasonCode: stay.RejectionNotAGuest,
+		IdempotencyKey: "self-service-reject-first-" + accepted.stayID.String(),
+		RequestID:      "request-reject-first-" + accepted.stayID.String(),
+	})
+	if err != nil {
+		t.Fatalf("Reject() error = %v", err)
+	}
+	if _, _, err := repository.Approve(ctx, stay.ApprovalCommand{
+		Actor: principal(fixture.subject), StayID: accepted.stayID,
+		ExpectedVersion: rejected.Version,
+		IdempotencyKey:  "self-service-approve-after-reject-" + accepted.stayID.String(),
+		RequestID:       "request-approve-after-reject-" + accepted.stayID.String(),
+	}); err == nil {
+		t.Fatal("a rejected stay accepted an approval")
+	}
+	// The stamp has to survive the refused decision, not merely the error.
+	assertApprovalState(t, ctx, admin, accepted.stayID, "rejected")
+}
+
 // N-03 and N-14. The ADR-039 promises that rotation invalidates the previous
 // poster. The observable contract has four parts and all four are asserted
 // here, because the first three can pass while the fourth silently regresses:
@@ -1173,7 +1206,14 @@ func TestSelfServiceRateLimitCrossesTheThresholdAndIsolatesAccommodations(t *tes
 	}); err != nil {
 		t.Fatalf("the second accommodation shared the exhausted bucket: %v", err)
 	}
-	assertDistinctBuckets(t, ctx, admin, subject)
+	// A bucket from a different client, in the same scope, that the assertion
+	// must not count. Without it the filter could be absent and unnoticed.
+	if _, err := repository.GetAccommodationInviteContext(ctx, stay.InviteRequest{
+		Token: secondToken, RateSubject: "198.51.100.0/24",
+	}); err != nil {
+		t.Fatalf("seed a bucket for another subject: %v", err)
+	}
+	assertDistinctBuckets(t, ctx, admin, firstToken, secondToken, subject)
 }
 
 func newTightlyLimitedSelfServiceRepository(
@@ -1197,26 +1237,65 @@ func newTightlyLimitedSelfServiceRepository(
 	return repository
 }
 
-// Two buckets for one client is the observable form of "they do not share a
-// budget"; a single row would mean the counter was keyed by the subject alone.
+// D-14. The first version took `subject` and never used it: it counted
+// count(DISTINCT subject_hmac) across the whole scope, so rows created by other
+// tests satisfied it and it could not fail for its own reason.
+//
+// It now names the two rows it expects, by recomputing the bucket key the
+// production code writes, and requires that the scope hold **more** rows than
+// the two it matched. That second half is what keeps the filter honest: drop
+// the `= ANY(...)` and matched becomes total, and the equality fails.
 func assertDistinctBuckets(
 	t *testing.T,
 	ctx context.Context,
 	admin *pgxpool.Pool,
+	firstToken string,
+	secondToken string,
 	subject string,
 ) {
 	t.Helper()
-	var buckets int
+	key := bytesRepeat('r', 32)
+	first := store.RateLimitDigestForTest(
+		key, posterContextScopeForTest, firstToken, subject,
+	)
+	second := store.RateLimitDigestForTest(
+		key, posterContextScopeForTest, secondToken, subject,
+	)
+	if bytes.Equal(first, second) {
+		t.Fatal("two posters produced the same bucket key")
+	}
+	matched, total := countPosterBuckets(t, ctx, admin, first, second)
+	if matched != 2 {
+		t.Fatalf("buckets matching the two posters = %d, want 2", matched)
+	}
+	if total <= matched {
+		t.Fatalf(
+			"scope holds %d rows and the assertion matched %d; without noise it cannot show it filters",
+			total, matched,
+		)
+	}
+}
+
+const posterContextScopeForTest = "accommodation_invite_context"
+
+func countPosterBuckets(
+	t *testing.T,
+	ctx context.Context,
+	admin *pgxpool.Pool,
+	first []byte,
+	second []byte,
+) (int, int) {
+	t.Helper()
+	var matched, total int
 	err := admin.QueryRow(ctx,
-		`SELECT count(DISTINCT subject_hmac) FROM platform.rate_limit_buckets
-		 WHERE scope = 'accommodation_invite_context'`,
-	).Scan(&buckets)
+		`SELECT count(*) FILTER (WHERE subject_hmac = ANY($1)), count(*)
+		 FROM platform.rate_limit_buckets WHERE scope = $2`,
+		[][]byte{first, second}, posterContextScopeForTest,
+	).Scan(&matched, &total)
 	if err != nil {
-		t.Fatalf("count rate limit buckets: %v", err)
+		t.Fatalf("count poster buckets: %v", err)
 	}
-	if buckets < 2 {
-		t.Fatalf("distinct buckets = %d, want one per poster", buckets)
-	}
+	return matched, total
 }
 
 func assertStayCount(
@@ -1273,5 +1352,86 @@ func assertApprovalState(
 	}
 	if state == nil || *state != want {
 		t.Fatalf("approval state = %v, want %s", state, want)
+	}
+}
+
+// N-42. Single use was only ever proved sequentially — the second call fails
+// because the first already finished. That leaves the interesting case
+// untested: several holders of the same link pressing the button at once.
+//
+// The guarantee lives in ConsumeActivationCapability, whose UPDATE matches
+// consumed_at IS NULL. Under concurrency exactly one UPDATE may affect a row;
+// every other goroutine must see zero rows and answer the uniform not-found,
+// never a partially activated account. The suite runs under -race, so a data
+// race in the path would also surface here.
+func TestSelfServiceActivationCapabilityIsSingleUseUnderConcurrency(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	admin, runtime, fixture := openSelfServiceIntegration(t, ctx)
+	repository := newSelfServiceActivationRepository(t, runtime)
+	email := "corrida-" + mustV7(t).String() + "@exemplo.invalid"
+	token := issueActivationWithKey(t, ctx, repository, fixture, email, "race")
+
+	const racers = 8
+	start := make(chan struct{})
+	results := make(chan error, racers)
+	var waiting sync.WaitGroup
+	waiting.Add(racers)
+	for racer := 0; racer < racers; racer++ {
+		go func(index int) {
+			defer waiting.Done()
+			<-start
+			results <- repository.Complete(ctx, activation.CompleteCommand{
+				Token: token, RateSubject: "203.0.113.0/24",
+				Password:  "uma-senha-bem-longa",
+				RequestID: fmt.Sprintf("request-race-%02d-%s", index, fixture.accommodationID),
+			})
+		}(racer)
+	}
+	close(start)
+	waiting.Wait()
+	close(results)
+
+	succeeded, refused := 0, 0
+	for err := range results {
+		switch {
+		case err == nil:
+			succeeded++
+		case errors.Is(err, activation.ErrNotFound):
+			refused++
+		default:
+			t.Fatalf("a racer failed with an unexpected error: %v", err)
+		}
+	}
+	if succeeded != 1 {
+		t.Fatalf("%d racers activated the account, want exactly 1", succeeded)
+	}
+	if refused != racers-1 {
+		t.Fatalf("refusals = %d, want %d uniform not-found", refused, racers-1)
+	}
+	// The row must be consumed once, and the account must hold exactly one
+	// credential — not a half-written one.
+	assertAccountCredential(t, ctx, admin, email, "active", true)
+	assertConsumedCapabilities(t, ctx, admin, fixture, 1)
+}
+
+func assertConsumedCapabilities(
+	t *testing.T,
+	ctx context.Context,
+	admin *pgxpool.Pool,
+	fixture selfServiceFixture,
+	want int,
+) {
+	t.Helper()
+	var consumed int
+	if err := admin.QueryRow(ctx,
+		`SELECT count(*) FROM auth.activation_capabilities
+		 WHERE accommodation_id = $1 AND consumed_at IS NOT NULL`,
+		fixture.accommodationID,
+	).Scan(&consumed); err != nil {
+		t.Fatalf("count consumed capabilities: %v", err)
+	}
+	if consumed != want {
+		t.Fatalf("consumed capabilities = %d, want %d", consumed, want)
 	}
 }

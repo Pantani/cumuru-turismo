@@ -19,6 +19,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_NAME="cumuru-self-service-full-stack-${PPID}-$$"
+. "${ROOT_DIR}/deploy/scripts/lib/compose-subnet.sh"
+cumuru_acquire_subnet self-service-full-stack
 
 build_metadata=()
 while IFS= read -r value; do
@@ -50,6 +52,7 @@ COMPOSE=(
 )
 
 cleanup() {
+  cumuru_release_subnet
   local primary_status=$?
   trap - EXIT
   set +e
