@@ -575,7 +575,7 @@ func phase2HandlerWithOptions(t *testing.T, options phase2HandlerOptions) http.H
 	if accommodations == nil {
 		accommodations = accommodationRepositoryStub{}
 	}
-	handler, _ := httpapi.New(httpapi.Dependencies{
+	handler, _, err := httpapi.New(httpapi.Dependencies{
 		Readiness:                      readinessFunc(func(context.Context) error { return nil }),
 		Verifier:                       verifier,
 		Accommodations:                 accommodation.NewService(accommodations),
@@ -591,5 +591,8 @@ func phase2HandlerWithOptions(t *testing.T, options phase2HandlerOptions) http.H
 		},
 		Logger: options.logger,
 	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
 	return handler
 }

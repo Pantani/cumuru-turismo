@@ -61,11 +61,14 @@ func runAPIWithTelemetry(
 	if err != nil {
 		return err
 	}
-	publicHandler, operationsHandler := httpapi.New(apiDependencies(
+	publicHandler, operationsHandler, err := httpapi.New(apiDependencies(
 		cfg, build, logger, tracing, verifier,
 		platformStore, accommodationService, stayService, questionnaireService,
 		publicAnalytics, analyticsQuality,
 	))
+	if err != nil {
+		return err
+	}
 	publicListener, operationsListener, err := apiListeners(cfg)
 	if err != nil {
 		return err
