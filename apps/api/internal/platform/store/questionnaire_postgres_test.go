@@ -28,28 +28,28 @@ func TestQuestionnairePostgreSQLSurveySecurityAndAtomicity(t *testing.T) {
 	runtime := openIntegrationPool(t, ctx, "CUMURU_TEST_DATABASE_URL")
 	requireRuntimeRole(t, ctx, runtime)
 	fixture := seedQuestionnaireFixture(t, ctx, admin)
-	questionnaire := integrationQuestionnaireConfig()
+	settings := integrationQuestionnaireConfig()
 	subject, err := store.NewQuestionnaire(
 		runtime,
 		5*time.Second,
 		integrationCoreConfig(t),
-		questionnaire,
+		settings,
 	)
 	if err != nil {
 		t.Fatalf("questionnaire store: %v", err)
 	}
 	repository := store.NewQuestionnaireRepository(subject)
 	service := questionnaire.NewService(repository)
-	codec := integrationCapabilityCodec(t, questionnaire)
+	codec := integrationCapabilityCodec(t, settings)
 
 	first := assertSurveyReplayCipherAndSinks(
 		t, ctx, admin, service, codec, fixture,
 	)
 	assertSurveyPoolSaturationDoesNotStarve(
-		t, ctx, admin, questionnaire, first,
+		t, ctx, admin, settings, first,
 	)
 	assertSurveySingleConnectionPoolFailsClosed(
-		t, ctx, questionnaire, first,
+		t, ctx, settings, first,
 	)
 	assertSurveyReplayBypassesConsumedRateBudget(
 		t, ctx, admin, service, codec, fixture,
@@ -80,13 +80,13 @@ func TestQuestionnairePostgreSQLSurveySecurityAndAtomicity(t *testing.T) {
 func assertSurveySingleConnectionPoolFailsClosed(
 	t *testing.T,
 	ctx context.Context,
-	questionnaire config.QuestionnaireConfig,
+	settings config.QuestionnaireConfig,
 	accepted acceptedSurvey,
 ) {
 	t.Helper()
 	runtime := openLimitedIntegrationPool(t, ctx, 1)
 	subject, err := store.NewQuestionnaire(
-		runtime, time.Second, integrationCoreConfig(t), questionnaire,
+		runtime, time.Second, integrationCoreConfig(t), settings,
 	)
 	if err != nil {
 		t.Fatalf("single-connection questionnaire store: %v", err)
@@ -103,13 +103,13 @@ func assertSurveyPoolSaturationDoesNotStarve(
 	t *testing.T,
 	ctx context.Context,
 	admin *pgxpool.Pool,
-	questionnaire config.QuestionnaireConfig,
+	settings config.QuestionnaireConfig,
 	accepted acceptedSurvey,
 ) {
 	t.Helper()
 	runtime := openLimitedIntegrationPool(t, ctx, 2)
 	subject, err := store.NewQuestionnaire(
-		runtime, 2*time.Second, integrationCoreConfig(t), questionnaire,
+		runtime, 2*time.Second, integrationCoreConfig(t), settings,
 	)
 	if err != nil {
 		t.Fatalf("limited questionnaire store: %v", err)
@@ -475,12 +475,12 @@ func integrationQuestionnaireConfig() config.QuestionnaireConfig {
 
 func integrationCapabilityCodec(
 	t *testing.T,
-	questionnaire config.QuestionnaireConfig,
+	settings config.QuestionnaireConfig,
 ) *questionnaire.CapabilityCodec {
 	t.Helper()
 	codec, err := questionnaire.NewCapabilityCodec(questionnaire.Keyring{
-		CurrentVersion: questionnaire.SurveyKeys.CurrentVersion,
-		Keys:           questionnaire.SurveyKeys.Keys,
+		CurrentVersion: settings.SurveyKeys.CurrentVersion,
+		Keys:           settings.SurveyKeys.Keys,
 	})
 	if err != nil {
 		t.Fatalf("survey capability codec: %v", err)

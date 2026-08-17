@@ -457,7 +457,13 @@ compose-config: ## Valida o Compose base e o overlay local com metadata reprodut
 	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) config --quiet
 	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
 		-f deploy/compose.local-test.yaml config --quiet
-	@LOCAL_E2E_PORT=4174 "$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
+        # O octeto real é escolhido em tempo de execução por
+        # test-local-demo-e2e.sh, que procura uma sub-rede livre. Aqui só se
+        # valida a interpolação do overlay, então o valor é um placeholder — sem
+        # ele o `:?` do Compose falha e o gate acusa erro de configuração onde
+        # não há nenhum.
+	@LOCAL_E2E_PORT=4174 LOCAL_E2E_SUBNET_OCTET=99 \
+		"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
 		-f deploy/compose.analytics-full-stack.yaml \
 		-f deploy/compose.local-e2e.yaml config --quiet
 
