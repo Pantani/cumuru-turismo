@@ -99,7 +99,7 @@ func (r *QuestionnaireRepository) transitionableVersion(
 		!reviewerDistinctFromEditor(r.store, current, command.Actor) {
 		return current, questionnaire.ErrConflict
 	}
-	err = validateTransitionContent(current, command.Transition, r.store.phase3.Enabled)
+	err = validateTransitionContent(current, command.Transition, r.store.questionnaire.Enabled)
 	return current, err
 }
 

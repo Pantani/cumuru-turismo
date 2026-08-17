@@ -69,13 +69,13 @@ curl --fail --silent --show-error \
   --output "${temporary_dir}/questionnaire.json" \
   "${API_BASE_URL}/questionnaires/tourism_profile/active"
 
-authenticated_phase2="$(
+authenticated_core="$(
   curl --fail --silent --show-error \
     --header "Authorization: Bearer ${LOCAL_FAKE_OIDC_TOKEN}" \
     "${WEB_BASE_URL}/api/v1/accommodations?limit=10"
 )"
 
-AUTHENTICATED_PHASE2="${authenticated_phase2}" \
+AUTHENTICATED_CORE="${authenticated_core}" \
   SMOKE_DIRECTORY="${temporary_dir}" node <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
@@ -89,7 +89,7 @@ const next = read("presence-next");
 const preferences = read("preferences");
 const methodology = read("methodology");
 const questionnaire = read("questionnaire");
-const accommodations = JSON.parse(process.env.AUTHENTICATED_PHASE2 ?? "null");
+const accommodations = JSON.parse(process.env.AUTHENTICATED_CORE ?? "null");
 
 if (!Array.isArray(accommodations?.items) || accommodations.items.length < 1) {
   throw new Error("local operator has no accommodation fixture");

@@ -44,7 +44,7 @@ describe("rota interna de qualidade", () => {
           },
           fnrh_failures: {
             status: "not_available",
-            reason_code: "phase_not_implemented",
+            reason_code: "not_implemented",
           },
           coverage_by_category: [],
         },

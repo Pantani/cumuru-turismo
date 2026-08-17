@@ -40,11 +40,13 @@ COMPOSE=(
 )
 
 cleanup() {
-  cumuru_release_subnet
   local status=$?
   trap - EXIT
   "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -f -- "${CONCURRENT_FIRST}" "${CONCURRENT_SECOND}"
+  # O lock só cai depois do teardown: é isso que impede a execução seguinte de
+  # pedir um endereço que ainda está sendo liberado.
+  cumuru_release_subnet
   exit "${status}"
 }
 trap cleanup EXIT

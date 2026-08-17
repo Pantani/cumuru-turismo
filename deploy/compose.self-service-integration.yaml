@@ -1,0 +1,25 @@
+name: cumuru-self-service-integration
+
+services:
+  postgres:
+    # O harness descobre esta porta efêmera; nenhum banco compartilhado é usado.
+    # A suíte Go da fase precisa alcançar o banco a partir do host, o que o
+    # overlay de migration-test não permite porque zera as portas publicadas.
+    ports: !override
+      - "127.0.0.1::5432"
+  # 172.30.9 e não .7: o octeto 7 já pertence a compose.local-test.yaml, e usá-lo
+  # aqui impediria `make local-demo-test` e `make self-service-integration` de rodarem
+  # ao mesmo tempo. Colisão introduzida quando este overlay nasceu.
+  api:
+    environment:
+      TRUSTED_PROXY_CIDRS: 172.30.${CUMURU_SUBNET_OCTET:-9}.10/32
+  web:
+    networks:
+      private:
+        ipv4_address: 172.30.${CUMURU_SUBNET_OCTET:-9}.10
+
+networks:
+  private:
+    ipam:
+      config: !override
+        - subnet: 172.30.${CUMURU_SUBNET_OCTET:-9}.0/24

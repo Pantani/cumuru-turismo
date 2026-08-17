@@ -6,10 +6,10 @@ info:
     name: Licença a definir pelo Município de Prado
     identifier: LicenseRef-Proprietary
   description: >
-    Contrato-alvo faseado para a fundação, estadias, questionários e métricas
-    públicas. A extensão x-cumuru-implementation-phase informa a fase
-    proprietária; as operações das Fases 1 a 4 estão implementadas nesta
-    versão, sempre em modo
+    Contrato da fundação, estadias, questionários e métricas públicas. A
+    extensão x-cumuru-feature informa a funcionalidade proprietária de cada
+    operação — platform, core, questionnaire, analytics ou self-service — e o
+    valor deferred marca a operação ainda não implementada. Tudo roda em modo
     PROTOTYPE_ONLY e somente com fixtures fictícias e generalizadas.
 servers:
   - url: https://turismo.prado.ba.gov.br/api/v1
@@ -49,7 +49,7 @@ paths:
         aplica bloqueio temporário por tentativas repetidas.
       tags: [auth]
       operationId: login
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security: []
       requestBody:
         required: true
@@ -87,7 +87,7 @@ paths:
         desconhecido também responde 204.
       tags: [auth]
       operationId: logout
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - session: []
       responses:
@@ -114,7 +114,7 @@ paths:
         depois da troca o cliente autentica novamente.
       tags: [auth]
       operationId: rotatePassword
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - session: []
       requestBody:
@@ -148,7 +148,7 @@ paths:
       summary: Consultar a sessão local corrente
       tags: [auth]
       operationId: getSession
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - session: []
       responses:
@@ -175,7 +175,7 @@ paths:
       tags: [platform]
       security: []
       operationId: getPlatformHealth
-      x-cumuru-implementation-phase: 1
+      x-cumuru-feature: platform
       responses:
         "200":
           description: Processo apto a responder HTTP.
@@ -196,7 +196,7 @@ paths:
       tags: [platform]
       security: []
       operationId: getPlatformReadiness
-      x-cumuru-implementation-phase: 1
+      x-cumuru-feature: platform
       responses:
         "200":
           description: Dependências necessárias estão prontas.
@@ -218,7 +218,7 @@ paths:
       summary: Consultar metadados técnicos do build
       tags: [platform]
       operationId: getPlatformBuild
-      x-cumuru-implementation-phase: 1
+      x-cumuru-feature: platform
       security:
         - oidc: ["platform:read"]
       responses:
@@ -245,7 +245,7 @@ paths:
       tags: [public]
       security: []
       operationId: getPublicSummary
-      x-cumuru-implementation-phase: 4
+      x-cumuru-feature: analytics
       parameters:
         - $ref: "#/components/parameters/IfNoneMatch"
       responses:
@@ -276,7 +276,7 @@ paths:
       tags: [public]
       security: []
       operationId: getPublicPresence
-      x-cumuru-implementation-phase: 4
+      x-cumuru-feature: analytics
       parameters:
         - $ref: "#/components/parameters/PresenceWindow"
         - $ref: "#/components/parameters/IfNoneMatch"
@@ -308,7 +308,7 @@ paths:
       tags: [public]
       security: []
       operationId: getPublicPreferences
-      x-cumuru-implementation-phase: 4
+      x-cumuru-feature: analytics
       parameters:
         - $ref: "#/components/parameters/PreferencePeriod"
         - $ref: "#/components/parameters/IfNoneMatch"
@@ -340,7 +340,7 @@ paths:
       tags: [public]
       security: []
       operationId: getPublicMethodology
-      x-cumuru-implementation-phase: 4
+      x-cumuru-feature: analytics
       parameters:
         - $ref: "#/components/parameters/IfNoneMatch"
       responses:
@@ -370,7 +370,7 @@ paths:
       summary: Consultar qualidade agregada interna
       tags: [analytics]
       operationId: getAnalyticsQuality
-      x-cumuru-implementation-phase: 4
+      x-cumuru-feature: analytics
       security:
         - oidc: ["analytics:read:internal"]
       parameters:
@@ -402,7 +402,7 @@ paths:
       summary: Listar acomodações acessíveis
       tags: [accommodations]
       operationId: listAccommodations
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:read:own"]
       parameters:
@@ -439,7 +439,7 @@ paths:
         qualquer configuração FNRH.
       tags: [accommodations]
       operationId: createAccommodation
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["accommodations:onboard"]
       parameters:
@@ -487,7 +487,7 @@ paths:
       summary: Consultar acomodação acessível
       tags: [accommodations]
       operationId: getAccommodation
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:read:own"]
       parameters:
@@ -522,7 +522,7 @@ paths:
       summary: Alterar campos operacionais da acomodação
       tags: [accommodations]
       operationId: updateAccommodation
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["accommodations:manage"]
       parameters:
@@ -571,7 +571,7 @@ paths:
       summary: Listar memberships da acomodação
       tags: [accommodations]
       operationId: listAccommodationMemberships
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["accommodations:manage"]
       parameters:
@@ -606,7 +606,7 @@ paths:
       summary: Criar membership na acomodação
       tags: [accommodations]
       operationId: createAccommodationMembership
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["accommodations:manage"]
       parameters:
@@ -657,7 +657,7 @@ paths:
       summary: Alterar papel ou atividade de uma membership
       tags: [accommodations]
       operationId: updateAccommodationMembership
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["accommodations:manage"]
       parameters:
@@ -709,7 +709,7 @@ paths:
       summary: Criar estadia
       tags: [stays]
       operationId: createStay
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:write"]
       parameters:
@@ -758,7 +758,7 @@ paths:
       summary: Listar estadias acessíveis
       tags: [stays]
       operationId: listStays
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:read:own"]
       parameters:
@@ -777,8 +777,8 @@ paths:
           in: query
           description: >
             Fila de aprovação por acomodação. Nenhum endpoint novo de listagem:
-            cursor, limite, ordenação e isolamento por membership são os da
-            Fase 2.
+            cursor, limite, ordenação e isolamento por membership são os do
+            núcleo.
           schema:
             $ref: "#/components/schemas/StayApprovalState"
         - name: provenance
@@ -822,7 +822,7 @@ paths:
       summary: Consultar estadia
       tags: [stays]
       operationId: getStay
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:read:own"]
       parameters:
@@ -857,7 +857,7 @@ paths:
       summary: Alterar estadia
       tags: [stays]
       operationId: updateStay
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:write"]
       parameters:
@@ -908,7 +908,7 @@ paths:
       summary: Consultar grupo generalizado da estadia
       tags: [stays]
       operationId: getStayGroup
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:read:own"]
       parameters:
@@ -943,7 +943,7 @@ paths:
       summary: Enviar grupo por cadastro assistido
       tags: [stays]
       operationId: submitAssistedStayGroup
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:write"]
       parameters:
@@ -999,7 +999,7 @@ paths:
       summary: Criar ou reemitir convite de preenchimento
       tags: [stays]
       operationId: createStayInvite
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:write"]
       parameters:
@@ -1055,7 +1055,7 @@ paths:
       summary: Confirmar check-in
       tags: [stays]
       operationId: checkInStay
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:write"]
       parameters:
@@ -1092,7 +1092,7 @@ paths:
       summary: Confirmar check-out
       tags: [stays]
       operationId: checkOutStay
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:write"]
       parameters:
@@ -1129,7 +1129,7 @@ paths:
       summary: Cancelar estadia
       tags: [stays]
       operationId: cancelStay
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:write"]
       parameters:
@@ -1170,7 +1170,7 @@ paths:
       summary: Marcar não comparecimento
       tags: [stays]
       operationId: markStayNoShow
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       security:
         - oidc: ["stays:write"]
       parameters:
@@ -1212,7 +1212,7 @@ paths:
       tags: [invites]
       security: []
       operationId: getInvite
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       parameters:
         - $ref: "#/components/parameters/InviteToken"
       responses:
@@ -1245,7 +1245,7 @@ paths:
       tags: [invites]
       security: []
       operationId: submitInviteGroup
-      x-cumuru-implementation-phase: 2
+      x-cumuru-feature: core
       parameters:
         - $ref: "#/components/parameters/InviteToken"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1299,7 +1299,7 @@ paths:
         o QR são exibidos na própria tela.
       tags: [accommodations]
       operationId: createAccommodationActivation
-      x-cumuru-implementation-phase: 7
+      x-cumuru-feature: self-service
       security:
         - oidc: ["accommodations:manage"]
       parameters:
@@ -1361,7 +1361,7 @@ paths:
         produz o mesmo 404, sem distinção.
       tags: [auth]
       operationId: getAccommodationActivation
-      x-cumuru-implementation-phase: 7
+      x-cumuru-feature: self-service
       security: []
       parameters:
         - $ref: "#/components/parameters/ActivationTokenHeader"
@@ -1398,7 +1398,7 @@ paths:
         e repetir a chamada devolve 404, intencionalmente.
       tags: [auth]
       operationId: activateAccommodationAccount
-      x-cumuru-implementation-phase: 7
+      x-cumuru-feature: self-service
       security: []
       parameters:
         - $ref: "#/components/parameters/ActivationTokenHeader"
@@ -1438,7 +1438,7 @@ paths:
         (/i#token) e só aparece nesta criação e no replay idempotente exato.
       tags: [accommodations]
       operationId: createAccommodationInvite
-      x-cumuru-implementation-phase: 7
+      x-cumuru-feature: self-service
       security:
         - oidc: ["accommodations:manage"]
       parameters:
@@ -1496,7 +1496,7 @@ paths:
         exato (ADR-019). 404 quando não houver convite ativo.
       tags: [accommodations]
       operationId: getAccommodationInvite
-      x-cumuru-implementation-phase: 7
+      x-cumuru-feature: self-service
       security:
         - oidc: ["accommodations:manage"]
       parameters:
@@ -1534,7 +1534,7 @@ paths:
         idempotente por natureza.
       tags: [accommodations]
       operationId: revokeAccommodationInvite
-      x-cumuru-implementation-phase: 7
+      x-cumuru-feature: self-service
       security:
         - oidc: ["accommodations:manage"]
       parameters:
@@ -1588,7 +1588,7 @@ paths:
         do contador do balde de rate limit desta rota.
       tags: [invites]
       operationId: getAccommodationInviteContext
-      x-cumuru-implementation-phase: 7
+      x-cumuru-feature: self-service
       security: []
       parameters:
         - $ref: "#/components/parameters/InviteTokenHeader"
@@ -1629,7 +1629,7 @@ paths:
         nem publicação enquanto não for aprovada.
       tags: [invites]
       operationId: submitAccommodationSelfRegistration
-      x-cumuru-implementation-phase: 7
+      x-cumuru-feature: self-service
       security: []
       parameters:
         - $ref: "#/components/parameters/InviteTokenHeader"
@@ -1684,7 +1684,7 @@ paths:
         approval_state, responde 422.
       tags: [stays]
       operationId: approveStay
-      x-cumuru-implementation-phase: 7
+      x-cumuru-feature: self-service
       security:
         - oidc: ["stays:approve"]
       parameters:
@@ -1727,7 +1727,7 @@ paths:
         auditável.
       tags: [stays]
       operationId: rejectStay
-      x-cumuru-implementation-phase: 7
+      x-cumuru-feature: self-service
       security:
         - oidc: ["stays:approve"]
       parameters:
@@ -1768,7 +1768,7 @@ paths:
       summary: Listar questionários administráveis
       tags: [questionnaires]
       operationId: listQuestionnaires
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:manage"]
       parameters:
@@ -1800,7 +1800,7 @@ paths:
       summary: Criar questionário global com primeira versão draft
       tags: [questionnaires]
       operationId: createQuestionnaire
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:manage"]
       parameters:
@@ -1833,7 +1833,7 @@ paths:
       summary: Consultar questionário administrável
       tags: [questionnaires]
       operationId: getQuestionnaire
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:manage"]
       parameters:
@@ -1867,7 +1867,7 @@ paths:
       summary: Listar versões de um questionário
       tags: [questionnaires]
       operationId: listQuestionnaireVersions
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:manage"]
         - oidc: ["questionnaires:approve"]
@@ -1903,7 +1903,7 @@ paths:
       summary: Clonar uma versão para novo draft
       tags: [questionnaires]
       operationId: cloneQuestionnaireVersion
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:manage"]
       parameters:
@@ -1939,7 +1939,7 @@ paths:
       summary: Consultar versão administrativa
       tags: [questionnaires]
       operationId: getQuestionnaireVersion
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:manage"]
         - oidc: ["questionnaires:approve"]
@@ -1975,7 +1975,7 @@ paths:
       summary: Substituir conteúdo de uma versão draft
       tags: [questionnaires]
       operationId: updateQuestionnaireVersion
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:manage"]
       parameters:
@@ -2015,7 +2015,7 @@ paths:
       summary: Enviar versão para revisão de privacidade
       tags: [questionnaires]
       operationId: submitQuestionnaireVersionReview
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:manage"]
       parameters:
@@ -2052,7 +2052,7 @@ paths:
       summary: Solicitar mudanças e devolver versão a draft
       tags: [questionnaires]
       operationId: requestQuestionnaireVersionChanges
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:approve"]
       parameters:
@@ -2093,7 +2093,7 @@ paths:
       summary: Aprovar revisão de privacidade
       tags: [questionnaires]
       operationId: approveQuestionnaireVersion
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:approve"]
       parameters:
@@ -2130,7 +2130,7 @@ paths:
       summary: Publicar versão aprovada
       tags: [questionnaires]
       operationId: publishQuestionnaireVersion
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:approve"]
       parameters:
@@ -2167,7 +2167,7 @@ paths:
       summary: Retirar versão publicada
       tags: [questionnaires]
       operationId: retireQuestionnaireVersion
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       security:
         - oidc: ["questionnaires:approve"]
       parameters:
@@ -2205,7 +2205,7 @@ paths:
       tags: [questionnaires]
       security: []
       operationId: getActiveQuestionnaire
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       parameters:
         - $ref: "#/components/parameters/QuestionnaireStableKey"
       responses:
@@ -2236,7 +2236,7 @@ paths:
       tags: [questionnaires]
       security: []
       operationId: submitSurveyResponse
-      x-cumuru-implementation-phase: 3
+      x-cumuru-feature: questionnaire
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/SurveyCapability"
@@ -2280,7 +2280,7 @@ paths:
       tags: [privacy]
       security: []
       operationId: createPrivacyRequest
-      x-cumuru-implementation-phase: deferred
+      x-cumuru-feature: deferred
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -4764,7 +4764,7 @@ components:
           const: not_available
         reason_code:
           type: string
-          enum: [phase_not_implemented, pseudonym_not_approved, insufficient_source]
+          enum: [not_implemented, pseudonym_not_approved, insufficient_source]
     QualityCount:
       oneOf:
         - $ref: "#/components/schemas/AvailableQualityCount"

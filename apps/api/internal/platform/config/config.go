@@ -66,10 +66,10 @@ type Config struct {
 	OIDC              OIDCConfig
 	Auth              AuthConfig
 	Telemetry         TelemetryConfig
-	Phase2            Phase2Config
-	Phase3            Phase3Config
-	Phase4            Phase4Config
-	Phase7            Phase7Config
+	Core              CoreConfig
+	Questionnaire     QuestionnaireConfig
+	Analytics         AnalyticsConfig
+	SelfService       SelfServiceConfig
 }
 
 type LookupEnv func(string) (string, bool)
@@ -103,7 +103,7 @@ type loadedParts struct {
 	environment       Environment
 	trustedProxyCIDRs []netip.Prefix
 	auth              AuthConfig
-	phases            phaseConfigs
+	features          featureConfigs
 }
 
 func loadParts(process Process, lookup LookupEnv) (loadedParts, error) {
@@ -112,7 +112,7 @@ func loadParts(process Process, lookup LookupEnv) (loadedParts, error) {
 		return loadedParts{}, err
 	}
 	environment := Environment(required(lookup, "APP_ENV"))
-	phases, err := loadPhases(environment, process, lookup)
+	features, err := loadFeatures(environment, process, lookup)
 	if err != nil {
 		return loadedParts{}, err
 	}
@@ -122,7 +122,7 @@ func loadParts(process Process, lookup LookupEnv) (loadedParts, error) {
 	}
 	return loadedParts{
 		environment: environment, trustedProxyCIDRs: trustedProxyCIDRs,
-		auth: auth, phases: phases,
+		auth: auth, features: features,
 	}, nil
 }
 
@@ -134,7 +134,7 @@ func loadConfig(process Process, lookup LookupEnv) (Config, error) {
 	reader := newEnvReader(lookup)
 	cfg := baseConfig(
 		process, parts.environment, reader,
-		parts.trustedProxyCIDRs, parts.auth, parts.phases,
+		parts.trustedProxyCIDRs, parts.auth, parts.features,
 	)
 	if err := reader.Err(); err != nil {
 		return Config{}, err
@@ -149,7 +149,7 @@ func baseConfig(
 	reader *envReader,
 	trustedProxyCIDRs []netip.Prefix,
 	auth AuthConfig,
-	phases phaseConfigs,
+	features featureConfigs,
 ) Config {
 	lookup := reader.lookup
 	return Config{
@@ -175,11 +175,11 @@ func baseConfig(
 			Endpoint: required(lookup, "OTEL_ENDPOINT"),
 			Timeout:  reader.duration("OTEL_TIMEOUT", 5*time.Second),
 		},
-		Auth:   auth,
-		Phase2: phases.phase2,
-		Phase3: phases.phase3,
-		Phase4: phases.phase4,
-		Phase7: phases.phase7,
+		Auth:          auth,
+		Core:          features.core,
+		Questionnaire: features.questionnaire,
+		Analytics:     features.analytics,
+		SelfService:   features.selfService,
 	}
 }
 
@@ -195,32 +195,32 @@ func applyProcessAddresses(cfg *Config, process Process, lookup LookupEnv) {
 	cfg.ServiceName = "cumuru-worker"
 }
 
-type phaseConfigs struct {
-	phase2 Phase2Config
-	phase3 Phase3Config
-	phase4 Phase4Config
-	phase7 Phase7Config
+type featureConfigs struct {
+	core          CoreConfig
+	questionnaire QuestionnaireConfig
+	analytics     AnalyticsConfig
+	selfService   SelfServiceConfig
 }
 
-func loadPhases(environment Environment, process Process, lookup LookupEnv) (phaseConfigs, error) {
-	phase2, err := loadPhase2(lookup)
+func loadFeatures(environment Environment, process Process, lookup LookupEnv) (featureConfigs, error) {
+	core, err := loadCore(lookup)
 	if err != nil {
-		return phaseConfigs{}, err
+		return featureConfigs{}, err
 	}
-	phase3, err := loadPhase3(environment, phase2, lookup)
+	questionnaire, err := loadQuestionnaire(environment, core, lookup)
 	if err != nil {
-		return phaseConfigs{}, err
+		return featureConfigs{}, err
 	}
-	phase4, err := loadPhase4(environment, process, lookup)
+	analytics, err := loadAnalytics(environment, process, lookup)
 	if err != nil {
-		return phaseConfigs{}, err
+		return featureConfigs{}, err
 	}
-	phase7, err := loadPhase7(environment, phase2, lookup)
+	selfService, err := loadSelfService(environment, core, lookup)
 	if err != nil {
-		return phaseConfigs{}, err
+		return featureConfigs{}, err
 	}
-	return phaseConfigs{
-		phase2: phase2, phase3: phase3, phase4: phase4, phase7: phase7,
+	return featureConfigs{
+		core: core, questionnaire: questionnaire, analytics: analytics, selfService: selfService,
 	}, nil
 }
 
@@ -234,16 +234,16 @@ func (c Config) validate() error {
 		c.validateOIDC,
 		c.validateTelemetry,
 		func() error {
-			return c.Phase2.validate(
+			return c.Core.validate(
 				c.requiresHTTPS(),
 				c.Environment,
 				c.OIDC.Mode,
 			)
 		},
-		c.Phase3.validate,
-		c.Phase7.validate,
+		c.Questionnaire.validate,
+		c.SelfService.validate,
 		func() error {
-			return c.Phase4.validate(
+			return c.Analytics.validate(
 				c.Process,
 				c.Environment,
 				c.DatabaseURL,

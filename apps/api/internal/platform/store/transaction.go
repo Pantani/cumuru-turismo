@@ -125,7 +125,7 @@ func (s *Store) hashRequest(value any) ([]byte, error) {
 }
 
 func (s *Store) requestHashKey() ([]byte, error) {
-	keyring := s.phase2.IdempotencyKeys
+	keyring := s.core.IdempotencyKeys
 	key, ok := keyring.Key(keyring.CurrentVersion)
 	if !ok {
 		return nil, ErrUnavailable
@@ -193,8 +193,8 @@ func (s *Store) findIdempotency(
 	spec idempotencySpec,
 	requestHash []byte,
 ) (idempotencyResult, bool, error) {
-	actors := digests(s.phase2.ActorKeys, "actor", spec.actorValue)
-	keys := digests(s.phase2.IdempotencyKeys, "idempotency-key", spec.key)
+	actors := digests(s.core.ActorKeys, "actor", spec.actorValue)
+	keys := digests(s.core.IdempotencyKeys, "idempotency-key", spec.key)
 	for _, actor := range actors {
 		result, found, err := s.lockUnderActor(ctx, q, spec, requestHash, actor, keys)
 		if found || err != nil {
@@ -237,13 +237,13 @@ func (s *Store) claimIdempotency(
 	spec idempotencySpec,
 	requestHash []byte,
 ) (generated.PlatformIdempotencyRecord, error) {
-	actor := digests(s.phase2.ActorKeys, "actor", spec.actorValue)[0]
-	key := digests(s.phase2.IdempotencyKeys, "idempotency-key", spec.key)[0]
+	actor := digests(s.core.ActorKeys, "actor", spec.actorValue)[0]
+	key := digests(s.core.IdempotencyKeys, "idempotency-key", spec.key)[0]
 	return q.ClaimIdempotencyKey(ctx, generated.ClaimIdempotencyKeyParams{
 		ActorKeyHmac: actor.sum, ActorKeyVersion: actor.version,
 		OperationKey: string(spec.operation), ResourceID: pgUUID(spec.resourceID),
 		IdempotencyKeyHmac: key.sum, IdempotencyKeyVersion: key.version,
-		RequestHash: requestHash, ExpiresAt: pgTime(spec.now.Add(s.phase2.IdempotencyTTL)),
+		RequestHash: requestHash, ExpiresAt: pgTime(spec.now.Add(s.core.IdempotencyTTL)),
 	})
 }
 
@@ -301,8 +301,8 @@ func (s *Store) completeIdempotency(
 	requestHash []byte,
 	response storedMutation,
 ) error {
-	actor := digests(s.phase2.ActorKeys, "actor", spec.actorValue)[0]
-	key := digests(s.phase2.IdempotencyKeys, "idempotency-key", spec.key)[0]
+	actor := digests(s.core.ActorKeys, "actor", spec.actorValue)[0]
+	key := digests(s.core.IdempotencyKeys, "idempotency-key", spec.key)[0]
 	headers, err := json.Marshal(response.headers)
 	if err != nil {
 		return ErrUnavailable
@@ -424,11 +424,11 @@ func outboxAggregateID(spec eventSpec) uuid.UUID {
 }
 
 func (s *Store) pseudonymizeActor(issuer, subject string) (audit.ActorDigest, error) {
-	key, ok := s.phase2.ActorKeys.Key(s.phase2.ActorKeys.CurrentVersion)
+	key, ok := s.core.ActorKeys.Key(s.core.ActorKeys.CurrentVersion)
 	if !ok {
 		return audit.ActorDigest{}, audit.ErrInvalidActor
 	}
-	hasher, err := audit.NewActorHasher(s.phase2.ActorKeys.CurrentVersion, key)
+	hasher, err := audit.NewActorHasher(s.core.ActorKeys.CurrentVersion, key)
 	if err != nil {
 		return audit.ActorDigest{}, err
 	}

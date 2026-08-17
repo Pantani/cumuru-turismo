@@ -168,9 +168,9 @@ func workerServices(
 	pool *pgxpool.Pool,
 	cfg config.Config,
 ) (*store.Store, *questionnaire.Service, error) {
-	platformStore, err := store.NewPhase3(
-		pool, cfg.DatabaseTimeout, cfg.Phase2, cfg.Phase3,
-		store.WithPhase7Config(cfg.Phase7),
+	platformStore, err := store.NewQuestionnaire(
+		pool, cfg.DatabaseTimeout, cfg.Core, cfg.Questionnaire,
+		store.WithSelfServiceConfig(cfg.SelfService),
 	)
 	if err != nil {
 		return nil, nil, errors.New("worker repository initialization failed")
@@ -181,14 +181,14 @@ func workerServices(
 	return platformStore, questionnaires, nil
 }
 
-// approvalSweeper is nil when the phase is off. With the phase on and no usable
+// approvalSweeper is nil when the feature is off. With the feature on and no usable
 // key the repository refuses to exist, and the worker fails to start rather
-// than sweeping for a phase the API is not serving.
+// than sweeping for a feature the API is not serving.
 func approvalSweeper(
 	platformStore *store.Store,
 	cfg config.Config,
 ) (approvalExpirer, error) {
-	if !cfg.Phase7.Enabled {
+	if !cfg.SelfService.Enabled {
 		return nil, nil
 	}
 	return store.NewStayRepository(platformStore)
@@ -230,8 +230,8 @@ type workerPollerSpec struct {
 	approvalExpiry    approvalExpiryMetrics
 }
 
-// Phase-gated pollers only start when their phase is enabled, so a disabled
-// phase costs nothing at run time.
+// Feature-gated pollers only start when their feature is enabled, so a disabled
+// feature costs nothing at run time.
 func startWorkerPollers(ctx context.Context, spec workerPollerSpec) *pollerCoordinator {
 	pollers := newPollerCoordinator(ctx)
 	pollers.Go(func(pollerContext context.Context) {
@@ -247,12 +247,12 @@ func startWorkerPollers(ctx context.Context, spec workerPollerSpec) *pollerCoord
 			pollerContext, spec.store, spec.logger, spec.cleanup,
 		)
 	})
-	startPhasePollers(pollers, spec)
+	startFeaturePollers(pollers, spec)
 	return pollers
 }
 
-func startPhasePollers(pollers *pollerCoordinator, spec workerPollerSpec) {
-	if spec.cfg.Phase3.Enabled {
+func startFeaturePollers(pollers *pollerCoordinator, spec workerPollerSpec) {
+	if spec.cfg.Questionnaire.Enabled {
 		pollers.Go(func(pollerContext context.Context) {
 			pollFreeTextCleanup(
 				pollerContext, spec.questionnaires, spec.logger, spec.cleanupFailures,
@@ -260,24 +260,24 @@ func startPhasePollers(pollers *pollerCoordinator, spec workerPollerSpec) {
 		})
 	}
 	startApprovalExpiryPoller(pollers, spec)
-	if !spec.cfg.Phase4.Enabled {
+	if !spec.cfg.Analytics.Enabled {
 		return
 	}
-	analyticsRepository := store.NewAnalyticsRepository(spec.store, spec.cfg.Phase4)
+	analyticsRepository := store.NewAnalyticsRepository(spec.store, spec.cfg.Analytics)
 	pollers.Go(func(pollerContext context.Context) {
 		pollAnalytics(
-			pollerContext, analyticsRepository, spec.cfg.Phase4, spec.logger,
+			pollerContext, analyticsRepository, spec.cfg.Analytics, spec.logger,
 			spec.analyticsFailures, spec.analyticsRuns,
 		)
 	})
 }
 
-// The sweep only runs when the phase is on, and only when the repository could
+// The sweep only runs when the feature is on, and only when the repository could
 // be built: with no usable proof-of-work key the repository refuses to exist,
-// and a worker that swept without one would be operating a phase the API is not
+// and a worker that swept without one would be operating a feature the API is not
 // serving.
 func startApprovalExpiryPoller(pollers *pollerCoordinator, spec workerPollerSpec) {
-	if !spec.cfg.Phase7.Enabled || spec.approvals == nil {
+	if !spec.cfg.SelfService.Enabled || spec.approvals == nil {
 		return
 	}
 	pollers.Go(func(pollerContext context.Context) {
@@ -704,7 +704,7 @@ type analyticsWorker interface {
 func pollAnalytics(
 	ctx context.Context,
 	service analyticsWorker,
-	phase4 config.Phase4Config,
+	settings config.AnalyticsConfig,
 	logger *slog.Logger,
 	failures prometheus.Counter,
 	runs *prometheus.CounterVec,
@@ -713,8 +713,8 @@ func pollAnalytics(
 		ctx, service, analytics.ReconciliationFull, time.Now().UTC(),
 		logger, failures, runs,
 	)
-	incremental := time.NewTicker(phase4.IncrementalInterval)
-	full := time.NewTicker(phase4.FullReconciliationInterval)
+	incremental := time.NewTicker(settings.IncrementalInterval)
+	full := time.NewTicker(settings.FullReconciliationInterval)
 	defer incremental.Stop()
 	defer full.Stop()
 	for {

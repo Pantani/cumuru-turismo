@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestPhase2QueriesKeepAuthorizationAndLocksInSQL(t *testing.T) {
+func TestCoreQueriesKeepAuthorizationAndLocksInSQL(t *testing.T) {
 	t.Parallel()
 
 	assertSQLContains(t, "accommodation.sql",
@@ -30,7 +30,7 @@ func TestPhase2QueriesKeepAuthorizationAndLocksInSQL(t *testing.T) {
 	)
 }
 
-func TestPhase2PlatformQueriesAreClosedAndMinimal(t *testing.T) {
+func TestCorePlatformQueriesAreClosedAndMinimal(t *testing.T) {
 	t.Parallel()
 
 	assertSQLContains(t, "idempotency.sql",

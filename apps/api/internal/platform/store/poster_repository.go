@@ -18,7 +18,7 @@ import (
 
 // posterReplayPayload is what the idempotency record stores. It holds the
 // identifier and the key version, never the token: the URL is rebuilt from the
-// keyring on replay, exactly as the Fase 2 invite does, so a leaked idempotency
+// keyring on replay, exactly as the core invite does, so a leaked idempotency
 // table hands nobody a working poster.
 type posterReplayPayload struct {
 	InviteID   uuid.UUID `json:"invite_id"`
@@ -71,7 +71,7 @@ func (r *StayRepository) CreateAccommodationInvite(
 	ctx context.Context,
 	command stay.AccommodationInviteCommand,
 ) (result stay.AccommodationInviteCreated, replayed bool, err error) {
-	if !r.store.phase7.Enabled {
+	if !r.store.selfService.Enabled {
 		return result, false, stay.ErrNotFound
 	}
 	now := r.store.currentTime()
@@ -187,7 +187,7 @@ func (r *StayRepository) insertPoster(
 		return posterReplayPayload{}, err
 	}
 	row, err := q.CreateAccommodationInvite(ctx, posterParams(
-		command, inviteID, digest, keyVersion, now.Add(r.store.phase2.InviteTTL),
+		command, inviteID, digest, keyVersion, now.Add(r.store.core.InviteTTL),
 	))
 	if err != nil {
 		return posterReplayPayload{}, stayMutationError(err)
@@ -244,7 +244,7 @@ func (r *StayRepository) decodePoster(
 	}
 	return stay.AccommodationInviteCreated{
 		InviteID: payload.InviteID, URL: fragmentURL(
-			r.store.phase7.SelfRegistrationURL, token,
+			r.store.selfService.SelfRegistrationURL, token,
 		),
 		ExpiresAt: payload.ExpiresAt, MaxUses: payload.MaxUses,
 		UseCount: payload.UseCount, Version: payload.Version,
@@ -256,7 +256,7 @@ func (r *StayRepository) GetAccommodationInvite(
 	actor access.Principal,
 	accommodationID uuid.UUID,
 ) (result stay.AccommodationInviteStatus, err error) {
-	if !r.store.phase7.Enabled {
+	if !r.store.selfService.Enabled {
 		return result, stay.ErrNotFound
 	}
 	err = r.store.inReadOnlyTransaction(ctx, func(q generated.Querier) error {
@@ -289,7 +289,7 @@ func (r *StayRepository) RevokeAccommodationInvite(
 	ctx context.Context,
 	command stay.AccommodationInviteRevokeCommand,
 ) (result stay.AccommodationInviteStatus, replayed bool, err error) {
-	if !r.store.phase7.Enabled {
+	if !r.store.selfService.Enabled {
 		return result, false, stay.ErrNotFound
 	}
 	now := r.store.currentTime()

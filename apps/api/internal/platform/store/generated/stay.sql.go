@@ -1653,7 +1653,7 @@ WHERE m.oidc_issuer = $1
   )
   -- A fila de aprovação é GET /stays?accommodation_id=…&approval_state=pending.
   -- Nenhum endpoint novo de listagem: cursor, limite, ordenação e isolamento
-  -- por membership continuam sendo os já provados na Fase 2.
+  -- por membership continuam sendo os já provados no núcleo.
   AND (
     $5::text IS NULL
     OR s.approval_state = $5::text

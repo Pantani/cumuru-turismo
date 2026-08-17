@@ -7,7 +7,8 @@ import {
 } from "react";
 
 import type { components } from "../../generated/schema";
-import { createPhase7Client, Phase7ApiError } from "../../shared/api/phase7-client";
+import { ApiError } from "../../shared/api/http-client";
+import { createSelfServiceClient } from "../../shared/api/self-service-client";
 import {
   describedBy,
   FieldError,
@@ -20,12 +21,12 @@ import {
 import {
   validateActivationPassword,
   type ActivationPasswordIssues,
-} from "../../shared/validation/phase7-validation";
+} from "../../shared/validation/self-service-validation";
 
 type AccommodationActivationContext =
   components["schemas"]["AccommodationActivationContext"];
 
-const guestClient = createPhase7Client({ getAccessToken: () => null });
+const guestClient = createSelfServiceClient({ getAccessToken: () => null });
 
 /** Consumed, revoked, expired and forged all answer the same 404, by design. */
 /**
@@ -34,7 +35,7 @@ const guestClient = createPhase7Client({ getAccessToken: () => null });
  * é a política de senha e a pessoa precisa saber o que corrigir.
  */
 function describeActivationFailure(error: unknown) {
-  if (!(error instanceof Phase7ApiError)) {
+  if (!(error instanceof ApiError)) {
     return "Sem conexão agora. Tente de novo em instantes.";
   }
   if (error.status === 404) {

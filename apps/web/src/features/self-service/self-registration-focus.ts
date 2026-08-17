@@ -1,4 +1,4 @@
-import type { ValidationIssue } from "../../shared/validation/phase2-validation";
+import type { ValidationIssue } from "../../shared/validation/core-validation";
 import type { VisitorEditorHandle } from "../visitors/VisitorEditor";
 
 /** Group-level issues have no field of their own; the first role owns them. */

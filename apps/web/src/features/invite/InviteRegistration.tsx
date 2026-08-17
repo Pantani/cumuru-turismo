@@ -14,10 +14,8 @@ import {
   type VisitorEditorHandle,
 } from "../visitors/VisitorEditor";
 import { normalizedVisitor } from "../visitors/visitor-input";
-import {
-  createPhase2Client,
-  Phase2ApiError,
-} from "../../shared/api/phase2-client";
+import { ApiError } from "../../shared/api/http-client";
+import { createCoreClient } from "../../shared/api/core-client";
 import { guestCopyFor } from "../../shared/forms/guest-copy";
 import {
   deleteDraft,
@@ -37,13 +35,13 @@ import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import {
   type ValidationIssue,
   validateSubmitGroup,
-} from "../../shared/validation/phase2-validation";
+} from "../../shared/validation/core-validation";
 
 type InviteContext = components["schemas"]["InviteContext"];
 type SubmitGroupRequest = components["schemas"]["SubmitGroupRequest"];
 type VisitorInput = components["schemas"]["VisitorInput"];
 
-const guestClient = createPhase2Client({ getAccessToken: () => null });
+const guestClient = createCoreClient({ getAccessToken: () => null });
 
 function draftIdFromHash() {
   const value = new URLSearchParams(window.location.hash.slice(1)).get("draft");
@@ -85,7 +83,7 @@ const guestMessages: Readonly<Record<number, string>> = {
 };
 
 function errorMessage(error: unknown) {
-  if (!(error instanceof Phase2ApiError)) {
+  if (!(error instanceof ApiError)) {
     return "Sem conexão. O rascunho foi preservado neste dispositivo.";
   }
   return guestCopyFor(error, guestMessages);
@@ -104,7 +102,7 @@ async function handleSubmissionFailure(
   inviteWasValidated: boolean,
   preserve: () => Promise<void>,
 ) {
-  const status = error instanceof Phase2ApiError ? error.status : 0;
+  const status = error instanceof ApiError ? error.status : 0;
   if (draftDispositionFor(status, inviteWasValidated) === "purge") {
     await removeDraft(draftId);
   } else {
@@ -192,7 +190,7 @@ async function recoverSubmission(
     inviteWasValidated,
     actions.persistDraft,
   );
-  if (error instanceof Phase2ApiError && error.status === 404) {
+  if (error instanceof ApiError && error.status === 404) {
     actions.clearExpired();
   }
   actions.setMessage(errorMessage(error));
@@ -202,7 +200,7 @@ async function purgeInitialInviteIfMissing(
   error: unknown,
   draftId: string | null,
 ) {
-  if (!(error instanceof Phase2ApiError) || error.status !== 404) {
+  if (!(error instanceof ApiError) || error.status !== 404) {
     return false;
   }
   await removeDraft(draftId);

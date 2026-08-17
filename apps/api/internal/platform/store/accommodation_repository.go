@@ -577,7 +577,7 @@ func accommodationIdempotencySpec(
 }
 
 func (s *Store) accommodationOnboardingLockKey(actor access.Principal) (string, error) {
-	key, ok := s.phase2.ActorKeys.Key(s.phase2.ActorKeys.CurrentVersion)
+	key, ok := s.core.ActorKeys.Key(s.core.ActorKeys.CurrentVersion)
 	if !ok {
 		return "", accommodation.ErrUnavailable
 	}

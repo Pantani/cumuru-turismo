@@ -92,11 +92,11 @@ func accountFixture(lookup func(string) (string, bool)) (store.LocalDemoAccount,
 			"stays:write",
 			// The approval queue and the poster panel are gated on this scope by
 			// the client. Without it the local demo renders neither, and
-			// local-demo-e2e would pass by never opening the phase 7 screens —
+			// local-demo-e2e would pass by never opening the self-service screens —
 			// the same green-for-the-wrong-reason failure as D-01, one layer up.
 			//
 			// Safe here and only here: compose.local.yaml pins
-			// PHASE7_ENABLED: "true", so the single runtime that loads this
+			// SELF_SERVICE_ENABLED: "true", so the single runtime that loads this
 			// fixture always serves the routes the scope unlocks.
 			"stays:approve",
 			"questionnaires:manage",

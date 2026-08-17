@@ -48,7 +48,7 @@ func (r *StayRepository) GetAccommodationInviteContext(
 	now := r.store.currentTime()
 	count, err := r.countedRateLimit(
 		ctx, posterContextScope, request.Token, request.RateSubject,
-		r.store.phase7.SelfServiceContextRateLimit, now,
+		r.store.selfService.SelfServiceContextRateLimit, now,
 	)
 	if err != nil {
 		return result, err
@@ -69,10 +69,10 @@ func (r *StayRepository) posterContext(
 	requestCount int32,
 	now time.Time,
 ) (stay.AccommodationInviteContext, error) {
-	phase7 := r.store.phase7
+	selfService := r.store.selfService
 	difficulty := proofofwork.Difficulty(
-		phase7.DifficultyBase, phase7.DifficultyCeiling,
-		phase7.DifficultyRequestsPerBit, requestCount,
+		selfService.DifficultyBase, selfService.DifficultyCeiling,
+		selfService.DifficultyRequestsPerBit, requestCount,
 	)
 	challenge, err := r.challenges.Issue(poster.inviteID, difficulty, now)
 	if err != nil {
@@ -99,7 +99,7 @@ func (r *StayRepository) SubmitSelfRegistration(
 	now := r.store.currentTime()
 	if _, err = r.countedRateLimit(
 		ctx, posterSubmitScope, command.Token, command.RateSubject,
-		r.store.phase7.SelfServiceSubmitRateLimit, now,
+		r.store.selfService.SelfServiceSubmitRateLimit, now,
 	); err != nil {
 		return result, false, err
 	}
@@ -460,18 +460,18 @@ func (r *StayRepository) countedRateLimit(
 	limit int,
 	now time.Time,
 ) (int32, error) {
-	key, ok := r.store.phase2.RateLimitKeys.Key(r.store.phase2.RateLimitKeys.CurrentVersion)
+	key, ok := r.store.core.RateLimitKeys.Key(r.store.core.RateLimitKeys.CurrentVersion)
 	if !ok {
 		return 0, stay.ErrUnavailable
 	}
-	window := now.Truncate(r.store.phase2.RateLimitWindow)
+	window := now.Truncate(r.store.core.RateLimitWindow)
 	ctx, cancel := context.WithTimeout(ctx, r.store.timeout)
 	defer cancel()
 	row, err := r.store.queries.IncrementRateLimit(ctx, generated.IncrementRateLimitParams{
 		Scope: scope, SubjectHmac: rateLimitDigest(key, scope, token, subject),
-		SubjectKeyVersion: r.store.phase2.RateLimitKeys.CurrentVersion,
+		SubjectKeyVersion: r.store.core.RateLimitKeys.CurrentVersion,
 		WindowStartedAt:   timeToPG(window),
-		ExpiresAt:         timeToPG(window.Add(2 * r.store.phase2.RateLimitWindow)),
+		ExpiresAt:         timeToPG(window.Add(2 * r.store.core.RateLimitWindow)),
 	})
 	if err != nil {
 		return 0, stay.ErrUnavailable

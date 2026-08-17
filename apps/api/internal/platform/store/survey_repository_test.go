@@ -59,11 +59,11 @@ func TestSurveyRateConnectionUsesExplicitNoPoolUnitFallback(t *testing.T) {
 	subject := &Store{
 		queries: queries,
 		timeout: time.Second,
-		phase2: config.Phase2Config{
+		core: config.CoreConfig{
 			RateLimitKeys:   keyring,
 			RateLimitWindow: time.Minute,
 		},
-		phase3: config.Phase3Config{SurveySubmitRateLimit: 10},
+		questionnaire: config.QuestionnaireConfig{SurveySubmitRateLimit: 10},
 	}
 	repository := NewQuestionnaireRepository(subject)
 

@@ -9,7 +9,7 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/stay"
 )
 
-func TestAnalyticsRoutesAreAbsentWithoutPhaseFourDependencies(t *testing.T) {
+func TestAnalyticsRoutesAreAbsentWithoutAnalyticsDependencies(t *testing.T) {
 	t.Parallel()
 
 	handler, _ := mustNew(t, Dependencies{})

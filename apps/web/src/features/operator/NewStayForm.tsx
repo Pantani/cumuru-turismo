@@ -4,7 +4,7 @@ import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import {
   validateCreateStay,
   type ValidationIssue,
-} from "../../shared/validation/phase2-validation";
+} from "../../shared/validation/core-validation";
 import {
   FieldError,
   invalidFlag,
@@ -26,7 +26,7 @@ function emptyDraft() {
 }
 
 export function NewStayForm({ accommodationId, onCreated }: NewStayFormProps) {
-  const { client } = useAuthSession();
+  const { coreClient: client } = useAuthSession();
   const operation = useOperation();
   const formId = useId();
   const [draft, setDraft] = useState(emptyDraft);

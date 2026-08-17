@@ -39,7 +39,7 @@ services:
       CURSOR_HMAC_KEYS: local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtY3Vyc29yLWtleS12MS0wMDA=
       DOCUMENT_HMAC_CURRENT_VERSION: local-v1
       DOCUMENT_HMAC_KEYS: local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtZG9jdW1lbnQtdjEtMDA=
-      PHASE3_ENABLED: "true"
+      QUESTIONNAIRE_ENABLED: "true"
       SURVEY_CAPABILITY_TTL: 24h
       SURVEY_FREE_TEXT_TTL: 24h
       SURVEY_SUBMIT_RATE_LIMIT: "10"
@@ -48,18 +48,18 @@ services:
       SURVEY_HMAC_KEYS: local-v1=Y3VtdXJ1LWxvY2FsLXRlc3Qtc3VydmV5LWhtYWMtdjEtMDAw
       SURVEY_FREE_TEXT_CURRENT_VERSION: local-v1
       SURVEY_FREE_TEXT_KEYS: local-v1=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      PHASE4_ENABLED: "true"
+      ANALYTICS_ENABLED: "true"
       PUBLIC_DATABASE_TIMEOUT: 3s
-      PHASE4_PRIMARY_CELL_THRESHOLD: "10"
-      PHASE4_MINIMUM_REPORTING_ACCOMMODATIONS: "3"
-      PHASE4_ROUNDING_BASE: "10"
-      PHASE4_PRE_REGISTERED_WEIGHT: "0.80"
-      PHASE4_INCREMENTAL_INTERVAL: 15m
-      PHASE4_FULL_RECONCILIATION_INTERVAL: 24h
-      # Fase 7: autoatendimento e aprovação. Sem esta habilitação as rotas do canal
+      ANALYTICS_PRIMARY_CELL_THRESHOLD: "10"
+      ANALYTICS_MINIMUM_REPORTING_ACCOMMODATIONS: "3"
+      ANALYTICS_ROUNDING_BASE: "10"
+      ANALYTICS_PRE_REGISTERED_WEIGHT: "0.80"
+      ANALYTICS_INCREMENTAL_INTERVAL: 15m
+      ANALYTICS_FULL_RECONCILIATION_INTERVAL: 24h
+      # autoatendimento: autoatendimento e aprovação. Sem esta habilitação as rotas do canal
       # aberto não são registradas, e qualquer gate que sonde /accommodation-invite
       # ou /activation fica verde por ausência de rota em vez de por comportamento.
-      PHASE7_ENABLED: "true"
+      SELF_SERVICE_ENABLED: "true"
       # Keyring próprio: o loader recusa sobreposição com qualquer outro ring, porque
       # uma chave vazada permitiria forjar token de convite ou digest de idempotência.
       PROOF_OF_WORK_HMAC_CURRENT_VERSION: local-v1

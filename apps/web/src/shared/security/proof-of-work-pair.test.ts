@@ -11,7 +11,7 @@ import { countLeadingZeroBits, solveProofOfWork } from "./proof-of-work";
  *
  * Existem três implementações da mesma regra: este módulo, o verificador Go
  * (`proofofwork.go:262`) e o solucionador do gate integrado
- * (`deploy/scripts/phase7-solve-pow.mjs`), que é uma reimplementação porque
+ * (`deploy/scripts/self-service-solve-pow.mjs`), que é uma reimplementação porque
  * bundlar o TypeScript exigiria criar arquivo nesta lane.
  *
  * O gate do platform prova solucionador ↔ verificador Go pelo fio real. A suíte
@@ -30,7 +30,7 @@ import { countLeadingZeroBits, solveProofOfWork } from "./proof-of-work";
  */
 const gateSolverPath = resolve(
   process.cwd(),
-  "../../deploy/scripts/phase7-solve-pow.mjs",
+  "../../deploy/scripts/self-service-solve-pow.mjs",
 );
 
 /** Desafios com a forma real: base64url opaco emitido pelo cunhador Go. */

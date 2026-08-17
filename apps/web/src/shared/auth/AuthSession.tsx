@@ -14,10 +14,10 @@ import {
   type AuthClient,
   type SessionAccount,
 } from "../api/auth-client";
-import { createPhase2Client, type Phase2Client } from "../api/phase2-client";
-import { createPhase3Client, type Phase3Client } from "../api/phase3-client";
-import { createPhase4Client, type Phase4Client } from "../api/phase4-client";
-import { createPhase7Client, type Phase7Client } from "../api/phase7-client";
+import { createCoreClient, type CoreClient } from "../api/core-client";
+import { createQuestionnaireClient, type QuestionnaireClient } from "../api/questionnaire-client";
+import { createAnalyticsClient, type AnalyticsClient } from "../api/analytics-client";
+import { createSelfServiceClient, type SelfServiceClient } from "../api/self-service-client";
 import { clearAllDrafts } from "../offline/encrypted-drafts";
 import { clearActivationCapability } from "../security/activation-capability";
 import { clearInviteCapability } from "../security/invite-capability";
@@ -26,12 +26,12 @@ import { clearSurveyCapability } from "../security/survey-capability";
 
 interface AuthSessionValue {
   account: SessionAccount | null;
-  analyticsClient: Phase4Client;
+  analyticsClient: AnalyticsClient;
   authenticated: boolean;
-  client: Phase2Client;
+  coreClient: CoreClient;
   mustChangePassword: boolean;
-  questionnaireClient: Phase3Client;
-  selfServiceClient: Phase7Client;
+  questionnaireClient: QuestionnaireClient;
+  selfServiceClient: SelfServiceClient;
   signIn: (email: string, password: string) => Promise<void>;
   rotatePassword: (current: string, next: string) => Promise<void>;
   endSession: () => Promise<void>;
@@ -42,14 +42,14 @@ interface AuthSessionProviderProps extends PropsWithChildren {
   authClient?: AuthClient;
 }
 
-const failClosedClient = createPhase2Client({ getAccessToken: () => null });
-const failClosedQuestionnaireClient = createPhase3Client({
+const failClosedCoreClient = createCoreClient({ getAccessToken: () => null });
+const failClosedQuestionnaireClient = createQuestionnaireClient({
   getAccessToken: () => null,
 });
-const failClosedAnalyticsClient = createPhase4Client({
+const failClosedAnalyticsClient = createAnalyticsClient({
   getAccessToken: () => null,
 });
-const failClosedSelfServiceClient = createPhase7Client({
+const failClosedSelfServiceClient = createSelfServiceClient({
   getAccessToken: () => null,
 });
 
@@ -65,7 +65,7 @@ const failClosedSession: AuthSessionValue = {
   account: null,
   analyticsClient: failClosedAnalyticsClient,
   authenticated: false,
-  client: failClosedClient,
+  coreClient: failClosedCoreClient,
   mustChangePassword: false,
   questionnaireClient: failClosedQuestionnaireClient,
   selfServiceClient: failClosedSelfServiceClient,
@@ -163,10 +163,10 @@ export function AuthSessionProvider({
 function buildClients(tokenRef: { current: string | null }) {
   const getAccessToken = () => tokenRef.current;
   return {
-    client: createPhase2Client({ getAccessToken }),
-    questionnaireClient: createPhase3Client({ getAccessToken }),
-    analyticsClient: createPhase4Client({ getAccessToken }),
-    selfServiceClient: createPhase7Client({ getAccessToken }),
+    coreClient: createCoreClient({ getAccessToken }),
+    questionnaireClient: createQuestionnaireClient({ getAccessToken }),
+    analyticsClient: createAnalyticsClient({ getAccessToken }),
+    selfServiceClient: createSelfServiceClient({ getAccessToken }),
   };
 }
 

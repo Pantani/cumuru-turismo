@@ -14,34 +14,34 @@ regexTarget = "match"
 regexes = ['''U1VCU1RJVFVJUi1QT1It[A-Za-z0-9+/=]*''']
 
 [[allowlists]]
-description = "Phase 7 poster token fixture is a repeated hex alphabet"
+description = "Self-service poster token fixture is a repeated hex alphabet"
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^apps/api/internal/platform/httpapi/phase7_test\.go$''']
+paths = ['''^apps/api/internal/platform/httpapi/selfservice_test\.go$''']
 regexTarget = "match"
 # Só o alfabeto hexadecimal repetido passa. Um token real colado no mesmo
 # arquivo não tem essa forma, então o gate continua fechado ali.
 regexes = ['''(?:0123456789abcdef){2,}[0-9a-f]*''']
 
 [[allowlists]]
-description = "Phase 7 fragment test uses a literal alphabet sample"
+description = "Self-service fragment test uses a literal alphabet sample"
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^apps/api/internal/platform/store/phase7_repository_test\.go$''']
+paths = ['''^apps/api/internal/platform/store/selfservice_repository_test\.go$''']
 regexTarget = "match"
 # O valor exato exercita a codificação do fragmento contra host.invalid.
 regexes = ['''abcDEF-_0123456789''']
 
 [[allowlists]]
-description = "Phase 7 store fixtures build keys from a literal prefix plus UUID"
+description = "Self-service store fixtures build keys from a literal prefix plus UUID"
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^apps/api/internal/platform/store/phase7_postgres_test\.go$''']
+paths = ['''^apps/api/internal/platform/store/selfservice_postgres_test\.go$''']
 regexTarget = "match"
 # Só o prefixo nomeado do fixture passa; o valor real é montado em tempo de
 # teste concatenando um UUID. Uma chave literal colada aqui não tem prefixo e
 # continua sendo detectada.
-regexes = ['''"phase7-[a-z0-9-]+-"''']
+regexes = ['''"self-service-[a-z0-9-]+-"''']
 
 [[allowlists]]
 description = "Generated API image SHA references are not credentials"

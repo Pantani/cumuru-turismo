@@ -12,7 +12,7 @@ import (
 // It exists because the previous parsers answered a malformed value with a
 // sentinel — zero for a duration or an integer, NaN for a decimal — and left it
 // to a later validator to notice. That worked only while every field happened to
-// have a range check: PHASE4_PRE_REGISTERED_WEIGHT did not, because every
+// have a range check: ANALYTICS_PRE_REGISTERED_WEIGHT did not, because every
 // comparison against NaN is false, so a typo there passed validation and reached
 // the forecast arithmetic. Recording the failure at the point of parsing removes
 // that whole class of bug and names the offending field instead of whichever
@@ -115,4 +115,15 @@ func (r *envReader) boolean(field string, fallback bool) bool {
 		return fallback
 	}
 	return parsed
+}
+
+// parseBoolean keeps the standalone form for the loaders that decide whether a
+// whole feature is enabled before any other field is read.
+func parseBoolean(lookup LookupEnv, field string, fallback bool) (bool, error) {
+	reader := newEnvReader(lookup)
+	parsed := reader.boolean(field, fallback)
+	if err := reader.Err(); err != nil {
+		return false, err
+	}
+	return parsed, nil
 }

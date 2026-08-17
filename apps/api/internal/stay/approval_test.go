@@ -9,7 +9,7 @@ import (
 
 // The unset state must not be countable and must not be valid. Anything else
 // would let a caller that forgot to read the column publish a stay nobody
-// approved, which is exactly the silent regression this phase guards against.
+// approved, which is exactly the silent regression this feature guards against.
 func TestUnsetApprovalIsNeitherValidNorCountable(t *testing.T) {
 	t.Parallel()
 
@@ -91,7 +91,7 @@ func TestProvenanceIsAClosedList(t *testing.T) {
 	}
 }
 
-// The same 72 hours as the Fase 2 invite: the product must not grow a second
+// The same 72 hours as the core invite: the product must not grow a second
 // notion of validity.
 func TestPendingApprovalSharesTheInviteLifetime(t *testing.T) {
 	t.Parallel()

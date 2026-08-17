@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Phase7ApiError } from "../../shared/api/phase7-client";
+import { ApiError } from "../../shared/api/http-client";
 import { describeSelfServiceFailure } from "./self-service-messages";
 
 /**
@@ -16,7 +16,7 @@ import { describeSelfServiceFailure } from "./self-service-messages";
  * with title "Requisição em processamento" and Retry-After: N.
  */
 function retryable(status: number, title: string, seconds: number) {
-  return new Phase7ApiError(
+  return new ApiError(
     status,
     { type: "urn:cumuru:problem:x", title, status },
     seconds,
@@ -70,7 +70,7 @@ describe("cópia de hóspede nos dois ramos", () => {
     (status) => {
       const serverTitle = "Upstream dependency returned an unexpected shape.";
       const message = describeSelfServiceFailure(
-        new Phase7ApiError(status, { type: "urn:x", title: serverTitle, status }, null),
+        new ApiError(status, { type: "urn:x", title: serverTitle, status }, null),
       );
 
       expect(message).not.toContain(serverTitle);
@@ -88,7 +88,7 @@ describe("cópia de hóspede nos dois ramos", () => {
 const IN_PROGRESS = "https://turismo.prado.ba.gov.br/problems/idempotency-in-progress";
 
 function inProgress(seconds: number) {
-  return new Phase7ApiError(
+  return new ApiError(
     409,
     { type: IN_PROGRESS, title: "Requisição em processamento", status: 409 },
     seconds,
@@ -107,7 +107,7 @@ describe("os dois 409 do canal aberto", () => {
 
   it("mantém a cópia do aviso desatualizado para o outro 409", () => {
     const message = describeSelfServiceFailure(
-      new Phase7ApiError(
+      new ApiError(
         409,
         {
           type: "https://turismo.prado.ba.gov.br/problems/privacy-notice-version",

@@ -159,33 +159,33 @@ jobs:
             go: "false"
             node: "false"
             npm: "false"
-          - name: phase2
-            targets: phase2-integration
+          - name: core
+            targets: core-integration
             go: "true"
             node: "false"
             npm: "false"
-          - name: phase3
-            targets: phase3-integration
+          - name: questionnaire
+            targets: questionnaire-integration
             go: "true"
             node: "false"
             npm: "false"
-          - name: phase4
-            targets: phase4-integration
+          - name: analytics
+            targets: analytics-integration
             go: "false"
             node: "false"
             npm: "false"
           - name: proxy-hardening
-            targets: phase2-proxy-test phase3-proxy-test
+            targets: core-proxy-test questionnaire-proxy-test
             go: "false"
             node: "true"
             npm: "true"
-          - name: phase4-proxy
-            targets: phase4-proxy-test
+          - name: analytics-proxy
+            targets: analytics-proxy-test
             go: "false"
             node: "true"
             npm: "true"
-          - name: phase7
-            targets: phase7-integration
+          - name: self-service
+            targets: self-service-integration
             go: "true"
             node: "false"
             npm: "false"
@@ -211,21 +211,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: phase2
-            targets: phase2-full-stack
+          - name: core
+            targets: core-full-stack
             go: "false"
             node: "false"
             npm: "false"
-          # O script da Fase 4 usa apenas heredoc de node; o benchmark roda em
+          # O script de analytics usa apenas heredoc de node; o benchmark roda em
           # Go. Nenhum dos dois lê o node_modules, então npm ci fica de fora.
-          - name: phase4-benchmark
-            targets: phase4-benchmark
+          - name: analytics-benchmark
+            targets: analytics-benchmark
             go: "true"
             node: "true"
             npm: "false"
           # O solucionador de proof-of-work usa só node:crypto, sem pacotes.
-          - name: phase7
-            targets: phase7-full-stack
+          - name: self-service
+            targets: self-service-full-stack
             go: "false"
             node: "true"
             npm: "false"

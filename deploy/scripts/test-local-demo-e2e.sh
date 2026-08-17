@@ -36,7 +36,7 @@ COMPOSE=(
   --env-file "${LOCAL_ENV_FILE}"
   --file "${ROOT_DIR}/compose.yaml"
   --file "${ROOT_DIR}/compose.local.yaml"
-  --file "${ROOT_DIR}/deploy/compose.phase4-full-stack.yaml"
+  --file "${ROOT_DIR}/deploy/compose.analytics-full-stack.yaml"
   --file "${ROOT_DIR}/deploy/compose.local-e2e.yaml"
   --project-name "${PROJECT_NAME}"
 )

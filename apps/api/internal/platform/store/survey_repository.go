@@ -321,14 +321,14 @@ func (r *QuestionnaireRepository) encryptFreeText(
 	params.EncryptedFreeText = value.Content
 	params.FreeTextNonce = value.Nonce
 	params.EncryptionKeyVersion = &value.KeyVersion
-	params.EraseAfter = pgTime(now.Add(r.store.phase3.FreeTextTTL))
+	params.EraseAfter = pgTime(now.Add(r.store.questionnaire.FreeTextTTL))
 	return nil
 }
 
 // Free text is refused unless the cipher and the erase pipeline are both
 // configured, so plaintext can never be stored without a deletion path.
 func (r *QuestionnaireRepository) freeTextKeyVersion() (string, error) {
-	if r.store.textCipher == nil || !r.store.phase3.FreeTextCleanupEnabled {
+	if r.store.textCipher == nil || !r.store.questionnaire.FreeTextCleanupEnabled {
 		return "", questionnaire.ErrInvalidInput
 	}
 	keyVersion := r.store.textCipher.CurrentVersion()
@@ -376,25 +376,25 @@ func (r *QuestionnaireRepository) applySurveyRateLimit(
 	subject string,
 	now time.Time,
 ) error {
-	key, ok := r.store.phase2.RateLimitKeys.Key(r.store.phase2.RateLimitKeys.CurrentVersion)
+	key, ok := r.store.core.RateLimitKeys.Key(r.store.core.RateLimitKeys.CurrentVersion)
 	if !ok {
 		return questionnaire.ErrUnavailable
 	}
 	const scope = "survey_submit"
-	window := now.Truncate(r.store.phase2.RateLimitWindow)
+	window := now.Truncate(r.store.core.RateLimitWindow)
 	rateCtx, cancel := context.WithTimeout(ctx, r.store.timeout)
 	defer cancel()
 	row, err := queries.IncrementRateLimit(rateCtx, generated.IncrementRateLimitParams{
 		Scope:             scope,
 		SubjectHmac:       keyedDigest(key, "rate-limit:"+scope, capabilityID.String()+"\x00"+subject),
-		SubjectKeyVersion: r.store.phase2.RateLimitKeys.CurrentVersion,
+		SubjectKeyVersion: r.store.core.RateLimitKeys.CurrentVersion,
 		WindowStartedAt:   timeToPG(window),
-		ExpiresAt:         timeToPG(window.Add(2 * r.store.phase2.RateLimitWindow)),
+		ExpiresAt:         timeToPG(window.Add(2 * r.store.core.RateLimitWindow)),
 	})
 	if err != nil {
 		return questionnaire.ErrUnavailable
 	}
-	if row.RequestCount > int32(r.store.phase3.SurveySubmitRateLimit) {
+	if row.RequestCount > int32(r.store.questionnaire.SurveySubmitRateLimit) {
 		return questionnaire.ErrRateLimited
 	}
 	return nil

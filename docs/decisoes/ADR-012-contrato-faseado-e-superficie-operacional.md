@@ -16,7 +16,7 @@ de referência do blueprint.
 ## Decisão
 
 `contracts/openapi.yaml` permanece o **contrato-alvo faseado** da API. Cada
-operação recebe `x-cumuru-implementation-phase`, e a documentação de entrega
+operação recebe `x-cumuru-feature`, e a documentação de entrega
 deixa explícito quais fases estão implementadas.
 
 A Fase 1 adiciona, sob o servidor `/api/v1`:

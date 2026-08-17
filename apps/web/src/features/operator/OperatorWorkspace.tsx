@@ -25,7 +25,7 @@ function LoadFailure({ operation }: { operation: { message: string; tone: string
 }
 
 /**
- * O servidor não registra rota alguma da Fase 7 quando `PHASE7_ENABLED` é falso
+ * O servidor não registra rota alguma do autoatendimento quando `SELF_SERVICE_ENABLED` é falso
  * — e o default é falso —, mas o contrato não expõe nenhum campo de capacidade:
  * `HealthStatus` e `ReadinessStatus` são `additionalProperties: false` com valor
  * `const`, logo não há onde ler a flag sem mudar o contrato, que é lane do
@@ -33,7 +33,7 @@ function LoadFailure({ operation }: { operation: { message: string; tone: string
  *
  * O canal que já existe é o escopo da sessão, o mesmo que `App.tsx` usa para as
  * Fases 3 e 4. `stays:approve` serve porque é concedido **exclusivamente** pelo
- * caminho de ativação da Fase 7, e nenhuma conta semeada o carrega; ele vem do
+ * caminho de ativação do autoatendimento, e nenhuma conta semeada o carrega; ele vem do
  * servidor a cada login, então a mesma imagem atende runtime com a fase ligada
  * e desligada. Devolver `null` antes de montar é o que importa: painel não
  * montado não dispara efeito, e efeito não disparado não gera `404`.
@@ -54,7 +54,7 @@ function SelfServicePanels({ accommodation }: { accommodation: Accommodation }) 
 }
 
 function useAccommodations() {
-  const { client } = useAuthSession();
+  const { coreClient: client } = useAuthSession();
   const operation = useOperation();
   const { run } = operation;
   const [accommodations, setAccommodations] = useState<readonly Accommodation[]>(

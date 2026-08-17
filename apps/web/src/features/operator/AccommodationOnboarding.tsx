@@ -4,7 +4,7 @@ import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import {
   validateCreateAccommodation,
   type ValidationIssue,
-} from "../../shared/validation/phase2-validation";
+} from "../../shared/validation/core-validation";
 import {
   FieldError,
   invalidFlag,
@@ -41,7 +41,7 @@ export function AccommodationOnboarding({
   onCancel,
   onCreated,
 }: AccommodationOnboardingProps) {
-  const { client } = useAuthSession();
+  const { coreClient: client } = useAuthSession();
   const operation = useOperation();
   const formId = useId();
   const [draft, setDraft] = useState(emptyDraft);
