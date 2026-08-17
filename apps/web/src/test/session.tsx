@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 import type { AuthClient, Session } from "../shared/api/auth-client";
 import { AuthSessionProvider, useAuthSession } from "../shared/auth/AuthSession";
+import { LocaleProvider } from "../shared/i18n/LocaleProvider";
 
 export const testAccountScopes = [
   "platform:read",
@@ -76,9 +77,11 @@ export function renderWithSession(
 ): RenderResult {
   return render(
     <QueryClientProvider client={newQueryClient()}>
-      <AuthSessionProvider authClient={authClient}>
-        {signedIn ? <SignInOnMount>{ui}</SignInOnMount> : ui}
-      </AuthSessionProvider>
+      <LocaleProvider initial="pt">
+        <AuthSessionProvider authClient={authClient}>
+          {signedIn ? <SignInOnMount>{ui}</SignInOnMount> : ui}
+        </AuthSessionProvider>
+      </LocaleProvider>
     </QueryClientProvider>,
   );
 }

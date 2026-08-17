@@ -5,6 +5,7 @@ import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../generated/schema";
+import { LocaleProvider } from "../../shared/i18n/LocaleProvider";
 import type {
   Phase4Client,
   Phase4Result,
@@ -159,7 +160,9 @@ function renderDashboard(phase4Client = client()) {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AnalyticsDashboard client={phase4Client} />
+      <LocaleProvider initial="pt">
+        <AnalyticsDashboard client={phase4Client} />
+      </LocaleProvider>
     </QueryClientProvider>,
   );
 }

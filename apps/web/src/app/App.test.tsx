@@ -18,6 +18,7 @@ import {
   clearSurveyCapability,
   setSurveyCapability,
 } from "../shared/security/survey-capability";
+import { LocaleProvider } from "../shared/i18n/LocaleProvider";
 import { App } from "./App";
 
 function renderApp(app: ReactElement = <App />) {
@@ -31,7 +32,7 @@ function renderApp(app: ReactElement = <App />) {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      {app}
+      <LocaleProvider initial="pt">{app}</LocaleProvider>
     </QueryClientProvider>,
   );
 }
@@ -53,7 +54,7 @@ describe("App", () => {
   });
 
   it.each([
-    ["/", "Observatório Turístico de Cumuruxatiba"],
+    ["/", "O turismo da nossa praia, finalmente em números."],
     ["/registro", "Registro de estadias"],
     ["/pesquisa", "Pesquisa turística"],
     ["/acesso", "Área da hospedagem"],
@@ -154,7 +155,7 @@ describe("App", () => {
     const { container } = renderApp();
     await screen.findByRole("heading", {
       level: 1,
-      name: "Observatório Turístico de Cumuruxatiba",
+      name: "O turismo da nossa praia, finalmente em números.",
     });
 
     const report = await axe.run(container, {

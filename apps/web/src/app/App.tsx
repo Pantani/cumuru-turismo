@@ -13,6 +13,9 @@ import {
 import { AppLink } from "./AppLink";
 import { normalizePathname, type AppPath } from "./routes";
 import { useAuthSession } from "../shared/auth/AuthSession";
+import { useLocale } from "../shared/i18n/LocaleProvider";
+import { LocaleSwitcher } from "../shared/i18n/LocaleSwitcher";
+import type { MessageKey, Translate } from "../shared/i18n/translate";
 import { CAPABILITY_CHANGE_EVENT } from "../shared/security/capability-events";
 import { peekInviteCapability } from "../shared/security/invite-capability";
 import { peekSurveyCapability } from "../shared/security/survey-capability";
@@ -36,13 +39,13 @@ const routePages: Record<AppPath, ComponentType> = {
   "/qualidade": AnalyticsQualityPage,
 };
 
-const routeTitles: Record<AppPath, string> = {
-  "/": "Painel público do turismo",
-  "/registro": "Registro de visitantes",
-  "/pesquisa": "Pesquisa com o visitante",
-  "/acesso": "Área da hospedagem",
-  "/questionarios": "Questionários",
-  "/qualidade": "Qualidade dos dados",
+const routeTitles: Record<AppPath, MessageKey> = {
+  "/": "app.title.public",
+  "/registro": "app.title.registration",
+  "/pesquisa": "app.title.survey",
+  "/acesso": "app.title.workspace",
+  "/questionarios": "app.title.questionnaires",
+  "/qualidade": "app.title.quality",
 };
 
 function renderRoute(pathname: string) {
@@ -52,7 +55,7 @@ function renderRoute(pathname: string) {
 
 interface NavigationEntry {
   href: AppPath;
-  label: string;
+  label: MessageKey;
   visible: boolean;
 }
 
@@ -77,8 +80,9 @@ function PrimaryNavigation({
   navigate,
   pathname,
 }: PrimaryNavigationProps) {
+  const { t } = useLocale();
   return (
-    <nav aria-label="Navegação principal">
+    <nav aria-label={t("app.nav.aria")}>
       <ul className="navigation">
         {entries
           .filter((entry) => entry.visible)
@@ -89,7 +93,7 @@ function PrimaryNavigation({
                 navigate={navigate}
                 aria-current={pathname === entry.href ? "page" : undefined}
               >
-                {entry.label}
+                {t(entry.label)}
               </AppLink>
             </li>
           ))}
@@ -124,6 +128,20 @@ function RouteContent({ children, focusOnMount, onFocused }: RouteContentProps) 
   }, [focusOnMount, onFocused]);
 
   return <div ref={contentRef}>{children}</div>;
+}
+
+/**
+ * A capa pública é escura por desenho, e o cabeçalho, o rodapé e o fundo de
+ * overscroll ficam fora de `main`. A classe vai na raiz enquanto a rota da capa
+ * está montada e sai ao trocar de rota, para que as telas autenticadas
+ * continuem seguindo o tema do sistema.
+ */
+function useObservatoryTheme(pathname: string) {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("theme-observatory", pathname === "/");
+    return () => root.classList.remove("theme-observatory");
+  }, [pathname]);
 }
 
 function useCapabilityRevision() {
@@ -184,26 +202,26 @@ function navigationEntries(
   hasScope: (scope: string) => boolean,
 ): NavigationEntry[] {
   return [
-    { href: "/", label: "Painel público", visible: true },
+    { href: "/", label: "app.nav.public", visible: true },
     {
       href: "/registro",
-      label: "Registro",
+      label: "app.nav.registration",
       visible: peekInviteCapability() !== null,
     },
     {
       href: "/pesquisa",
-      label: "Pesquisa",
+      label: "app.nav.survey",
       visible: peekSurveyCapability() !== null,
     },
-    { href: "/acesso", label: "Área da hospedagem", visible: true },
+    { href: "/acesso", label: "app.nav.workspace", visible: true },
     {
       href: "/questionarios",
-      label: "Questionários",
+      label: "app.nav.questionnaires",
       visible: authenticated && hasScope("questionnaires:manage"),
     },
     {
       href: "/qualidade",
-      label: "Qualidade",
+      label: "app.nav.quality",
       visible: authenticated && hasScope("analytics:read:internal"),
     },
   ];
@@ -211,6 +229,7 @@ function navigationEntries(
 
 function SessionBadge() {
   const { account, authenticated, endSession } = useAuthSession();
+  const { t } = useLocale();
   if (!authenticated || account === null) {
     return null;
   }
@@ -218,21 +237,27 @@ function SessionBadge() {
     <div className="session-badge">
       <span className="session-name">{account.display_name}</span>
       <button type="button" className="quiet-action" onClick={() => void endSession()}>
-        Sair
+        {t("app.signOut")}
       </button>
     </div>
   );
 }
 
+function routeTitle(t: Translate, pathname: string): string {
+  const key = routeTitles[pathname as AppPath];
+  return key === undefined ? t("app.title.notFound") : t(key);
+}
+
 export function App({ routeRenderer = renderRoute }: AppProps) {
   const { authenticated, hasScope } = useAuthSession();
+  const { t } = useLocale();
   const { completeRouteFocus, navigate, pathname, pendingRouteFocus } =
     useRouting();
   const mainRef = useRef<HTMLElement>(null);
   useCapabilityRevision();
+  useObservatoryTheme(pathname);
 
-  const currentTitle =
-    routeTitles[pathname as AppPath] ?? "Página não encontrada";
+  const currentTitle = routeTitle(t, pathname);
 
   return (
     <div className="site-shell">
@@ -241,7 +266,7 @@ export function App({ routeRenderer = renderRoute }: AppProps) {
         href="#conteudo"
         onClick={() => mainRef.current?.focus()}
       >
-        Ir para o conteúdo
+        {t("app.skipLink")}
       </a>
 
       <header className="site-header">
@@ -251,8 +276,8 @@ export function App({ routeRenderer = renderRoute }: AppProps) {
               C
             </span>
             <span>
-              <strong>Observatório Turístico</strong>
-              <small>Cumuruxatiba · Prado, Bahia</small>
+              <strong>{t("app.brand.name")}</strong>
+              <small>{t("app.brand.place")}</small>
             </span>
           </AppLink>
 
@@ -262,20 +287,21 @@ export function App({ routeRenderer = renderRoute }: AppProps) {
               navigate={navigate}
               pathname={pathname}
             />
+            <LocaleSwitcher />
             <SessionBadge />
           </div>
         </div>
       </header>
 
       <p className="route-announcer" aria-live="polite" aria-atomic="true">
-        Página atual: {currentTitle}
+        {t("app.routeAnnounce", { title: currentTitle })}
       </p>
 
       <main id="conteudo" ref={mainRef} tabIndex={-1}>
         <Suspense
           fallback={
             <div className="route-status" role="status" aria-live="polite">
-              Carregando página…
+              {t("app.routeLoading")}
             </div>
           }
         >
@@ -290,10 +316,8 @@ export function App({ routeRenderer = renderRoute }: AppProps) {
       </main>
 
       <footer className="site-footer">
-        <p>
-          Protótipo técnico com dados fictícios. Uso real depende dos gates de
-          governança do Município de Prado.
-        </p>
+        <p>{t("app.footer.note")}</p>
+        <p className="site-footer-mark">{t("landing.contact.mark")}</p>
       </footer>
     </div>
   );

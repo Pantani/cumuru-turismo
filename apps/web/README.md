@@ -52,6 +52,27 @@ sessão por construção.
 O arquivo `src/generated/schema.ts` é produzido a partir do OpenAPI pelo owner
 de plataforma e nunca deve ser editado manualmente.
 
+## Idiomas
+
+A capa pública e o painel de indicadores são publicados em português, inglês e
+espanhol. `src/shared/i18n/messages-pt.ts` é a fonte da verdade: o tipo
+`Messages` deriva dele, então uma chave ausente em `messages-en.ts` ou
+`messages-es.ts` quebra a compilação em vez de virar texto faltando em
+produção. `src/shared/i18n/translate.test.ts` também compara os parâmetros
+`{nome}` de cada mensagem entre os três idiomas.
+
+O idioma inicial vem do `Accept-Language` do navegador e a troca manual vale
+enquanto a aba estiver aberta: nada é persistido em `localStorage` ou
+`sessionStorage`.
+
+## Guias em PDF
+
+`public/guias/` serve as duas cartilhas que a capa oferece para download. Os
+originais versionados ficam na raiz do repositório
+(`guia-simples-observatorio-fnrh-prefeitura.pdf` e
+`guia-gerar-chave-fnrh-hospedagens.pdf`); ao atualizar um deles, copie a nova
+versão para `public/guias/` na mesma mudança.
+
 O lint usa `apps/web/.oxlintrc.json` e cobre todo arquivo TypeScript, TSX e
 JavaScript próprio dentro de `apps/web`, incluindo `vite.config.ts`, testes e o
 cliente gerado. `node_modules` e `dist` são os únicos artefatos fora dessa

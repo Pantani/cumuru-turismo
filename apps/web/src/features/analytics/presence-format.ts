@@ -1,3 +1,7 @@
+import { useMemo } from "react";
+
+import { useLocale } from "../../shared/i18n/LocaleProvider";
+import type { Translate } from "../../shared/i18n/translate";
 import {
   centralValue,
   percentFromAverage,
@@ -6,102 +10,164 @@ import {
 
 const TIME_ZONE = "America/Bahia";
 
-const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
-  dateStyle: "medium",
-  timeZone: TIME_ZONE,
-});
-const dayFormatter = new Intl.DateTimeFormat("pt-BR", {
-  weekday: "short",
-  day: "2-digit",
-  month: "2-digit",
-  timeZone: TIME_ZONE,
-});
-const dateTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
-  dateStyle: "long",
-  timeStyle: "short",
-  timeZone: TIME_ZONE,
-});
-const countFormatter = new Intl.NumberFormat("pt-BR");
+interface Formatters {
+  count: Intl.NumberFormat;
+  date: Intl.DateTimeFormat;
+  dateTime: Intl.DateTimeFormat;
+  day: Intl.DateTimeFormat;
+  weekday: Intl.DateTimeFormat;
+}
 
-/** Noon anchors the civil date away from the day boundary in America/Bahia. */
+/**
+ * Domingo, 7 de janeiro de 2024, em UTC: âncora para nomear o dia da semana
+ * pelo `Intl` do idioma ativo em vez de manter sete traduções por idioma.
+ */
+const WEEKDAY_ANCHOR_DAY = 7;
+
+function weekdayDate(weekday: number): Date {
+  return new Date(Date.UTC(2024, 0, WEEKDAY_ANCHOR_DAY + weekday));
+}
+
+/**
+ * `Intl` é caro para instanciar e o painel formata centenas de células por
+ * render. O cache é por tag e não por render: são três tags no total.
+ */
+const FORMATTERS = new Map<string, Formatters>();
+
+function buildFormatters(tag: string): Formatters {
+  return {
+    count: new Intl.NumberFormat(tag),
+    date: new Intl.DateTimeFormat(tag, {
+      dateStyle: "medium",
+      timeZone: TIME_ZONE,
+    }),
+    dateTime: new Intl.DateTimeFormat(tag, {
+      dateStyle: "long",
+      timeStyle: "short",
+      timeZone: TIME_ZONE,
+    }),
+    day: new Intl.DateTimeFormat(tag, {
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: TIME_ZONE,
+    }),
+    weekday: new Intl.DateTimeFormat(tag, {
+      weekday: "long",
+      timeZone: "UTC",
+    }),
+  };
+}
+
+function formattersFor(tag: string): Formatters {
+  const cached = FORMATTERS.get(tag);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const created = buildFormatters(tag);
+  FORMATTERS.set(tag, created);
+  return created;
+}
+
+/** Meio-dia ancora a data civil longe da virada do dia em America/Bahia. */
 function civilDate(value: string) {
   return new Date(`${value}T12:00:00-03:00`);
 }
 
-export function formatDate(value: string) {
-  return dateFormatter.format(civilDate(value));
-}
-
-export function formatDay(value: string) {
-  return dayFormatter.format(civilDate(value));
-}
-
-export function formatDateTime(value: string) {
-  return dateTimeFormatter.format(new Date(value));
-}
-
-export function formatCount(value: number) {
-  return countFormatter.format(value);
-}
-
 /**
- * "Referência" and not "janela": a joined view measures the forecast against
- * the observed level, so naming the window here would state the wrong scope.
+ * "Referência" e não "janela": uma visão combinada mede a previsão contra o
+ * nível observado, então nomear a janela aqui declararia o escopo errado.
  */
-export function formatDelta(percent: number) {
+function deltaText(t: Translate, percent: number): string {
   const rounded = Math.round(percent);
   if (rounded === 0) {
-    return "no mesmo nível da média de referência";
+    return t("analytics.delta.same");
   }
-  const direction = rounded > 0 ? "acima" : "abaixo";
-  return `${Math.abs(rounded)}% ${direction} da média de referência`;
+  const key = rounded > 0 ? "analytics.delta.above" : "analytics.delta.below";
+  return t(key, { percent: Math.abs(rounded) });
 }
 
-export function formatTrend(percent: number, size: number) {
+function trendText(t: Translate, percent: number, size: number): string {
   const rounded = Math.round(percent);
-  const sign = rounded > 0 ? "+" : "";
-  return `${sign}${rounded}% ante os ${size} dias anteriores`;
+  return t("analytics.trend.value", {
+    percent: rounded,
+    sign: rounded > 0 ? "+" : "",
+    size,
+  });
 }
 
-function kindText(kind: PresencePoint["kind"]) {
-  return kind === "observed" ? "Observado" : "Previsto";
-}
-
-function bandLine(point: PresencePoint): string[] {
+function bandLine(t: Translate, point: PresencePoint): string[] {
   if (point.status !== "published" || point.kind !== "forecast") {
     return [];
   }
-  return [`Faixa provável: ${point.lower} a ${point.upper} pessoas-dia`];
+  return [t("analytics.slot.band", { lower: point.lower, upper: point.upper })];
 }
 
-function deltaLine(value: number, average: number | null): string[] {
+function deltaLine(
+  t: Translate,
+  value: number,
+  average: number | null,
+): string[] {
   const percent = percentFromAverage(value, average);
-  return percent === null ? [] : [formatDelta(percent)];
+  return percent === null ? [] : [deltaText(t, percent)];
 }
 
-function withheldLine(point: PresencePoint): string[] {
+function withheldLine(t: Translate, point: PresencePoint): string[] {
   return [
     point.status === "protected"
-      ? "Protegido pela política de publicação, sem valor substituto"
-      : "Sem dado disponível para este dia",
+      ? t("analytics.slot.protected")
+      : t("analytics.slot.unavailable"),
   ];
 }
 
 /**
- * One description of a day, reused by the tooltip and by the live readout, so
- * pointer and keyboard readers never receive different facts.
+ * Uma descrição do dia, reaproveitada pelo tooltip e pela leitura viva, para
+ * que ponteiro e leitor de tela nunca recebam fatos diferentes.
  */
-export function slotLines(
+function slotLinesOf(
+  t: Translate,
   point: PresencePoint,
   average: number | null,
 ): string[] {
   const value = centralValue(point);
   if (value === null) {
-    return withheldLine(point);
+    return withheldLine(t, point);
   }
+  const kindKey =
+    point.kind === "observed" ? "analytics.slot.observed" : "analytics.slot.forecast";
   return [
-    `${kindText(point.kind)}: ${value} pessoas-dia`,
-    ...bandLine(point),
-    ...deltaLine(value, average),
+    t(kindKey, { value }),
+    ...bandLine(t, point),
+    ...deltaLine(t, value, average),
   ];
+}
+
+export interface PresenceFormat {
+  count(value: number): string;
+  date(value: string): string;
+  dateTime(value: string): string;
+  day(value: string): string;
+  delta(percent: number): string;
+  slotLines(point: PresencePoint, average: number | null): string[];
+  trend(percent: number, size: number): string;
+  weekdayName(weekday: number): string;
+}
+
+export function presenceFormat(tag: string, t: Translate): PresenceFormat {
+  const formatters = formattersFor(tag);
+  return {
+    count: (value) => formatters.count.format(value),
+    date: (value) => formatters.date.format(civilDate(value)),
+    dateTime: (value) => formatters.dateTime.format(new Date(value)),
+    day: (value) => formatters.day.format(civilDate(value)),
+    delta: (percent) => deltaText(t, percent),
+    slotLines: (point, average) => slotLinesOf(t, point, average),
+    trend: (percent, size) => trendText(t, percent, size),
+    weekdayName: (weekday) => formatters.weekday.format(weekdayDate(weekday)),
+  };
+}
+
+export function usePresenceFormat(): PresenceFormat {
+  const { t, tag } = useLocale();
+  return useMemo(() => presenceFormat(tag, t), [t, tag]);
 }

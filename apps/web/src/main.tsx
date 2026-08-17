@@ -12,7 +12,10 @@ import { purgeExpiredDrafts } from "./shared/offline/encrypted-drafts";
 // latino.
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
+// Display editorial da capa pública: um eixo de peso só, mesmo empacotamento.
+import "@fontsource-variable/bricolage-grotesque";
 import "./styles.css";
+import "./landing.css";
 
 captureInviteCapability(
   new URL(window.location.href),
