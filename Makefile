@@ -235,6 +235,7 @@ post-task-quality: ## Gate obrigatório pós-tarefa: complexity, lint e marcador
 # pertence a outra sessão ou a uma dependência, e varrê-lo transformava lixo
 # alheio em falha do gate. `--others --exclude-standard` mantém no escopo o
 # script novo que ainda não foi adicionado ao índice.
+lint-shell: SHELL := /usr/bin/env bash
 lint-shell: ## Valida a sintaxe dos scripts shell versionados; ignora caminhos gitignored
 	@set -eu; \
 	files="$$(mktemp "$${TMPDIR:-/tmp}/cumuru-shell-lint.XXXXXX")"; \
