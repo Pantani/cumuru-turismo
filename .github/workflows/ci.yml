@@ -345,16 +345,13 @@ jobs:
       - scan
       - supply-chain
     steps:
+      # O checkout existe para a porta poder derivar a expectativa do próprio
+      # workflow, em vez de carregar uma constante que envelhece.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Require every gate to succeed
         env:
-          GATE_RESULTS: ${{ join(needs.*.result, ' ') }}
-        run: |
-          set -eu
-          echo "gate results: ${GATE_RESULTS}"
-          for result in ${GATE_RESULTS}; do
-            if test "${result}" != "success"; then
-              echo "CI_GATE=FAIL" >&2
-              exit 1
-            fi
-          done
-          echo "CI_GATE=PASS"
+          # O objeto inteiro, e não `join(needs.*.result)`: a projeção descarta
+          # o nome do job e transforma resultado vazio em nada, que era por onde
+          # a porta antiga passava batido.
+          GATE_NEEDS_JSON: ${{ toJSON(needs) }}
+        run: bash deploy/scripts/ci-gate.sh

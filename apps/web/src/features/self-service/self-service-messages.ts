@@ -1,4 +1,5 @@
 import { Phase7ApiError } from "../../shared/api/phase7-client";
+import { guestCopyFor } from "../../shared/forms/guest-copy";
 import {
   ProofOfWorkAbortedError,
   ProofOfWorkExhaustedError,
@@ -9,22 +10,12 @@ import {
  * one are indistinguishable by design, so the message must not speculate about
  * which one happened.
  */
-/**
- * O canal aberto não repassa `problem.title` para status que não sabe explicar.
- * A voz do brandkit pede frase curta e concreta, e o título do problema é
- * escrito para quem opera o serviço: um hóspede que via "O serviço respondeu
- * fora do contrato." recebia jargão de engenharia na superfície mais pública do
- * produto, e nada acionável. Os status que a pessoa pode resolver continuam com
- * mensagem própria na tabela abaixo.
- */
-const UNEXPECTED_FAILURE =
-  "Não conseguimos falar com o serviço agora. Tente de novo em alguns instantes.";
-
 const statusMessages: Readonly<Record<number, string>> = {
   403: "Este cartaz não está aceitando cadastros agora.",
   404: "Este cartaz não é mais válido. Peça um novo à hospedagem.",
   409: "O aviso de privacidade mudou desde que o cartaz foi impresso. Peça um cartaz atualizado à hospedagem.",
   422: "Alguns dados não são aceitos neste formulário aberto. Revise e tente de novo.",
+  429: "Já houve envios demais desta rede agora há pouco.",
 };
 
 function localFailureMessage(error: unknown) {
@@ -41,10 +32,7 @@ export function describeSelfServiceFailure(error: unknown) {
   if (!(error instanceof Phase7ApiError)) {
     return localFailureMessage(error);
   }
-  if (error.retryAfterSeconds !== null) {
-    return `${error.problem.title} Tente novamente em ${error.retryAfterSeconds} segundos.`;
-  }
-  return statusMessages[error.status] ?? UNEXPECTED_FAILURE;
+  return guestCopyFor(error, statusMessages);
 }
 
 /** A refusal that will never succeed on retry must not keep a local copy. */

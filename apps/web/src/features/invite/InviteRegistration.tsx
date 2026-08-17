@@ -18,6 +18,7 @@ import {
   createPhase2Client,
   Phase2ApiError,
 } from "../../shared/api/phase2-client";
+import { guestCopyFor } from "../../shared/forms/guest-copy";
 import {
   deleteDraft,
   loadDraft,
@@ -80,19 +81,14 @@ const guestMessages: Readonly<Record<number, string>> = {
   404: "Convite expirado.",
   409: "O aviso de privacidade mudou desde que este convite foi criado. Peça outro à hospedagem.",
   422: "Alguns dados não foram aceitos. Revise e tente de novo.",
+  429: "Já houve envios demais desta rede agora há pouco.",
 };
 
 function errorMessage(error: unknown) {
   if (!(error instanceof Phase2ApiError)) {
     return "Sem conexão. O rascunho foi preservado neste dispositivo.";
   }
-  if (error.status === 429 && error.retryAfterSeconds !== null) {
-    return `Muitas tentativas. Aguarde ${error.retryAfterSeconds} segundos.`;
-  }
-  return (
-    guestMessages[error.status] ??
-    "Não conseguimos falar com o serviço agora. Tente de novo em alguns instantes."
-  );
+  return guestCopyFor(error, guestMessages);
 }
 
 async function removeDraft(id: string | null) {

@@ -97,6 +97,39 @@ describe("pesquisa pública", () => {
     expect(document.documentElement.innerHTML).not.toContain(engineeringTitle);
   });
 
+  it.each([
+    [429, "Muitas tentativas", 60],
+    [409, "Requisição em processamento", 3],
+  ])(
+    "status %s com Retry-After não vaza o título do servidor e mantém o prazo",
+    async (status, serverTitle, seconds) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>().mockResolvedValue(
+          Response.json(
+            { type: "about:blank", title: serverTitle, status },
+            {
+              status,
+              headers: {
+                ...headers,
+                "Content-Type": "application/problem+json",
+                "Retry-After": String(seconds),
+              },
+            },
+          ),
+        ),
+      );
+      setSurveyCapability("payload.signature");
+
+      renderSurvey();
+
+      expect(
+        await screen.findByText(new RegExp(`${seconds} segundos`, "u")),
+      ).toBeInTheDocument();
+      expect(document.documentElement.innerHTML).not.toContain(serverTitle);
+    },
+  );
+
   it("falha fechada sem capability e não consulta a API", () => {
     const fetcher = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", fetcher);

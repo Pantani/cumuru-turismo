@@ -366,6 +366,37 @@ describe("registro por convite", () => {
     expect(document.documentElement.innerHTML).not.toContain(engineeringTitle);
   });
 
+  // D-08 nesta tela: `409` e `429` chegam do servidor **com** `Retry-After`, e
+  // o ramo do prazo não pode virar atalho para o título de engenharia.
+  it.each([
+    [429, "Muitas tentativas", 60],
+    [409, "Requisição em processamento", 3],
+  ])(
+    "status %s com Retry-After não vaza o título do servidor e mantém o prazo",
+    async (status, serverTitle, seconds) => {
+      captureCapability();
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        phase2Response(
+          { type: "about:blank", title: serverTitle, status },
+          {
+            status,
+            headers: {
+              "Content-Type": "application/problem+json",
+              "Retry-After": String(seconds),
+            },
+          },
+        ),
+      );
+
+      render(<RegistrationPage />);
+
+      expect(
+        await screen.findByText(new RegExp(`${seconds} segundos`, "u")),
+      ).toBeInTheDocument();
+      expect(document.documentElement.innerHTML).not.toContain(serverTitle);
+    },
+  );
+
   it("não apresenta violações axe no formulário carregado", async () => {
     captureCapability();
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(

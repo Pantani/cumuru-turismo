@@ -547,4 +547,209 @@ CUMURU_TEST_ADMIN_DATABASE_URL="${admin_dsn}" \
   go -C "${ROOT_DIR}/apps/api" test \
   -tags=integration -race -count=1 ./internal/platform/store
 
-echo "phase 7 PostgreSQL integration passed: unlimited-invite silent failure reproduced and fixed, invite targeting, stay provenance and approval invariants, pending account credential state, proof-of-work nonce ledger and the approval filter in the SECURITY DEFINER aggregate"
+# --- N-38: o ponto 3 do filtro, provado por EXECUÇÃO ---------------------------
+#
+# A asserção posicional acima inspeciona o texto da função e nunca a chama. Ela
+# detecta o predicado no lugar errado, mas não prova comportamento: se a cadeia
+# metric_mappings → questions → answers → responses → consent_decisions → stays
+# nunca alcançasse a função, o texto continuaria correto e o filtro continuaria
+# valendo nada. Aqui a função é chamada de verdade, duas vezes.
+#
+# A chamada é feita como cumuru_worker porque EXECUTE é concedido somente a
+# worker_runtime; a função é SECURITY DEFINER e lê as tabelas como migration_admin.
+psql_as cumuru_migration cumuru-local-migration-only <<'SQL'
+-- Transação única: survey.responses tem trigger de constraint diferida que
+-- compara decisões com requisitos de consentimento. Em autocommit a resposta
+-- seria validada antes de as decisões existirem e o INSERT falharia com
+-- "survey decisions do not match the version snapshot".
+BEGIN;
+
+INSERT INTO core.accommodations (id, organization_id, name, status, category, capacity)
+VALUES (
+  '00000000-0000-7000-8000-000000000b02',
+  '00000000-0000-7000-8000-0000000007a1',
+  'Pousada Fictícia N38',
+  'active', 'formal_lodging', 8
+);
+
+-- Estadia assistida: approval_state nulo, portanto sempre elegível.
+INSERT INTO core.stays (
+  id, accommodation_id, created_by_membership_id, client_submission_id,
+  planned_arrival_on, planned_departure_on, expected_guest_count
+) VALUES (
+  '00000000-0000-7000-8000-000000000c01',
+  '00000000-0000-7000-8000-0000000007b1',
+  '00000000-0000-7000-8000-0000000007c1',
+  '00000000-0000-7000-8000-000000000c02',
+  '2026-05-02', '2026-05-06', 2
+);
+
+-- Estadia autocadastrada pendente: é ela que o predicado tem de excluir.
+INSERT INTO core.stays (
+  id, accommodation_id, status, client_submission_id,
+  planned_arrival_on, planned_departure_on, expected_guest_count,
+  provenance, approval_state, approval_expires_at
+) VALUES (
+  '00000000-0000-7000-8000-000000000c03',
+  '00000000-0000-7000-8000-000000000b02',
+  'pre_registered',
+  '00000000-0000-7000-8000-000000000c04',
+  '2026-05-03', '2026-05-07', 2,
+  'self_service', 'pending', now() + interval '72 hours'
+);
+
+INSERT INTO survey.questionnaires (id, stable_key, name)
+VALUES ('00000000-0000-7000-8000-000000000d01', 'perfil_n38', 'Perfil Fictício N38');
+
+INSERT INTO survey.questionnaire_versions (
+  id, questionnaire_id, version_number, status, title,
+  privacy_notice_version, last_editor_hmac, last_editor_key_version, published_at
+) VALUES (
+  '00000000-0000-7000-8000-000000000d02',
+  '00000000-0000-7000-8000-000000000d01',
+  1, 'draft', 'Perfil Fictício N38', '2026-01-01',
+  decode(repeat('e1', 32), 'hex'), 'v1', NULL
+);
+
+-- public_aggregation_allowed, analytics_key e minimum_public_cell são exigidos
+-- pelo WHERE da função; answer_type e data_classification precisam ficar fora
+-- das listas que ela exclui.
+INSERT INTO survey.questions (
+  id, questionnaire_version_id, stable_key, prompt, answer_type, required,
+  data_classification, purpose_code, retention_policy_code, analytics_key,
+  public_aggregation_allowed, minimum_public_cell, display_order
+) VALUES (
+  '00000000-0000-7000-8000-000000000d03',
+  '00000000-0000-7000-8000-000000000d02',
+  'primeira_visita', 'Primeira visita?', 'single_choice', true,
+  'operational', 'estatistica_publica', 'padrao', 'visit_profile',
+  true, 10, 1
+);
+
+INSERT INTO survey.consent_requirements (
+  questionnaire_version_id, purpose_code, notice_version, prompt,
+  required_for_answers, display_order
+) VALUES (
+  '00000000-0000-7000-8000-000000000d02',
+  'estatistica_publica', '2026-01-01', 'Aceita uso agregado?', false, 1
+);
+
+-- A publicação respeita a máquina de estados da Fase 3:
+-- draft -> privacy_review -> approved -> published. Pular etapa dispara
+-- "invalid questionnaire version transition".
+UPDATE survey.questionnaire_versions SET status = 'privacy_review'
+ WHERE id = '00000000-0000-7000-8000-000000000d02';
+UPDATE survey.questionnaire_versions SET status = 'approved'
+ WHERE id = '00000000-0000-7000-8000-000000000d02';
+UPDATE survey.questionnaire_versions
+   SET status = 'published', published_at = '2026-04-01'
+ WHERE id = '00000000-0000-7000-8000-000000000d02';
+
+INSERT INTO analytics.metric_mappings (
+  privacy_policy_version, metric_code, questionnaire_version_id, question_id,
+  source_value, category_code
+) VALUES (
+  'prototype-v1', 'first_visit_share',
+  '00000000-0000-7000-8000-000000000d02',
+  '00000000-0000-7000-8000-000000000d03',
+  'first_visit', 'first_visit'
+);
+
+-- Uma resposta por estadia, ambas dentro do mês civil de maio/2026, ambas com
+-- consentimento concedido. A única diferença entre as duas é a aprovação.
+INSERT INTO survey.capabilities (
+  id, token_hmac, token_key_version, purpose, stay_id,
+  questionnaire_version_id, expires_at
+) VALUES
+  ('00000000-0000-7000-8000-000000000e01', decode(repeat('f1', 32), 'hex'), 'v1',
+   'survey_response', '00000000-0000-7000-8000-000000000c01',
+   '00000000-0000-7000-8000-000000000d02', now() + interval '30 days'),
+  ('00000000-0000-7000-8000-000000000e02', decode(repeat('f2', 32), 'hex'), 'v1',
+   'survey_response', '00000000-0000-7000-8000-000000000c03',
+   '00000000-0000-7000-8000-000000000d02', now() + interval '30 days');
+
+INSERT INTO survey.responses (
+  id, stay_id, questionnaire_version_id, capability_id, client_submission_id,
+  participation, submitted_at
+) VALUES
+  ('00000000-0000-7000-8000-000000000e03',
+   '00000000-0000-7000-8000-000000000c01',
+   '00000000-0000-7000-8000-000000000d02',
+   '00000000-0000-7000-8000-000000000e01',
+   '00000000-0000-7000-8000-000000000e05', 'submitted', '2026-05-10 12:00:00-03'),
+  ('00000000-0000-7000-8000-000000000e04',
+   '00000000-0000-7000-8000-000000000c03',
+   '00000000-0000-7000-8000-000000000d02',
+   '00000000-0000-7000-8000-000000000e02',
+   '00000000-0000-7000-8000-000000000e06', 'submitted', '2026-05-11 12:00:00-03');
+
+INSERT INTO survey.answers (
+  id, response_id, questionnaire_version_id, question_id, structured_value
+) VALUES
+  ('00000000-0000-7000-8000-000000000e07',
+   '00000000-0000-7000-8000-000000000e03',
+   '00000000-0000-7000-8000-000000000d02',
+   '00000000-0000-7000-8000-000000000d03', '"first_visit"'::jsonb),
+  ('00000000-0000-7000-8000-000000000e08',
+   '00000000-0000-7000-8000-000000000e04',
+   '00000000-0000-7000-8000-000000000d02',
+   '00000000-0000-7000-8000-000000000d03', '"first_visit"'::jsonb);
+
+INSERT INTO survey.consent_decisions (
+  id, response_id, questionnaire_version_id, purpose_code, notice_version,
+  granted, collection_channel
+) VALUES
+  ('00000000-0000-7000-8000-000000000e09',
+   '00000000-0000-7000-8000-000000000e03',
+   '00000000-0000-7000-8000-000000000d02',
+   'estatistica_publica', '2026-01-01', true, 'survey_capability'),
+  ('00000000-0000-7000-8000-000000000e0a',
+   '00000000-0000-7000-8000-000000000e04',
+   '00000000-0000-7000-8000-000000000d02',
+   'estatistica_publica', '2026-01-01', true, 'survey_capability');
+
+COMMIT;
+SQL
+
+aggregate_preferences() {
+  psql_as cumuru_worker cumuru-local-worker-only --tuples-only --no-align --command="
+    SELECT category_code || ':' || sample_size || ':' || accommodation_count
+    FROM analytics.aggregate_eligible_preferences(
+      'prototype-v1',
+      timestamptz '2026-05-01 00:00:00-03',
+      timestamptz '2026-06-01 00:00:00-03'
+    ) AS agregado(
+      privacy_policy_version text,
+      metric_code text,
+      category_code text,
+      sample_size bigint,
+      accommodation_count bigint,
+      minimum_public_cell integer
+    )
+  " | tr -d '[:space:]'
+}
+
+# Com a pendente ainda pendente: só a assistida conta.
+pending_excluded="$(aggregate_preferences)"
+assert_equals \
+  "analytics.aggregate_eligible_preferences counted a stay awaiting approval" \
+  "first_visit:1:1" "${pending_excluded}"
+
+# Aprovar é a ÚNICA mudança entre as duas chamadas. Sem esta segunda metade,
+# "não contou" passaria também se a fixture estivesse vazia ou se a cadeia nunca
+# alcançasse a função — que é o modo de falha que esta fase encontrou oito vezes.
+psql_as cumuru_migration cumuru-local-migration-only --command="
+  UPDATE core.stays
+     SET approval_state = 'approved',
+         approved_at = now(),
+         approval_decided_by_membership_id = '00000000-0000-7000-8000-0000000007c1',
+         approval_expires_at = NULL
+   WHERE id = '00000000-0000-7000-8000-000000000c03'
+" >/dev/null
+
+approved_included="$(aggregate_preferences)"
+assert_equals \
+  "analytics.aggregate_eligible_preferences ignored a stay that was just approved" \
+  "first_visit:2:2" "${approved_included}"
+
+echo "phase 7 PostgreSQL integration passed: unlimited-invite silent failure reproduced and fixed, invite targeting, stay provenance and approval invariants, pending account credential state, proof-of-work nonce ledger and the approval filter in the SECURITY DEFINER aggregate proved by calling it: pending excluded, approved counted"

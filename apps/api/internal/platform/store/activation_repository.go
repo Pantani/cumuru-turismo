@@ -165,11 +165,19 @@ func (r *ActivationRepository) resolveActivationAccount(
 //     pending_activation, so a downgrade would either violate the CHECK or
 //     destroy a live credential;
 //  2. the account must **already** be a member of the accommodation issuing the
-//     capability, and reuse never adds a membership. That makes the reachable
-//     set of an account monotonically non-increasing: provisioning creates
-//     exactly one membership and reuse creates none, so a capability can only
-//     ever grant the accommodation that provisioned the account — which
-//     accommodationGuard already proved the issuer controls.
+//     capability, and reuse never adds a membership. What that buys is bounded
+//     and worth stating exactly: **re-issuing never widens the set of
+//     accommodations an account reaches.** The issuer must already be inside
+//     that set, and leaves it the size it found it.
+//
+// It does **not** buy "a capability only ever grants the accommodation that
+// provisioned the account". That would need this to be the only source of
+// membership, and it is not: createAccommodationMembership
+// (POST /accommodations/{id}/memberships, Fase 2) attaches an existing
+// principal to another accommodation, so an account can legitimately span two
+// before any re-issue happens. A capability then hands its holder whatever the
+// account already reached — which somebody with accommodations:manage there put
+// in place, not something this path created.
 //
 // Enumerating the account's memberships would be the obvious check and is the
 // wrong one: ListActiveTenantMemberships filters a.status = 'active', so a
