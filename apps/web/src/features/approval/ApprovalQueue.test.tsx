@@ -150,7 +150,7 @@ describe("fila de aprovação da acomodação", () => {
     });
   });
 
-  it("oferece o convite nominal da Fase 2 depois de aprovar", async () => {
+  it("oferece o convite nominal do núcleo depois de aprovar", async () => {
     const user = userEvent.setup();
     const fetcher = stubFetch();
     await renderQueue(fetcher);

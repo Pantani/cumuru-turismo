@@ -5,7 +5,7 @@ import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import {
   validateSubmitGroup,
   type ValidationIssue,
-} from "../../shared/validation/phase2-validation";
+} from "../../shared/validation/core-validation";
 import { useAuthSession } from "../../shared/auth/AuthSession";
 import { createVisitor, VisitorEditor } from "../visitors/VisitorEditor";
 import { entityTagFor, formatCivilDate, type Stay } from "./stay-lifecycle";
@@ -30,7 +30,7 @@ export function VisitorGroupPanel({
   onSubmitted,
   stay,
 }: VisitorGroupPanelProps) {
-  const { client } = useAuthSession();
+  const { coreClient: client } = useAuthSession();
   const operation = useOperation();
   const [visitors, setVisitors] = useState<VisitorInput[]>(initialVisitors);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);

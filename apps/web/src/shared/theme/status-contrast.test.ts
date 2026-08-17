@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Vigia o contraste das cores de estado que a Fase 7 trocou.
+ * Vigia o contraste das cores de estado que o autoatendimento trocou.
  *
  * A regra `color-contrast` do axe **não serve aqui**, e isso foi medido, não
  * suposto: sob jsdom ela devolve `violations: 0, incomplete: 1, passes: 0` para

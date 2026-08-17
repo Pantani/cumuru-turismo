@@ -1,4 +1,4 @@
-import type { Phase2Client } from "../../shared/api/phase2-client";
+import type { CoreClient } from "../../shared/api/core-client";
 import { entityTagFor, type Stay, type StayAction } from "./stay-lifecycle";
 
 /**
@@ -11,7 +11,7 @@ export const PRIVACY_NOTICE_VERSION = "prototype-v1";
 export type DirectStayAction = Exclude<StayAction, "invite" | "submit_group">;
 
 interface CommandContext {
-  client: Phase2Client;
+  client: CoreClient;
   stay: Stay;
 }
 

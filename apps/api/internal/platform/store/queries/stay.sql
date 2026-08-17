@@ -90,7 +90,7 @@ WHERE m.oidc_issuer = sqlc.arg(oidc_issuer)
   )
   -- A fila de aprovação é GET /stays?accommodation_id=…&approval_state=pending.
   -- Nenhum endpoint novo de listagem: cursor, limite, ordenação e isolamento
-  -- por membership continuam sendo os já provados na Fase 2.
+  -- por membership continuam sendo os já provados no núcleo.
   AND (
     sqlc.narg(approval_state)::text IS NULL
     OR s.approval_state = sqlc.narg(approval_state)::text

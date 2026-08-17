@@ -77,11 +77,11 @@ func newAuthStore(
 	clock *authClock,
 ) *store.Store {
 	t.Helper()
-	built, err := store.NewPhase3(
+	built, err := store.NewQuestionnaire(
 		pool,
 		5*time.Second,
-		config.Phase2Config{},
-		config.Phase3Config{},
+		config.CoreConfig{},
+		config.QuestionnaireConfig{},
 		store.WithAuthConfig(authConfig()),
 		store.WithCurrentTime(clock.read),
 	)

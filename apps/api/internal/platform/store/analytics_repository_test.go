@@ -226,8 +226,8 @@ func TestPublishSnapshotPreservesLastValidPointerOnPartialFailure(t *testing.T) 
 func TestOptionalQualityCountsExposeExplicitNotAvailable(t *testing.T) {
 	t.Parallel()
 
-	got := optionalCount(nil, "phase_not_implemented")
-	if got.Status != "not_available" || got.ReasonCode != "phase_not_implemented" {
+	got := optionalCount(nil, "not_implemented")
+	if got.Status != "not_available" || got.ReasonCode != "not_implemented" {
 		t.Fatalf("optionalCount() = %#v", got)
 	}
 }
@@ -370,7 +370,7 @@ func TestPreferenceCountPeriodUsesPreviousCivilMonthInBahia(t *testing.T) {
 func TestPreferenceThresholdUsesHistoricalMaximumAndComplementaryProtection(t *testing.T) {
 	t.Parallel()
 
-	repository := &AnalyticsRepository{phase4: config.Phase4Config{
+	repository := &AnalyticsRepository{analytics: config.AnalyticsConfig{
 		PrivacyPolicyVersion:           "prototype-v1",
 		PrimaryCellThreshold:           10,
 		MinimumReportingAccommodations: 3,
@@ -410,7 +410,7 @@ func TestPreferenceThresholdUsesHistoricalMaximumAndComplementaryProtection(t *t
 func TestPreferenceThresholdAllowsZeroCountAndProtectsFamily(t *testing.T) {
 	t.Parallel()
 
-	repository := &AnalyticsRepository{phase4: config.Phase4Config{
+	repository := &AnalyticsRepository{analytics: config.AnalyticsConfig{
 		PrivacyPolicyVersion:           "prototype-v1",
 		PrimaryCellThreshold:           10,
 		MinimumReportingAccommodations: 3,
@@ -441,7 +441,7 @@ func TestPreferenceThresholdAllowsZeroCountAndProtectsFamily(t *testing.T) {
 func TestPreferenceThresholdFailsClosedWhenAggregateIsInvalid(t *testing.T) {
 	t.Parallel()
 
-	repository := &AnalyticsRepository{phase4: config.Phase4Config{
+	repository := &AnalyticsRepository{analytics: config.AnalyticsConfig{
 		PrivacyPolicyVersion:           "prototype-v1",
 		PrimaryCellThreshold:           10,
 		MinimumReportingAccommodations: 3,
@@ -475,7 +475,7 @@ func TestPublicationCatalogValidationIsReadOnly(t *testing.T) {
 	t.Parallel()
 
 	queries := &metricCatalogQueries{}
-	repository := &AnalyticsRepository{phase4: config.Phase4Config{
+	repository := &AnalyticsRepository{analytics: config.AnalyticsConfig{
 		PrivacyPolicyVersion:           "prototype-v1",
 		PrimaryCellThreshold:           10,
 		MinimumReportingAccommodations: 3,
@@ -496,7 +496,7 @@ func TestBuildFailureRecordsQualityAndPreservesLastValidPublication(t *testing.T
 	database.now = func() time.Time {
 		return time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
 	}
-	repository := NewAnalyticsRepository(database, config.Phase4Config{})
+	repository := NewAnalyticsRepository(database, config.AnalyticsConfig{})
 
 	_, _, err := repository.BuildAndPublish(
 		context.Background(),
@@ -539,7 +539,7 @@ func TestQualityRecordingFailureDoesNotReplaceBuildError(t *testing.T) {
 		recordErr: errors.New("quality snapshot unavailable"),
 	}
 	database := New(queries, time.Second)
-	repository := NewAnalyticsRepository(database, config.Phase4Config{})
+	repository := NewAnalyticsRepository(database, config.AnalyticsConfig{})
 
 	_, _, err := repository.BuildAndPublish(
 		context.Background(),
@@ -560,7 +560,7 @@ func TestObservedPublicationProtectsNineAndPublishesTenFromThreeAccommodations(
 	t.Parallel()
 
 	asOf := stay.MustCivilDate("2026-07-28")
-	repository := &AnalyticsRepository{phase4: config.Phase4Config{
+	repository := &AnalyticsRepository{analytics: config.AnalyticsConfig{
 		PrimaryCellThreshold:           10,
 		MinimumReportingAccommodations: 3,
 		RoundingBase:                   10,

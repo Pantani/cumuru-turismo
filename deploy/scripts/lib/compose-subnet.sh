@@ -12,7 +12,7 @@
 # Todos os overlays declaram a MESMA rede (`private`), e o de cima vence na
 # mesclagem. Por isso uma única variável, `CUMURU_SUBNET_OCTET`, serve a todos:
 # quando um script empilha dois overlays que declaram a rede — o e2e empilha
-# `phase4-full-stack` e `local-e2e` —, ambos resolvem para o mesmo valor em vez
+# `analytics-full-stack` e `local-e2e` —, ambos resolvem para o mesmo valor em vez
 # de disputarem.
 #
 # Cada overlay usa `${CUMURU_SUBNET_OCTET:-<octeto original>}`, então um script

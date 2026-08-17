@@ -25,8 +25,8 @@ const (
 )
 
 // ActivationRepository is separate from StayRepository because it writes to
-// auth and to core.memberships, and because the phase must be switchable off as
-// a whole: with the phase disabled nothing constructs it and the routes are not
+// auth and to core.memberships, and because the feature must be switchable off as
+// a whole: with the feature disabled nothing constructs it and the routes are not
 // registered at all.
 type ActivationRepository struct {
 	store *Store
@@ -37,8 +37,8 @@ var _ activation.Repository = (*ActivationRepository)(nil)
 
 func NewActivationRepository(store *Store) (*ActivationRepository, error) {
 	codec, err := stay.NewInviteCodec(stay.InviteKeyring{
-		CurrentVersion: store.phase2.InviteKeys.CurrentVersion,
-		Keys:           store.phase2.InviteKeys.Keys,
+		CurrentVersion: store.core.InviteKeys.CurrentVersion,
+		Keys:           store.core.InviteKeys.Keys,
 	})
 	if err != nil {
 		return nil, err
@@ -173,7 +173,7 @@ func (r *ActivationRepository) resolveActivationAccount(
 // It does **not** buy "a capability only ever grants the accommodation that
 // provisioned the account". That would need this to be the only source of
 // membership, and it is not: createAccommodationMembership
-// (POST /accommodations/{id}/memberships, Fase 2) attaches an existing
+// (POST /accommodations/{id}/memberships, core) attaches an existing
 // principal to another accommodation, so an account can legitimately span two
 // before any re-issue happens. A capability then hands its holder whatever the
 // account already reached — which somebody with accommodations:manage there put
@@ -315,7 +315,7 @@ func (r *ActivationRepository) writeCapability(
 	if err != nil {
 		return activationReplayPayload{}, activation.ErrUnavailable
 	}
-	expiresAt := now.Add(r.store.phase2.InviteTTL)
+	expiresAt := now.Add(r.store.core.InviteTTL)
 	row, err := q.CreateActivationCapability(ctx, generated.CreateActivationCapabilityParams{
 		CapabilityID: idToPG(capabilityID), AccountID: idToPG(accountID),
 		AccommodationID: idToPG(command.AccommodationID), TokenHmac: digest,
@@ -345,7 +345,7 @@ func (r *ActivationRepository) decodeActivation(
 	}
 	return activation.Created{
 		ActivationID: payload.CapabilityID, AccountID: payload.AccountID,
-		URL:       fragmentURL(r.store.phase7.ActivationURL, token),
+		URL:       fragmentURL(r.store.selfService.ActivationURL, token),
 		ExpiresAt: payload.ExpiresAt, Version: payload.Version,
 	}, nil
 }
@@ -378,7 +378,7 @@ func (r *ActivationRepository) Context(
 	now := r.store.currentTime()
 	if err := r.limitActivation(
 		ctx, activationContextScope, request.Token, request.RateSubject,
-		r.store.phase7.ActivationContextRateLimit, now,
+		r.store.selfService.ActivationContextRateLimit, now,
 	); err != nil {
 		return result, err
 	}
@@ -413,7 +413,7 @@ func (r *ActivationRepository) Complete(
 	now := r.store.currentTime()
 	if err := r.limitActivation(
 		ctx, activationSubmitScope, command.Token, command.RateSubject,
-		r.store.phase7.ActivationSubmitRateLimit, now,
+		r.store.selfService.ActivationSubmitRateLimit, now,
 	); err != nil {
 		return err
 	}
@@ -540,18 +540,18 @@ func (r *ActivationRepository) limitActivation(
 	limit int,
 	now time.Time,
 ) error {
-	key, ok := r.store.phase2.RateLimitKeys.Key(r.store.phase2.RateLimitKeys.CurrentVersion)
+	key, ok := r.store.core.RateLimitKeys.Key(r.store.core.RateLimitKeys.CurrentVersion)
 	if !ok {
 		return activation.ErrUnavailable
 	}
-	window := now.Truncate(r.store.phase2.RateLimitWindow)
+	window := now.Truncate(r.store.core.RateLimitWindow)
 	limited, cancel := context.WithTimeout(ctx, r.store.timeout)
 	defer cancel()
 	row, err := r.store.queries.IncrementRateLimit(limited, generated.IncrementRateLimitParams{
 		Scope: scope, SubjectHmac: rateLimitDigest(key, scope, token, subject),
-		SubjectKeyVersion: r.store.phase2.RateLimitKeys.CurrentVersion,
+		SubjectKeyVersion: r.store.core.RateLimitKeys.CurrentVersion,
 		WindowStartedAt:   timeToPG(window),
-		ExpiresAt:         timeToPG(window.Add(2 * r.store.phase2.RateLimitWindow)),
+		ExpiresAt:         timeToPG(window.Add(2 * r.store.core.RateLimitWindow)),
 	})
 	if err != nil {
 		return activation.ErrUnavailable

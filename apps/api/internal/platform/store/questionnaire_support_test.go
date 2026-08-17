@@ -52,7 +52,7 @@ func TestQuestionnaireIdempotencyHashesIgnoreTransportMetadata(t *testing.T) {
 
 func TestReviewerIdentityRemainsDistinctAcrossKeyRotation(t *testing.T) {
 	t.Parallel()
-	store := &Store{phase2: config.Phase2Config{
+	store := &Store{core: config.CoreConfig{
 		ActorKeys: config.KeyringConfig{
 			CurrentVersion: "actor-v2",
 			Keys: map[string][]byte{
@@ -63,7 +63,7 @@ func TestReviewerIdentityRemainsDistinctAcrossKeyRotation(t *testing.T) {
 	}}
 	editor := access.NewPrincipal("https://issuer.invalid", "same-user", nil)
 	other := access.NewPrincipal("https://issuer.invalid", "other-user", nil)
-	oldDigest := digests(store.phase2.ActorKeys, "actor", actorValue(editor.Issuer, editor.Subject))[1]
+	oldDigest := digests(store.core.ActorKeys, "actor", actorValue(editor.Issuer, editor.Subject))[1]
 	version := questionnaire.Version{
 		LastEditorHMAC: oldDigest.sum, LastEditorKeyVersion: oldDigest.version,
 	}

@@ -293,8 +293,12 @@ describe("autocadastro pelo cartaz da acomodação", () => {
 
     render(<SelfRegistrationPage />);
 
-    const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent(/Não conseguimos falar com o serviço/u);
+    // A mesma região `role="status"` mostra "Validando o cartaz…" na primeira
+    // renderização e só troca de texto depois que a promessa do fetch rejeita.
+    // findByRole resolve assim que o elemento existe, não quando o texto certo
+    // chega — aguardar pelo texto evita a corrida contra essa atualização
+    // assíncrona.
+    await screen.findByText(/Não conseguimos falar com o serviço/u);
     expect(document.documentElement.innerHTML).not.toContain(engineeringTitle);
   });
 

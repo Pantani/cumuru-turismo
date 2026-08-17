@@ -4,7 +4,7 @@ import {
   invalidFlag,
   issueMessage,
 } from "../../shared/forms/FieldFeedback";
-import type { ValidationIssue } from "../../shared/validation/phase2-validation";
+import type { ValidationIssue } from "../../shared/validation/core-validation";
 
 interface PlannedWindowFieldsProps {
   arrival: string;

@@ -5,9 +5,9 @@ import type { components } from "../../generated/schema";
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import type { MessageKey, Translate } from "../../shared/i18n/translate";
 import {
-  phase4PublicClient,
-  type Phase4Client,
-} from "../../shared/api/phase4-client";
+  publicAnalyticsClient,
+  type AnalyticsClient,
+} from "../../shared/api/analytics-client";
 import { coverageText } from "./coverage";
 import { usePresenceFormat, type PresenceFormat } from "./presence-format";
 import { PresenceChart } from "./PresenceChart";
@@ -32,7 +32,7 @@ type PreferenceCategory = Schemas["PreferenceCategory"];
 const SMOOTH_DAYS = 7;
 
 interface AnalyticsDashboardProps {
-  client?: Phase4Client;
+  client?: AnalyticsClient;
 }
 
 /** Reúne o que todo painel interno precisa sem repetir dois hooks por bloco. */
@@ -740,7 +740,7 @@ function PresenceSection({
   );
 }
 
-function usePublicAnalytics(client: Phase4Client) {
+function usePublicAnalytics(client: AnalyticsClient) {
   const summary = usePublicSummary(client);
   const presence = useQuery({
     queryKey: ["analytics", "public", "presence", "recent_30_days"],
@@ -766,7 +766,7 @@ function usePublicAnalytics(client: Phase4Client) {
 }
 
 export function AnalyticsDashboard({
-  client = phase4PublicClient,
+  client = publicAnalyticsClient,
 }: AnalyticsDashboardProps) {
   const { t } = useLocale();
   const format = usePresenceFormat();

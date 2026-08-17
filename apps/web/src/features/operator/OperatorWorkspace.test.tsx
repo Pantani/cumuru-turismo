@@ -58,7 +58,7 @@ function stay(overrides: Record<string, unknown> = {}) {
 
 /**
  * O escopo `stays:approve` é o único concedido exclusivamente pelo caminho de
- * ativação da Fase 7 (`activation.go:97`), e nenhuma conta semeada o tem. Narrar
+ * ativação do autoatendimento (`activation.go:97`), e nenhuma conta semeada o tem. Narrar
  * a lista de escopos é como o resto da suíte simula "esta capacidade está
  * desligada" — ver `test/session.tsx`.
  */
@@ -75,7 +75,7 @@ function stayBoardHeading() {
   return screen.getByRole("heading", { name: /Estadias de/u });
 }
 
-/** The accommodation starts with no reusable poster; Phase 7 answers 404. */
+/** The accommodation starts with no reusable poster; self-service answers 404. */
 function noActivePoster() {
   return apiResponse(
     {
@@ -253,11 +253,11 @@ describe("área da hospedagem", () => {
     expect(form?.textContent).toContain("Não pedimos CPF, CNPJ, Cadastur");
   });
 
-  // Regressão D-02. `PHASE7_ENABLED` tem default `false` e não está em nenhum
+  // Regressão D-02. `SELF_SERVICE_ENABLED` tem default `false` e não está em nenhum
   // compose, então em todo runtime de hoje o servidor não registra as rotas da
   // fase. Montar os painéis sem condição fazia o operador tomar `404` a cada
   // acomodação aberta — foi o que derrubou `make local-demo-e2e`.
-  it("não consulta o cartaz quando a conta não tem o escopo da Fase 7", async () => {
+  it("não consulta o cartaz quando a conta não tem o escopo do autoatendimento", async () => {
     const calls = stubApi({ stays: [stay()] });
 
     renderWithSession(<OperatorWorkspace />);
@@ -274,7 +274,7 @@ describe("área da hospedagem", () => {
     expect(stayBoardHeading()).toBeInTheDocument();
   });
 
-  it("monta os painéis da Fase 7 quando o servidor concede o escopo próprio", async () => {
+  it("monta os painéis do autoatendimento quando o servidor concede o escopo próprio", async () => {
     const calls = stubApi({ stays: [stay()] });
 
     renderWithSession(<OperatorWorkspace />, {

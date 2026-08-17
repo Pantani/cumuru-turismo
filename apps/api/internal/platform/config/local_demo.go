@@ -41,8 +41,8 @@ func localDemoApplication(lookup LookupEnv) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if !application.Phase3.Enabled || !application.Phase4.Enabled {
-		return Config{}, errors.New("local demo requires phases 3 and 4")
+	if !application.Questionnaire.Enabled || !application.Analytics.Enabled {
+		return Config{}, errors.New("local demo requires questionnaire and analytics")
 	}
 	return application, nil
 }

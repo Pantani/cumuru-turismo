@@ -332,7 +332,7 @@ test("percorre a jornada local sem persistir authorities", async ({
     page.getByRole("heading", { name: "Participação registrada" }),
   ).toBeVisible();
 
-  // --- Fase 7: cartaz, autocadastro pelo link aberto e aprovação -----------
+  // --- autoatendimento: cartaz, autocadastro pelo link aberto e aprovação -----------
   //
   // Fecha N-45: o QR é gerado no navegador, sob a CSP existente, sem nenhuma
   // requisição a host externo, e a prova de trabalho é resolvida pelo módulo

@@ -23,7 +23,7 @@ type actorDigest struct {
 }
 
 func currentActorDigest(store *Store, actor access.Principal) actorDigest {
-	values := digests(store.phase2.ActorKeys, "actor", actorValue(actor.Issuer, actor.Subject))
+	values := digests(store.core.ActorKeys, "actor", actorValue(actor.Issuer, actor.Subject))
 	if len(values) == 0 {
 		return actorDigest{}
 	}
@@ -36,7 +36,7 @@ func reviewerDistinctFromEditor(
 	reviewer access.Principal,
 ) bool {
 	values := digests(
-		store.phase2.ActorKeys,
+		store.core.ActorKeys,
 		"actor",
 		actorValue(reviewer.Issuer, reviewer.Subject),
 	)

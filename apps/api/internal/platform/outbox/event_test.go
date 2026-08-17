@@ -37,7 +37,7 @@ func TestEventContainsOnlyAggregateIdentityVersionAndType(t *testing.T) {
 	}
 }
 
-func TestPhase3EventsContainNoPayload(t *testing.T) {
+func TestQuestionnaireEventsContainNoPayload(t *testing.T) {
 	t.Parallel()
 	cases := []outbox.Event{
 		{
@@ -53,7 +53,7 @@ func TestPhase3EventsContainNoPayload(t *testing.T) {
 	}
 	for _, event := range cases {
 		if err := event.Validate(); err != nil {
-			t.Fatalf("phase 3 event rejected: %v", err)
+			t.Fatalf("questionnaire event rejected: %v", err)
 		}
 	}
 }

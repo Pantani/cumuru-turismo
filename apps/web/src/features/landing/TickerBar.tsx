@@ -1,4 +1,4 @@
-import type { Phase4Client } from "../../shared/api/phase4-client";
+import type { AnalyticsClient } from "../../shared/api/analytics-client";
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import type { Translate } from "../../shared/i18n/translate";
 import { coverageText } from "../analytics/coverage";
@@ -58,7 +58,7 @@ function TickerTrack({
  * laço da animação fechar sem salto — e sai da árvore de acessibilidade para
  * que ninguém ouça os mesmos números duas vezes.
  */
-export function TickerBar({ client }: { client?: Phase4Client }) {
+export function TickerBar({ client }: { client?: AnalyticsClient }) {
   const { t } = useLocale();
   const format = usePresenceFormat();
   const summary = usePublicSummary(client);

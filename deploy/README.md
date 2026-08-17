@@ -12,21 +12,21 @@ deliberadamente locais e não podem ser reutilizadas em outro ambiente.
   aplica a baseline, grava somente canários fictícios, executa dump/restore em
   base isolada e compara schema, ownership, grants e integridade antes do
   cleanup;
-- `scripts/test-phase2-integration.sh`: usa projeto, volume e porta efêmeros,
+- `scripts/test-core-integration.sh`: usa projeto, volume e porta efêmeros,
   aplica migrations e fixtures com `cumuru_migration` e executa o teste tagged
   com conexão runtime `cumuru_app`; cleanup falha se deixar recurso residual;
-- `scripts/test-phase3-integration.sh`: aplica a baseline consolidada em
+- `scripts/test-questionnaire-integration.sh`: aplica a baseline consolidada em
   PostgreSQL efêmero e executa a suíte tagged com o papel runtime;
-- `scripts/test-phase3-proxy.sh`: preserva o canário de proxy e verifica o
+- `scripts/test-questionnaire-proxy.sh`: preserva o canário de proxy e verifica o
   contrato do header `Survey-Capability` sem criar log ou rewrite do segredo;
-- `scripts/test-phase4-integration.sh`: aplica a baseline consolidada em
+- `scripts/test-analytics-integration.sh`: aplica a baseline consolidada em
   PostgreSQL efêmero e prova publicação protegida, views públicas e negação das
   tabelas-base e do texto livre criptografado;
-- `scripts/test-phase4-proxy.sh`: valida autenticação vazia e seletores
+- `scripts/test-analytics-proxy.sh`: valida autenticação vazia e seletores
   fechados; resolve recursivamente os schemas públicos para exigir objetos
   fechados e rejeitar chaves proibidas; prova headers `200`/`304`, cache, ETag
   forte e `no-store` nos erros;
-- `scripts/test-phase4-full-stack.sh`: valida o overlay Compose e a separação
+- `scripts/test-analytics-full-stack.sh`: valida o overlay Compose e a separação
   entre o DSN transacional e o login PostgreSQL público, usando o bootstrap Go
   como fonte canônica da fixture;
 - `scripts/test-local-demo.sh`: prova banco fresh, repetição, preservação,
@@ -40,14 +40,14 @@ deliberadamente locais e não podem ser reutilizadas em outro ambiente.
   API ou capability no Cache API;
 - `scripts/test-proxy-hardening.sh`: prova headers fail-closed e ausência de
   capability/dados de erro nos logs de Nginx e Vite;
-- `scripts/test-phase2-full-stack.sh`: constrói e testa API, worker, web e banco
+- `scripts/test-core-full-stack.sh`: constrói e testa API, worker, web e banco
   em projeto efêmero, incluindo canário com API indisponível, restauração e
   cleanup verificável;
 - `scripts/check-generated.sh`: regenera cliente OpenAPI e código `sqlc` em
   diretório temporário e compara byte a byte;
 - `scripts/test-complexity.sh`: prova o limiar 10 em fixtures temporárias,
   incluindo `_test.go`, e mede Go e todo código web próprio com máximo 9;
-- `scripts/smoke.sh`: testa API, web, proxy e uma rota autenticada da Fase 2
+- `scripts/smoke.sh`: testa API, web, proxy e uma rota autenticada do núcleo
   com o fake OIDC local depois de `make up`; ao invocar diretamente o perfil
   `local-demo`, exige `LOCAL_FAKE_OIDC_TOKEN` explícito.
 
@@ -70,14 +70,14 @@ exata no container web.
 Os defaults de Compose e `.env.example` são fixtures deliberadamente públicas,
 únicas por finalidade e exclusivas de `local`/`test`. Produção deve fornecer
 URLs, origins, TTLs, limites e keyrings independentes por secret manager;
-nenhuma fixture local pode ser reutilizada. Na Fase 3, HMAC de capability e
-AES-GCM-256 usam material distinto dos cinco keyrings da Fase 2; o protótipo
+nenhuma fixture local pode ser reutilizada. No questionário, HMAC de capability e
+AES-GCM-256 usam material distinto dos cinco keyrings do núcleo; o protótipo
 também exige cleanup e TTL máximo de 24 horas.
 
-Na Fase 4, `PUBLIC_DATABASE_URL` é obrigatório e distinto de `DATABASE_URL`
+Em analytics, `PUBLIC_DATABASE_URL` é obrigatório e distinto de `DATABASE_URL`
 para o processo API. O login público lê exclusivamente as views
 `public_data.current_summary`, `current_presence`, `current_preferences` e
-`current_methodology`. `make phase4-remediation` combina código gerado, guardas
+`current_methodology`. `make analytics-remediation` combina código gerado, guardas
 de build, seed fresh/persistente, full-stack e navegador real. Todos esses
 targets continuam sendo provas locais de protótipo, não autorização
 operacional.

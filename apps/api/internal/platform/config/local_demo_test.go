@@ -86,21 +86,21 @@ func assertLocalDemoLoad(
 
 func localDemoValues() map[string]string {
 	return merge(validLocal(), map[string]string{
-		"LOCAL_DEMO_ENABLED":                  "true",
-		"PHASE3_ENABLED":                      "true",
-		"SURVEY_CAPABILITY_TTL":               "24h",
-		"SURVEY_FREE_TEXT_TTL":                "24h",
-		"SURVEY_SUBMIT_RATE_LIMIT":            "10",
-		"SURVEY_FREE_TEXT_CLEANUP_ENABLED":    "true",
-		"SURVEY_HMAC_CURRENT_VERSION":         "survey-v1",
-		"SURVEY_HMAC_KEYS":                    localDemoEncodedKey("survey-v1", "survey"),
-		"SURVEY_FREE_TEXT_CURRENT_VERSION":    "free-v1",
-		"SURVEY_FREE_TEXT_KEYS":               localDemoEncodedKey("free-v1", "free-text"),
-		"PHASE4_ENABLED":                      "true",
-		"PHASE4_INCREMENTAL_INTERVAL":         "15m",
-		"PHASE4_FULL_RECONCILIATION_INTERVAL": "24h",
-		"WORKER_DATABASE_URL":                 "postgres://worker:local@127.0.0.1:5432/cumuru?sslmode=disable",
-		"PROVISIONING_DATABASE_URL":           "postgres://migration:local@127.0.0.1:5432/cumuru?sslmode=disable",
+		"LOCAL_DEMO_ENABLED":                     "true",
+		"QUESTIONNAIRE_ENABLED":                  "true",
+		"SURVEY_CAPABILITY_TTL":                  "24h",
+		"SURVEY_FREE_TEXT_TTL":                   "24h",
+		"SURVEY_SUBMIT_RATE_LIMIT":               "10",
+		"SURVEY_FREE_TEXT_CLEANUP_ENABLED":       "true",
+		"SURVEY_HMAC_CURRENT_VERSION":            "survey-v1",
+		"SURVEY_HMAC_KEYS":                       localDemoEncodedKey("survey-v1", "survey"),
+		"SURVEY_FREE_TEXT_CURRENT_VERSION":       "free-v1",
+		"SURVEY_FREE_TEXT_KEYS":                  localDemoEncodedKey("free-v1", "free-text"),
+		"ANALYTICS_ENABLED":                      "true",
+		"ANALYTICS_INCREMENTAL_INTERVAL":         "15m",
+		"ANALYTICS_FULL_RECONCILIATION_INTERVAL": "24h",
+		"WORKER_DATABASE_URL":                    "postgres://worker:local@127.0.0.1:5432/cumuru?sslmode=disable",
+		"PROVISIONING_DATABASE_URL":              "postgres://migration:local@127.0.0.1:5432/cumuru?sslmode=disable",
 	})
 }
 

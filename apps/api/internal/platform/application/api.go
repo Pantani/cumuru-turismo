@@ -167,16 +167,16 @@ func apiDependencies(
 		Auth:                           localAuthenticator(cfg, platformStore),
 		LockoutDuration:                cfg.Auth.LockoutDuration,
 		Accommodations:                 accommodationService,
-		AccommodationOnboardingEnabled: cfg.Phase2.AccommodationOnboardingEnabled,
+		AccommodationOnboardingEnabled: cfg.Core.AccommodationOnboardingEnabled,
 		Stays:                          stayService,
-		SelfServiceEnabled:             cfg.Phase7.Enabled,
+		SelfServiceEnabled:             cfg.SelfService.Enabled,
 		Activation:                     activationService,
 		Questionnaires:                 questionnaireService,
 		PublicAnalytics:                publicAnalytics,
 		AnalyticsQuality:               analyticsQuality,
-		CORSAllowedOrigins:             cfg.Phase2.CORSAllowedOrigins,
+		CORSAllowedOrigins:             cfg.Core.CORSAllowedOrigins,
 		TrustedProxyCIDRs:              cfg.TrustedProxyCIDRs,
-		CursorKeys:                     cfg.Phase2.CursorKeys,
+		CursorKeys:                     cfg.Core.CursorKeys,
 		Logger:                         logger,
 		Registry:                       prometheus.NewRegistry(),
 		Tracer:                         tracing.Tracer("cumuru-api-http"),
@@ -217,13 +217,13 @@ func services(
 	return accommodationService, stay.NewService(stayRepository), questionnaireService, nil
 }
 
-// activationService is nil when the phase is off, which is what keeps the two
+// activationService is nil when the feature is off, which is what keeps the two
 // public activation routes unregistered instead of half configured.
 func activationService(
 	platformStore *store.Store,
 	cfg config.Config,
 ) (*activation.Service, error) {
-	if !cfg.Phase7.Enabled {
+	if !cfg.SelfService.Enabled {
 		return nil, nil
 	}
 	repository, err := store.NewActivationRepository(platformStore)
@@ -250,15 +250,15 @@ func openServices(
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
-	platformStore, err := store.NewPhase3(
-		pool, cfg.DatabaseTimeout, cfg.Phase2, cfg.Phase3,
+	platformStore, err := store.NewQuestionnaire(
+		pool, cfg.DatabaseTimeout, cfg.Core, cfg.Questionnaire,
 		store.WithAuthConfig(cfg.Auth),
-		store.WithPhase7Config(cfg.Phase7),
+		store.WithSelfServiceConfig(cfg.SelfService),
 	)
 	if err != nil {
 		pool.Close()
 		return nil, nil, nil, nil, nil, nil, nil,
-			errors.New("phase 3 repository initialization failed")
+			errors.New("questionnaire repository initialization failed")
 	}
 	accommodationService, stayService, questionnaireService, err := services(platformStore)
 	if err != nil {
@@ -286,22 +286,22 @@ func openAnalyticsServices(
 	cfg config.Config,
 	platformStore *store.Store,
 ) (analytics.PublicReader, analytics.QualityReader, func(), error) {
-	if !cfg.Phase4.Enabled {
+	if !cfg.Analytics.Enabled {
 		return nil, nil, func() {}, nil
 	}
 	publicPool, err := store.OpenPublicPool(
 		ctx,
-		cfg.Phase4.PublicDatabaseURL,
-		cfg.Phase4.PublicDatabaseTimeout,
+		cfg.Analytics.PublicDatabaseURL,
+		cfg.Analytics.PublicDatabaseTimeout,
 	)
 	if err != nil {
 		return nil, nil, nil, errors.New("public analytics repository initialization failed")
 	}
 	publicRepository := store.NewPublicAnalyticsRepository(
 		publicPool,
-		cfg.Phase4.PublicDatabaseTimeout,
+		cfg.Analytics.PublicDatabaseTimeout,
 	)
-	qualityRepository := store.NewAnalyticsRepository(platformStore, cfg.Phase4)
+	qualityRepository := store.NewAnalyticsRepository(platformStore, cfg.Analytics)
 	return publicRepository, qualityRepository, publicPool.Close, nil
 }
 

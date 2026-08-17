@@ -107,7 +107,7 @@ versão do Go, `GOOS`, `GOARCH`, `GOMAXPROCS`, sistema, CPUs lógicas e memória
 do host. Esses limites são hipóteses operacionais do `PROTOTYPE_ONLY`, não
 evidência de capacidade produtiva.
 
-O target `phase4-benchmark` executa primeiro `phase4-full-stack`. Assim, uma
+O target `analytics-benchmark` executa primeiro `analytics-full-stack`. Assim, uma
 recomposição só passa quando o runtime público também preserva exatamente
 corpo e `ETag` do último snapshot válido durante falha de publicação. O
 benchmark não usa dados reais, não publica resultado e não autoriza deploy.

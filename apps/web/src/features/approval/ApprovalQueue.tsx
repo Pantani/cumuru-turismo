@@ -28,8 +28,8 @@ interface ApprovedFollowUpProps {
 
 /**
  * The identity, when a purpose needs one, is filled in by the person
- * themselves through the nominal invite already built in Phase 2. There is no
- * second identity path, and this offer is where the two phases meet.
+ * themselves through the nominal invite already built in the core slice. There is no
+ * second identity path, and this offer is where the two features meet.
  */
 function ApprovedFollowUp({
   busy,
@@ -102,7 +102,7 @@ function QueueList(props: QueueListProps) {
 }
 
 function usePendingStays(accommodationId: string) {
-  const { client } = useAuthSession();
+  const { coreClient: client } = useAuthSession();
   const operation = useOperation();
   const { run } = operation;
   const [stays, setStays] = useState<readonly Stay[]>([]);
@@ -129,7 +129,7 @@ function usePendingStays(accommodationId: string) {
 }
 
 export function ApprovalQueue({ accommodation }: ApprovalQueueProps) {
-  const { client, selfServiceClient } = useAuthSession();
+  const { coreClient: client, selfServiceClient } = useAuthSession();
   const { loading, operation, refresh, stays } = usePendingStays(accommodation.id);
   const { run } = operation;
   const [rejectingId, setRejectingId] = useState<string | null>(null);

@@ -85,6 +85,35 @@ controlada. Não use Create React App.
 - **Privacidade por construção:** o dashboard nunca consulta respostas brutas ou
   tabelas de identidade.
 
+## Vocabulário de funcionalidades
+
+O código é nomeado por **funcionalidade**, nunca pela fase que a entregou. Fase
+é ordem de entrega e vive só no harness (`prompts/BOOTSTRAP-CODEX.md` e
+`phase-matrix.md`); quem lê o código não precisa saber em que onda cada coisa
+nasceu. Os quatro nomes abaixo são os mesmos no back-end, no front-end, na
+configuração e no contrato:
+
+| Funcionalidade | O que é | Config Go | Client web | Variável de ambiente | Entregue na |
+| --- | --- | --- | --- | --- | --- |
+| `platform` | Saúde, prontidão e build | — | `platform-client.ts` | — | Fase 1 |
+| `core` | Hospedagens, estadias e convite nominal | `CoreConfig` | `core-client.ts` | sempre ativa | Fase 2 |
+| `questionnaire` | Autoria do questionário e pesquisa pública | `QuestionnaireConfig` | `questionnaire-client.ts` | `QUESTIONNAIRE_ENABLED` | Fase 3 |
+| `analytics` | Métricas públicas e dashboard | `AnalyticsConfig` | `analytics-client.ts` | `ANALYTICS_ENABLED` | Fase 4 |
+| `self-service` | Autocadastro por cartaz, ativação e aprovação | `SelfServiceConfig` | `self-service-client.ts` | `SELF_SERVICE_ENABLED` | Fase 7 |
+
+No `contracts/openapi.yaml`, a extensão `x-cumuru-feature` marca a
+funcionalidade dona de cada operação, com o valor `deferred` para o que ainda
+não foi implementado.
+
+Os alvos de teste seguem o mesmo vocabulário: `make core-integration`,
+`make questionnaire-integration`, `make analytics-full-stack`,
+`make self-service-integration`.
+
+Todo client web é construído sobre um único transporte,
+`apps/web/src/shared/api/http-client.ts`, que concentra sessão, cabeçalhos,
+contrato de resposta e a classe de erro `ApiError`. Não existe classe de erro
+por funcionalidade: quem trata falha de API captura `ApiError` e nada mais.
+
 ## Mapa da documentação
 
 1. [`docs/00-visao-e-escopo.md`](docs/00-visao-e-escopo.md)
@@ -146,13 +175,13 @@ Para iniciar no Codex:
 $cumuru-bootstrap Execute a Fase 1, com estudo antes da implementação.
 ```
 
-## Fundação técnica — Fase 1
+## Plataforma — fundação técnica
 
 A implementação da fundação opera exclusivamente como `PROTOTYPE_ONLY`: use
 somente dados, identidades e credenciais fictícios. Governança, provedor OIDC
 institucional, KMS, backup/restore e infraestrutura de staging/produção ainda
 não foram verificados. O contrato OpenAPI é um contrato-alvo; a extensão
-`x-cumuru-implementation-phase` distingue operações futuras das três operações
+`x-cumuru-feature` distingue operações futuras das três operações
 entregues pela fundação.
 
 Versões principais fixadas:
@@ -177,9 +206,9 @@ make migration-test
 make local-restore-drill
 make local-demo-test
 make local-demo-e2e
-make phase2-integration
-make phase2-proxy-test
-make phase2-full-stack
+make core-integration
+make core-proxy-test
+make core-full-stack
 make complexity
 make up
 make smoke
@@ -212,7 +241,7 @@ memória, remove-a da URL e conduz ao registro e à pesquisa. As rotas
 
 `make smoke` exige publicação, séries públicas, preferências e ao menos uma
 acomodação do operador; lista vazia ou endpoint público `4xx/5xx` falha.
-`make phase4-remediation` reúne o check de código gerado, as guardas dos builds
+`make analytics-remediation` reúne o check de código gerado, as guardas dos builds
 web, PostgreSQL fresh/persistente, rollover, colisão fail-closed, full-stack e
 a jornada completa em Chromium, inclusive Service Worker e Cache API sem
 authority material. Antes do primeiro E2E local, instale o browser fixado pelo
@@ -244,12 +273,12 @@ make ci
 ```text
 openapi-lint          generated-check       compose-config
 prod-config-example   migration-test        local-restore-drill
-local-demo-test       phase2-integration    phase2-proxy-test
-phase3-integration    phase3-proxy-test     phase4-integration
-phase4-proxy-test     phase7-integration    test
+local-demo-test       core-integration    core-proxy-test
+questionnaire-integration    questionnaire-proxy-test     analytics-integration
+analytics-proxy-test     self-service-integration    test
 test-backend-race     typecheck             post-task-quality
 infra-validation      build                 images
-phase2-full-stack     phase4-benchmark      phase7-full-stack
+core-full-stack     analytics-benchmark      self-service-full-stack
 local-demo-e2e        smoke-local           sbom
 scan                  image-scan
 ```
@@ -273,7 +302,7 @@ O cleanup remove dump, base restaurada, containers, rede e volume temporários.
 Essa prova é estritamente local: não comprova backup contínuo, PITR, RPO, RTO,
 custódia, retenção, reaplicação de exclusões ou restore institucional.
 
-## Plataforma da Fase 2 — contrato e onboarding local
+## Núcleo (`core`) — contrato e onboarding local
 
 A baseline `000001_initial_schema` materializa acomodações, memberships,
 estadias, grupos, convites, comandos de estado e o onboarding local contratado
@@ -283,7 +312,7 @@ cliente gerado e React.
 
 O recorte continua `PROTOTYPE_ONLY`: nome, documento, contato, referência
 externa e texto livre são rejeitados; questionário, analytics, dashboard e
-FNRH permanecem fora da Fase 2. O gate `make complexity` exige complexidade
+FNRH permanecem fora do núcleo. O gate `make complexity` exige complexidade
 ciclomática e cognitiva no máximo 9 por função, inclui testes e código gerado e
 não admite suppressions.
 
@@ -314,7 +343,7 @@ No Compose, o web usa `/api/v1` no mesmo origin e é a única entrada para a API
 o serviço `api` não publica porta no host. Nginx mantém access log desligado,
 descarta error log na location de capability, remove `Referer`/`Forwarded` e
 sobrescreve `X-Forwarded-For`/`X-Real-IP` com o socket remoto. O smoke usa
-somente o fake OIDC local para provar uma rota autenticada da Fase 2 pelo
+somente o fake OIDC local para provar uma rota autenticada do núcleo pelo
 proxy. Web e PostgreSQL publicam portas apenas em `127.0.0.1`.
 
 O proxy web local usa `172.30.0.10` e
@@ -326,16 +355,16 @@ Overlays de migration, integration e full-stack usam subnets disjuntas para
 não colidir com a stack local.
 
 `.env.example` inicializa todos os TTLs, limites, CORS e os cinco keyrings da
-Fase 2 com fixtures públicas e independentes, exclusivamente para
+o núcleo com fixtures públicas e independentes, exclusivamente para
 `local`/`test`. Elas não são segredos e não podem ser promovidas. O target
-`make phase2-integration` cria PostgreSQL e porta efêmeros, aplica migrations
+`make core-integration` cria PostgreSQL e porta efêmeros, aplica migrations
 com `cumuru_migration` e executa a suíte tagged sob o papel runtime
 `cumuru_app`, falhando se qualquer DSN estiver ausente ou apontar para outro
 papel.
 
-`make phase2-proxy-test` usa upstreams locais controlados para provar
+`make core-proxy-test` usa upstreams locais controlados para provar
 sobrescrita de headers e ausência de capability/dados de erro em stdout e
-stderr de Nginx/Vite. `make phase2-full-stack` constrói API, worker e web em
+stderr de Nginx/Vite. `make core-full-stack` constrói API, worker e web em
 projeto descartável, valida timezone, service worker, proxy e rota autenticada,
 derruba/restaura a API para o canário de logs e confirma a remoção de
 containers, rede e volume.
@@ -346,9 +375,9 @@ e-mail e senha e rotação da senha semeada — está consolidada no único par
 `zero → 1 → zero → 1`, grants, categorias fechadas e isolamento de tenant
 fictício.
 
-## Plataforma da Fase 3 — contrato congelado
+## Questionário (`questionnaire`) — contrato congelado
 
-O contrato `0.4.0`, o trecho da Fase 3 incorporado à migration consolidada
+O contrato `0.4.0`, o trecho do questionário incorporado à migration consolidada
 `000001_initial_schema`, as queries `sqlc` e o cliente TypeScript gerado
 materializam a fronteira compartilhada do questionário. Isso ainda não declara
 domínio, handlers ou UI concluídos.
@@ -359,19 +388,19 @@ quando a submissão de grupo chega a `pre_registered` e existe uma versão
 mesmo POST e seu replay exato devolvem o mesmo segredo sem persistir plaintext.
 
 Local e teste exigem keyrings independentes, TTL máximo de 24 horas e cleanup
-de texto livre habilitado. A Fase 3 permanece `PROTOTYPE_ONLY`.
+de texto livre habilitado. O questionário permanece `PROTOTYPE_ONLY`.
 
 ```bash
 make openapi-lint
 make generated-check
 make migration-test
-make phase3-integration
-make phase3-proxy-test
+make questionnaire-integration
+make questionnaire-proxy-test
 ```
 
-## Fase 4 — analytics e publicação materializados
+## Analytics (`analytics`) — publicação materializada
 
-O contrato `0.5.2`, o trecho da Fase 4 incorporado à migration consolidada
+O contrato `0.5.2`, o trecho de analytics incorporado à migration consolidada
 `000001_initial_schema`, as queries `sqlc` e o cliente TypeScript gerado
 estabelecem analytics e publicação anônima. O papel `public_runtime` consulta
 somente quatro views `security_barrier` em `public_data`; a API usa um
@@ -394,16 +423,16 @@ HTTP runtime, frontend, recomposição e cleanup Compose com fixtures fictícias
 make openapi-lint
 make generated-check
 make migration-test
-make phase4-integration
-make phase4-proxy-test
-make phase4-full-stack
-make phase4-benchmark
+make analytics-integration
+make analytics-proxy-test
+make analytics-full-stack
+make analytics-benchmark
 make local-demo-test
 make local-demo-e2e
-make phase4-remediation
+make analytics-remediation
 ```
 
-Esses targets da Fase 4 são gates locais `PROTOTYPE_ONLY`. O benchmark
+Esses targets de analytics são gates locais `PROTOTYPE_ONLY`. O benchmark
 registra duas recomposições determinísticas de três anos, tempo, heap e
 hardware, depois que o full-stack prova a preservação do último snapshot
 válido. A remediação adicional prova build padrão sem identidade fake, seed

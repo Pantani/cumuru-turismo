@@ -325,7 +325,7 @@ inserted_snapshot AS (
       'pseudonym_not_approved'
     ),
     previous.fnrh_failures,
-    coalesce(previous.fnrh_failures_reason, 'phase_not_implemented')
+    coalesce(previous.fnrh_failures_reason, 'not_implemented')
   FROM previous_snapshot AS previous
   RETURNING id, aggregation_failures
 ),

@@ -317,7 +317,7 @@ a titulares reais.
 | --- | --- |
 | backend | `apps/api/**`, exceto migrations e gerados compartilhados |
 | frontend | `apps/web/**`, exceto `src/generated/**` |
-| platform | `contracts/**`, migrations, gerados, `deploy/scripts/test-phase7-*.sh`, Makefile |
+| platform | `contracts/**`, migrations, gerados, `deploy/scripts/test-self-service-*.sh`, Makefile |
 
 ### Gate
 

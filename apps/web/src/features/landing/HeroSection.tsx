@@ -1,4 +1,4 @@
-import type { Phase4Client } from "../../shared/api/phase4-client";
+import type { AnalyticsClient } from "../../shared/api/analytics-client";
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import { usePresenceFormat } from "../analytics/presence-format";
 import { usePublicSummary } from "../analytics/public-summary";
@@ -10,7 +10,7 @@ import { todayHeadline } from "./summary-values";
  * abaixo — vem do contrato público, nunca de constante no front, e some com a
  * mesma supressão estatística quando a célula não é publicável.
  */
-export function HeroSection({ client }: { client?: Phase4Client }) {
+export function HeroSection({ client }: { client?: AnalyticsClient }) {
   const { t } = useLocale();
   const format = usePresenceFormat();
   const summary = usePublicSummary(client);

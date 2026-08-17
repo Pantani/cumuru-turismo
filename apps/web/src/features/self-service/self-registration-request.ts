@@ -1,5 +1,5 @@
 import type { components } from "../../generated/schema";
-import type { SelfRegistrationDraft } from "../../shared/validation/phase7-validation";
+import type { SelfRegistrationDraft } from "../../shared/validation/self-service-validation";
 import { normalizedVisitor } from "../visitors/visitor-input";
 
 type Schemas = components["schemas"];

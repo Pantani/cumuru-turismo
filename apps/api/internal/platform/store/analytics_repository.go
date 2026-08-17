@@ -23,15 +23,15 @@ import (
 var qualityCategoryCode = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 type AnalyticsRepository struct {
-	store  *Store
-	phase4 config.Phase4Config
+	store     *Store
+	analytics config.AnalyticsConfig
 }
 
 func NewAnalyticsRepository(
 	store *Store,
-	phase4 config.Phase4Config,
+	analytics config.AnalyticsConfig,
 ) *AnalyticsRepository {
-	return &AnalyticsRepository{store: store, phase4: phase4}
+	return &AnalyticsRepository{store: store, analytics: analytics}
 }
 
 var _ analytics.QualityReader = (*AnalyticsRepository)(nil)
@@ -647,7 +647,7 @@ func addPresenceVisitors(
 // presenceEligible is the second of the three mandatory filter points, and the
 // choke point addPresenceVisitors and incompleteStayCount share. The status
 // alone is not enough: a pending self-registration sits in pre_registered — the
-// phase adds no value to core.stay_status — and would accrue forecast
+// feature adds no value to core.stay_status — and would accrue forecast
 // person-days that reach public_data.metric_cells without anybody approving it.
 func presenceEligible(status stay.Status, approval stay.ApprovalState) bool {
 	if !approval.Countable() {
@@ -690,7 +690,7 @@ func (r *AnalyticsRepository) reconcilePresenceSource(
 	if presenceEligible(source.presence.Status, source.presence.Approval) {
 		var err error
 		desired, err = analytics.MaterializePresence(
-			source.presence, asOf, r.phase4.PreRegisteredWeight,
+			source.presence, asOf, r.analytics.PreRegisteredWeight,
 		)
 		if err != nil {
 			return ErrUnavailable
@@ -931,9 +931,9 @@ func (r *AnalyticsRepository) newPublication(
 	coverage analytics.Coverage,
 ) analytics.Publication {
 	publication := analytics.Publication{
-		AsOfOn: asOf.String(), DataMode: r.phase4.DataMode,
-		PrivacyPolicyVersion: r.phase4.PrivacyPolicyVersion,
-		MethodologyVersion:   r.phase4.MethodologyVersion,
+		AsOfOn: asOf.String(), DataMode: r.analytics.DataMode,
+		PrivacyPolicyVersion: r.analytics.PrivacyPolicyVersion,
+		MethodologyVersion:   r.analytics.MethodologyVersion,
 		CoverageStatus:       string(coverage.Status), Cells: cells,
 	}
 	if coverage.Ratio != nil {
@@ -1042,7 +1042,7 @@ func (r *AnalyticsRepository) validateMetricCatalog(
 	ctx context.Context,
 	queries generated.Querier,
 ) error {
-	rows, err := queries.ListActiveMetricCatalog(ctx, r.phase4.PrivacyPolicyVersion)
+	rows, err := queries.ListActiveMetricCatalog(ctx, r.analytics.PrivacyPolicyVersion)
 	if err != nil || len(rows) != 3 {
 		return ErrUnavailable
 	}
@@ -1082,16 +1082,16 @@ func (r *AnalyticsRepository) validMetricCatalogRow(
 ) bool {
 	shape := row.DimensionCode + "|" + row.Unit
 	return expectedShape != "" && expectedShape == shape &&
-		row.Active && row.PrivacyPolicyVersion == r.phase4.PrivacyPolicyVersion &&
+		row.Active && row.PrivacyPolicyVersion == r.analytics.PrivacyPolicyVersion &&
 		r.matchesCellThresholds(row)
 }
 
 func (r *AnalyticsRepository) matchesCellThresholds(
 	row generated.AnalyticsMetricCatalog,
 ) bool {
-	return row.MinimumPublicCell == int32(r.phase4.PrimaryCellThreshold) &&
+	return row.MinimumPublicCell == int32(r.analytics.PrimaryCellThreshold) &&
 		row.MinimumReportingAccommodations ==
-			int32(r.phase4.MinimumReportingAccommodations)
+			int32(r.analytics.MinimumReportingAccommodations)
 }
 
 func incompleteStayCount(
@@ -1150,7 +1150,7 @@ func (r *AnalyticsRepository) readPublicationWindows(
 		return publicationWindows{}, ErrUnavailable
 	}
 	preferences, err := queries.ListEligiblePreferenceCounts(
-		ctx, preferenceCountParams(r.phase4.PrivacyPolicyVersion, asOf),
+		ctx, preferenceCountParams(r.analytics.PrivacyPolicyVersion, asOf),
 	)
 	if err != nil {
 		return publicationWindows{}, ErrUnavailable
@@ -1382,7 +1382,7 @@ func (r *AnalyticsRepository) forecastPublicationCell(
 		return cell, nil
 	}
 	rounded, err := analytics.RoundForecast(
-		forecast.Lower, forecast.Central, forecast.Upper, r.phase4.RoundingBase,
+		forecast.Lower, forecast.Central, forecast.Upper, r.analytics.RoundingBase,
 	)
 	if err != nil {
 		return analytics.PublicationCell{}, ErrUnavailable
@@ -1480,9 +1480,9 @@ func eligibleHistoricalAggregate(
 
 func (r *AnalyticsRepository) presencePolicy() analytics.Policy {
 	return analytics.Policy{
-		PrimaryThreshold:               r.phase4.PrimaryCellThreshold,
-		MinimumReportingAccommodations: r.phase4.MinimumReportingAccommodations,
-		RoundingBase:                   r.phase4.RoundingBase,
+		PrimaryThreshold:               r.analytics.PrimaryCellThreshold,
+		MinimumReportingAccommodations: r.analytics.MinimumReportingAccommodations,
+		RoundingBase:                   r.analytics.RoundingBase,
 	}
 }
 
@@ -1502,7 +1502,7 @@ func (r *AnalyticsRepository) buildPreferenceCells(
 	source := preferenceSourceCells(counts, categories)
 	protected, err := analytics.ProtectCells(source, analytics.Policy{
 		PrimaryThreshold:               threshold,
-		MinimumReportingAccommodations: r.phase4.MinimumReportingAccommodations,
+		MinimumReportingAccommodations: r.analytics.MinimumReportingAccommodations,
 		RoundingBase:                   5,
 	})
 	if err != nil {
@@ -1586,7 +1586,7 @@ func (r *AnalyticsRepository) acceptablePreferenceRow(
 	result map[string]preferenceCount,
 	seen map[string]struct{},
 ) bool {
-	if row.PrivacyPolicyVersion != r.phase4.PrivacyPolicyVersion ||
+	if row.PrivacyPolicyVersion != r.analytics.PrivacyPolicyVersion ||
 		row.MetricCode != "first_visit_share" {
 		return false
 	}
@@ -1611,7 +1611,7 @@ func knownOnce(
 func (r *AnalyticsRepository) effectivePreferenceThreshold(
 	counts map[string]preferenceCount,
 ) (int, error) {
-	result := r.phase4.PrimaryCellThreshold
+	result := r.analytics.PrimaryCellThreshold
 	for _, category := range []string{"first_visit", "returning"} {
 		count, exists := counts[category]
 		if !r.usableThreshold(count, exists) {
@@ -1626,7 +1626,7 @@ func (r *AnalyticsRepository) effectivePreferenceThreshold(
 // may only raise its own minimum cell.
 func (r *AnalyticsRepository) usableThreshold(count preferenceCount, exists bool) bool {
 	return exists && count.present &&
-		count.minimum >= int32(r.phase4.PrimaryCellThreshold)
+		count.minimum >= int32(r.analytics.PrimaryCellThreshold)
 }
 
 func validCount(value int64) bool {
@@ -1674,7 +1674,7 @@ func (r *AnalyticsRepository) buildCoverage(
 	rows []generated.ListActiveAccommodationCoverageRow,
 ) (analytics.Coverage, []categoryCoverage) {
 	now := r.store.currentTime()
-	global := coverageForRows(rows, now, r.phase4.MinimumReportingAccommodations)
+	global := coverageForRows(rows, now, r.analytics.MinimumReportingAccommodations)
 	grouped := make(map[string][]generated.ListActiveAccommodationCoverageRow)
 	for _, row := range rows {
 		grouped[row.Category] = append(grouped[row.Category], row)
@@ -1689,7 +1689,7 @@ func (r *AnalyticsRepository) buildCoverage(
 		result = append(result, categoryCoverage{
 			category: category,
 			coverage: coverageForRows(
-				grouped[category], now, r.phase4.MinimumReportingAccommodations,
+				grouped[category], now, r.analytics.MinimumReportingAccommodations,
 			),
 		})
 	}
@@ -1750,7 +1750,7 @@ func (r *AnalyticsRepository) recordQuality(
 			SilentAccommodations:      silentAccommodationCount(inputs.coverage, now),
 			AggregationFailures:       0,
 			SuspectedDuplicatesReason: "pseudonym_not_approved",
-			FnrhFailuresReason:        "phase_not_implemented",
+			FnrhFailuresReason:        "not_implemented",
 		}); err != nil {
 			return ErrUnavailable
 		}

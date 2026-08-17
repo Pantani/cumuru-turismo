@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 
-import { Phase2ApiError } from "../../shared/api/phase2-client";
-import { Phase7ApiError } from "../../shared/api/phase7-client";
+import { ApiError } from "../../shared/api/http-client";
 
 export interface OperationState {
   busy: boolean;
@@ -15,13 +14,8 @@ const idle: OperationState = { busy: false, message: "", tone: "idle" };
  * describeFailure turns a transport failure into something an innkeeper can act
  * on. It never surfaces an identifier, a status code or a stack.
  */
-type ApiFailure = Phase2ApiError | Phase7ApiError;
-
-function apiFailure(error: unknown): ApiFailure | null {
-  if (error instanceof Phase2ApiError || error instanceof Phase7ApiError) {
-    return error;
-  }
-  return null;
+function apiFailure(error: unknown): ApiError | null {
+  return error instanceof ApiError ? error : null;
 }
 
 export function describeFailure(cause: unknown) {

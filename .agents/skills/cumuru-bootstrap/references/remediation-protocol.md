@@ -47,7 +47,7 @@ Cada lane escreve um relatório `remediation-<lane>-<date>.md`, marca
 
 ## Build de remediação da Fase 4
 
-Execute `make phase4-remediation`. O target agrega guardas de build, fixture
+Execute `make analytics-remediation`. O target agrega guardas de build, fixture
 PostgreSQL, full-stack com fonte única e E2E Chromium isolado. Instale o browser
 fixado uma vez com `npx playwright install chromium`.
 
