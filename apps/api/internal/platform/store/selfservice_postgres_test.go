@@ -142,7 +142,7 @@ func seedSelfServiceFixture(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	fixture.name = "Hospedagem canário " + mustV7(t).String()
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO core.organizations (id, name) VALUES ($1, $2)`,
-		fixture.organizationID, "Organização fictícia da Fase 7",
+		fixture.organizationID, "Organização fictícia do autoatendimento",
 	); err != nil {
 		t.Fatalf("seed organization: %v", err)
 	}
@@ -567,7 +567,18 @@ func cleanupSelfServiceFixture(t *testing.T, fixture selfServiceFixture, pool *p
 		   (SELECT id FROM core.stays WHERE accommodation_id = $1)`,
 		`DELETE FROM core.invites WHERE accommodation_id = $1`,
 		`DELETE FROM core.stays WHERE accommodation_id = $1`,
-		`DELETE FROM auth.activation_capabilities WHERE accommodation_id = $1`,
+		// D-10. Deleting only the capabilities scoped to this accommodation left
+		// an account that spans two fixtures holding a live capability in the
+		// other one, and activation_capabilities_account_id_fkey then refused the
+		// account delete. Every A/B isolation test has exactly that shape, so the
+		// helper has to clear the capabilities **of the accounts it is about to
+		// delete**, wherever those capabilities live.
+		`DELETE FROM auth.activation_capabilities
+		   WHERE accommodation_id = $1
+		      OR account_id IN (
+		           SELECT m.oidc_subject::uuid FROM core.memberships m
+		           WHERE m.accommodation_id = $1
+		             AND m.oidc_issuer = 'https://auth.cumuru.local')`,
 		`DELETE FROM auth.accounts WHERE id IN (
 		   SELECT m.oidc_subject::uuid FROM core.memberships m
 		   WHERE m.accommodation_id = $1 AND m.oidc_issuer = 'https://auth.cumuru.local')`,
@@ -1061,5 +1072,206 @@ func assertAccountReaches(
 	}
 	if reach != want {
 		t.Fatalf("the account reaches %d accommodations, want %d", reach, want)
+	}
+}
+
+// N-01. The poster carries no accommodation parameter: the target comes from the
+// invite row, so a submission cannot be aimed elsewhere. What proves it is the
+// count on the other side, not the success on this one — "the stay landed in A"
+// and "no stay landed in B" are different facts and only the second is N-01.
+func TestSelfServicePosterOfOneAccommodationNeverReachesAnother(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	admin, runtime, first := openSelfServiceIntegration(t, ctx)
+	second := seedSelfServiceFixture(t, ctx, admin)
+	t.Cleanup(func() { cleanupSelfServiceFixture(t, second, admin) })
+	repository := newSelfServiceRepository(t, runtime)
+
+	// Both accommodations publish a poster, so the only difference between them
+	// is which token the submission carries.
+	issueSelfServicePoster(t, ctx, repository, second)
+	submission := submitSelfServiceSelfRegistration(t, ctx, repository, first)
+
+	assertStayCount(t, ctx, admin, first.accommodationID, 1)
+	assertStayCount(t, ctx, admin, second.accommodationID, 0)
+	assertStayBelongsTo(t, ctx, admin, submission.stayID, first.accommodationID)
+}
+
+// N-32. The queue is listStays with a filter, so its isolation is the core
+// membership join. The listing deliberately carries **no** accommodation filter:
+// if isolation came from the filter rather than from the join, this would still
+// pass, and it must not.
+func TestSelfServiceApprovalQueueIsolatesAccommodations(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	admin, runtime, first := openSelfServiceIntegration(t, ctx)
+	second := seedSelfServiceFixture(t, ctx, admin)
+	t.Cleanup(func() { cleanupSelfServiceFixture(t, second, admin) })
+	repository := newSelfServiceRepository(t, runtime)
+
+	pending := submitSelfServiceSelfRegistration(t, ctx, repository, second)
+
+	page, err := repository.List(ctx, principal(first.subject), stay.PageRequest{
+		Limit: 100, ApprovalState: stay.ApprovalPending,
+	})
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	for _, record := range page.Items {
+		if record.ID == pending.stayID {
+			t.Fatal("the manager of one accommodation read the queue of another")
+		}
+	}
+	// And cannot decide it either: the lock refuses before any state changes.
+	if _, _, err := repository.Approve(ctx, stay.ApprovalCommand{
+		Actor: principal(first.subject), StayID: pending.stayID,
+		ExpectedVersion: pending.version,
+		IdempotencyKey:  "self-service-foreign-approve-" + pending.stayID.String(),
+		RequestID:       "request-foreign-approve-" + pending.stayID.String(),
+	}); err == nil {
+		t.Fatal("the manager of one accommodation approved the queue of another")
+	}
+	assertApprovalState(t, ctx, admin, pending.stayID, "pending")
+}
+
+// N-22 and N-23 together, because they are the same counter seen from two
+// angles. The limit is crossed for real: the stub that returned ErrRateLimited
+// proved the HTTP shape and nothing about the limiter.
+func TestSelfServiceRateLimitCrossesTheThresholdAndIsolatesAccommodations(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	admin, runtime, first := openSelfServiceIntegration(t, ctx)
+	second := seedSelfServiceFixture(t, ctx, admin)
+	t.Cleanup(func() { cleanupSelfServiceFixture(t, second, admin) })
+	repository := newTightlyLimitedSelfServiceRepository(t, runtime)
+
+	firstToken := issueSelfServicePoster(t, ctx, repository, first)
+	secondToken := issueSelfServicePoster(t, ctx, repository, second)
+	subject := "203.0.113." + mustV7(t).String()[:2] + "/24"
+
+	// The threshold is two: the first two reads pass, the third is refused by
+	// the limiter itself.
+	for attempt := 1; attempt <= 2; attempt++ {
+		if _, err := repository.GetAccommodationInviteContext(ctx, stay.InviteRequest{
+			Token: firstToken, RateSubject: subject,
+		}); err != nil {
+			t.Fatalf("read %d below the threshold: %v", attempt, err)
+		}
+	}
+	_, err := repository.GetAccommodationInviteContext(ctx, stay.InviteRequest{
+		Token: firstToken, RateSubject: subject,
+	})
+	if !errors.Is(err, stay.ErrRateLimited) {
+		t.Fatalf("read above the threshold error = %v, want ErrRateLimited", err)
+	}
+
+	// N-23: the same client, over the limit on one poster, is untouched on the
+	// other. The bucket is keyed by the capability, so two posters cannot share
+	// one budget.
+	if _, err := repository.GetAccommodationInviteContext(ctx, stay.InviteRequest{
+		Token: secondToken, RateSubject: subject,
+	}); err != nil {
+		t.Fatalf("the second accommodation shared the exhausted bucket: %v", err)
+	}
+	assertDistinctBuckets(t, ctx, admin, subject)
+}
+
+func newTightlyLimitedSelfServiceRepository(
+	t *testing.T,
+	pool *pgxpool.Pool,
+) *store.StayRepository {
+	t.Helper()
+	settings := integrationSelfServiceConfig(t)
+	settings.SelfServiceContextRateLimit = 2
+	built, err := store.NewQuestionnaire(
+		pool, 10*time.Second, integrationCoreConfig(t), config.QuestionnaireConfig{},
+		store.WithSelfServiceConfig(settings),
+	)
+	if err != nil {
+		t.Fatalf("NewQuestionnaire() error = %v", err)
+	}
+	repository, err := store.NewStayRepository(built)
+	if err != nil {
+		t.Fatalf("NewStayRepository() error = %v", err)
+	}
+	return repository
+}
+
+// Two buckets for one client is the observable form of "they do not share a
+// budget"; a single row would mean the counter was keyed by the subject alone.
+func assertDistinctBuckets(
+	t *testing.T,
+	ctx context.Context,
+	admin *pgxpool.Pool,
+	subject string,
+) {
+	t.Helper()
+	var buckets int
+	err := admin.QueryRow(ctx,
+		`SELECT count(DISTINCT subject_hmac) FROM platform.rate_limit_buckets
+		 WHERE scope = 'accommodation_invite_context'`,
+	).Scan(&buckets)
+	if err != nil {
+		t.Fatalf("count rate limit buckets: %v", err)
+	}
+	if buckets < 2 {
+		t.Fatalf("distinct buckets = %d, want one per poster", buckets)
+	}
+}
+
+func assertStayCount(
+	t *testing.T,
+	ctx context.Context,
+	admin *pgxpool.Pool,
+	accommodationID uuid.UUID,
+	want int,
+) {
+	t.Helper()
+	var count int
+	if err := admin.QueryRow(ctx,
+		`SELECT count(*) FROM core.stays WHERE accommodation_id = $1`, accommodationID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count stays: %v", err)
+	}
+	if count != want {
+		t.Fatalf("stays in %s = %d, want %d", accommodationID, count, want)
+	}
+}
+
+func assertStayBelongsTo(
+	t *testing.T,
+	ctx context.Context,
+	admin *pgxpool.Pool,
+	stayID uuid.UUID,
+	accommodationID uuid.UUID,
+) {
+	t.Helper()
+	var owner uuid.UUID
+	if err := admin.QueryRow(ctx,
+		`SELECT accommodation_id FROM core.stays WHERE id = $1`, stayID,
+	).Scan(&owner); err != nil {
+		t.Fatalf("read stay owner: %v", err)
+	}
+	if owner != accommodationID {
+		t.Fatalf("stay landed in %s, want %s", owner, accommodationID)
+	}
+}
+
+func assertApprovalState(
+	t *testing.T,
+	ctx context.Context,
+	admin *pgxpool.Pool,
+	stayID uuid.UUID,
+	want string,
+) {
+	t.Helper()
+	var state *string
+	if err := admin.QueryRow(ctx,
+		`SELECT approval_state FROM core.stays WHERE id = $1`, stayID,
+	).Scan(&state); err != nil {
+		t.Fatalf("read approval state: %v", err)
+	}
+	if state == nil || *state != want {
+		t.Fatalf("approval state = %v, want %s", state, want)
 	}
 }

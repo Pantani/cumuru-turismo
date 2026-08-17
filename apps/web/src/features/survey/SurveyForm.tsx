@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { components } from "../../generated/schema";
+import { guestCopyFor } from "../../shared/forms/guest-copy";
 import {
   type FormEvent,
   useEffect,
@@ -42,19 +43,14 @@ const guestMessages: Readonly<Record<number, string>> = {
   404: "Esta pesquisa não está mais disponível.",
   409: "A pesquisa mudou desde que você abriu esta página. Recarregue para ver a versão atual.",
   422: "Algumas respostas não foram aceitas. Revise e tente de novo.",
+  429: "Já houve envios demais desta rede agora há pouco.",
 };
 
 function errorMessage(error: unknown) {
   if (!(error instanceof ApiError)) {
     return "Sem conexão. Você pode preservar um rascunho cifrado neste dispositivo.";
   }
-  if (error.status === 429 && error.retryAfterSeconds !== null) {
-    return `Muitas tentativas. Aguarde ${error.retryAfterSeconds} segundos.`;
-  }
-  return (
-    guestMessages[error.status] ??
-    "Não conseguimos falar com o serviço agora. Tente de novo em alguns instantes."
-  );
+  return guestCopyFor(error, guestMessages);
 }
 
 interface SurveyDraft {
