@@ -418,7 +418,7 @@ CREATE TABLE core.group_submissions (
   CONSTRAINT group_submissions_channel_valid
     CHECK (collection_channel IN ('assisted', 'invite', 'self_service')),
   -- O nome é preservado de propósito: renomear obrigaria a caçar asserções em
-  -- test-migrations.sh e phase2_postgres_test.go sem ganho proporcional.
+  -- test-migrations.sh e core_postgres_test.go sem ganho proporcional.
   CONSTRAINT group_submissions_assisted_actor_valid
     CHECK (
       (collection_channel = 'assisted'     AND submitted_by_membership_id IS NOT NULL)
@@ -1275,7 +1275,7 @@ CREATE TABLE analytics.quality_snapshots (
   CONSTRAINT quality_snapshots_fnrh_valid
     CHECK (
       fnrh_failures IS NULL
-      AND fnrh_failures_reason = 'phase_not_implemented'
+      AND fnrh_failures_reason = 'not_implemented'
     )
 );
 

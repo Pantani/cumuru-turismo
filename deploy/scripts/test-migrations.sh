@@ -93,7 +93,7 @@ migration_files="$(
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_organization_document.down.sql\n000002_organization_document.up.sql\n000003_self_service_and_approval.down.sql\n000003_self_service_and_approval.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_organization_document.down.sql\n000002_organization_document.up.sql\n000003_self_service_and_approval.down.sql\n000003_self_service_and_approval.up.sql\n000004_rename_fnrh_failures_reason.down.sql\n000004_rename_fnrh_failures_reason.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
@@ -1241,7 +1241,7 @@ VALUES
     1,
     1,
     'pseudonym_not_approved',
-    'not_implemented'
+    'phase_not_implemented'
   ),
   (
     '00000000-0000-7000-8000-000000000702',
@@ -1252,7 +1252,7 @@ VALUES
     2,
     2,
     'pseudonym_not_approved',
-    'not_implemented'
+    'phase_not_implemented'
   );
 
 INSERT INTO analytics.quality_coverage (
@@ -1624,6 +1624,68 @@ self_service_rollback="$(
 )"
 test "${self_service_rollback}" = "true:true:migration_admin:false:false:0:0"
 
+# 000004 renomeia 'phase_not_implemented' para 'not_implemented'. A linha é
+# semeada aqui, ainda na 000003, porque a constraint da baseline só aceita o
+# valor antigo: é o único ponto em que a linha que a migração precisa reescrever
+# pode existir. As fixtures do começo do teste já foram removidas na limpeza.
+psql_as cumuru_migration cumuru-local-migration-only <<'SQL'
+INSERT INTO analytics.quality_snapshots (
+  id,
+  window_code,
+  updated_at,
+  incomplete_stays,
+  overdue_planned_departures,
+  silent_accommodations,
+  aggregation_failures,
+  suspected_duplicates_reason,
+  fnrh_failures_reason
+)
+VALUES (
+  '00000000-0000-7000-8000-000000000704',
+  'last_30_days',
+  TIMESTAMPTZ '2026-07-29T12:00:00Z',
+  1,
+  1,
+  1,
+  1,
+  'pseudonym_not_approved',
+  'phase_not_implemented'
+);
+SQL
+
 run_migrate up
 
-echo "migrations zero-to-three, rollback to zero, reapply, reversible document uniqueness, reversible self-service and approval, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
+# Prova as duas metades da 000004: a linha existente foi reescrita e a constraint
+# nova recusa o vocabulário antigo. Sem a segunda metade, um DROP CONSTRAINT sem
+# o ADD de volta passaria despercebido.
+fnrh_reason_rename="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT count(*) FILTER (WHERE fnrh_failures_reason = 'not_implemented')
+        || ':' || count(*) FILTER (
+          WHERE fnrh_failures_reason = 'phase_not_implemented'
+        )
+      FROM analytics.quality_snapshots
+    "
+)"
+test "${fnrh_reason_rename}" = "1:0"
+
+fnrh_reason_constraint="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      UPDATE analytics.quality_snapshots
+        SET fnrh_failures_reason = 'phase_not_implemented'
+        WHERE id = '00000000-0000-7000-8000-000000000704'
+    " 2>&1 || true
+)"
+case "${fnrh_reason_constraint}" in
+  *quality_snapshots_fnrh_valid*) ;;
+  *)
+    echo "a constraint nova aceitou o vocabulário antigo: ${fnrh_reason_constraint}" >&2
+    exit 1
+    ;;
+esac
+
+echo "migrations zero-to-four, rollback to zero, reapply, reversible document uniqueness, reversible self-service and approval, fnrh reason rename, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
