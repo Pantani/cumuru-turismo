@@ -235,23 +235,8 @@ post-task-quality: ## Gate obrigatório pós-tarefa: complexity, lint e marcador
 # pertence a outra sessão ou a uma dependência, e varrê-lo transformava lixo
 # alheio em falha do gate. `--others --exclude-standard` mantém no escopo o
 # script novo que ainda não foi adicionado ao índice.
-lint-shell: SHELL := /usr/bin/env bash
 lint-shell: ## Valida a sintaxe dos scripts shell versionados; ignora caminhos gitignored
-	@set -eu; \
-	files="$$(mktemp "$${TMPDIR:-/tmp}/cumuru-shell-lint.XXXXXX")"; \
-	trap 'rm -f -- "$$files"' 0 1 2 3 15; \
-	git ls-files -z --cached --others --exclude-standard -- '*.sh' >"$$files"; \
-	count=0; \
-	while IFS= read -r -d '' file; do \
-		test -f "$$file" || { \
-			echo "lint-shell: arquivo indexado ausente do worktree: $$file" >&2; \
-			exit 1; \
-		}; \
-		bash -n "$$file"; \
-		count=$$((count + 1)); \
-	done <"$$files"; \
-	test "$$count" -gt 0; \
-	echo "SHELL_SYNTAX=PASS files=$$count"
+	@bash deploy/scripts/lint-shell.sh
 
 lint: lint-shell ## Executa shell, go vet, Staticcheck e lint do web
 	go -C apps/api vet ./...
