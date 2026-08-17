@@ -252,6 +252,52 @@ describe("autocadastro pelo cartaz da acomodação", () => {
     expect(postCount(fetcher)).toBe(1);
   });
 
+  // D-06. O sinal de conclusão do R6 sobrevive ao token de propósito, mas
+  // precisa morrer com ele: sem isso, descartar a capability deixa a aba
+  // afirmando que houve um autocadastro que ela não pode mais comprovar. Sob
+  // ordem embaralhada isso vazava para o teste de fail-closed, em 2 de 5
+  // execuções; aqui a sequência é explícita e o resultado não depende de sorte.
+  it("esquece a conclusão quando a capability é descartada", async () => {
+    const user = userEvent.setup();
+    const { fetcher } = await renderLoadedForm();
+    fetcher.mockResolvedValueOnce(acceptedResponse());
+    await fillResidence(user);
+    await user.click(screen.getByRole("button", { name: "Enviar autocadastro" }));
+    await screen.findByRole("heading", { name: "Autocadastro enviado" });
+
+    // É o que o fim de sessão e um boot sem fragmento fazem.
+    clearSelfServiceCapability();
+    cleanup();
+    render(<SelfRegistrationPage />);
+
+    expect(
+      screen.getByRole("heading", { name: "Cartaz necessário" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Autocadastro enviado" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // O hóspede não pode receber `problem.title`: ele é escrito para quem opera o
+  // serviço. Com a API fora do ar, a tela pública chegou a mostrar
+  // "O serviço respondeu fora do contrato." a quem só queria se cadastrar.
+  it("não mostra ao hóspede o texto de erro do servidor que não sabe explicar", async () => {
+    capture();
+    const engineeringTitle = "Upstream dependency returned an unexpected shape.";
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      apiResponse(
+        { type: "about:blank", title: engineeringTitle, status: 503 },
+        { status: 503, headers: { "Content-Type": "application/problem+json" } },
+      ),
+    );
+
+    render(<SelfRegistrationPage />);
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent(/Não conseguimos falar com o serviço/u);
+    expect(document.documentElement.innerHTML).not.toContain(engineeringTitle);
+  });
+
   it("anuncia a espera de aprovação de 72 horas na conclusão", async () => {
     const user = userEvent.setup();
     const { fetcher } = await renderLoadedForm();

@@ -346,6 +346,26 @@ describe("registro por convite", () => {
     });
   });
 
+  // Tela de hóspede: `problem.title` é escrito para quem opera o serviço e não
+  // pode chegar a quem só veio preencher o convite.
+  it("não mostra ao hóspede o texto de erro do servidor que não sabe explicar", async () => {
+    captureCapability();
+    const engineeringTitle = "Upstream dependency returned an unexpected shape.";
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      phase2Response(
+        { type: "about:blank", title: engineeringTitle, status: 503 },
+        { status: 503, headers: { "Content-Type": "application/problem+json" } },
+      ),
+    );
+
+    render(<RegistrationPage />);
+
+    expect(
+      await screen.findByText(/Não conseguimos falar com o serviço/u),
+    ).toBeInTheDocument();
+    expect(document.documentElement.innerHTML).not.toContain(engineeringTitle);
+  });
+
   it("não apresenta violações axe no formulário carregado", async () => {
     captureCapability();
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(

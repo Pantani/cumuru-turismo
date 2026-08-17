@@ -153,6 +153,19 @@ test("percorre a jornada local sem persistir authorities", async ({
 }) => {
   const consoleErrors: string[] = [];
   const failedAPIResponses: string[] = [];
+  // A política que o NAVEGADOR recebeu, não a que o nginx pretende enviar. O
+  // gate integrado já afirma o cabeçalho servido; aqui o que se prova é a
+  // entrega ponta a ponta, com o documento carregado pelo próprio Chromium.
+  const documentPolicies: string[] = [];
+  page.on("response", (response) => {
+    if (response.request().resourceType() !== "document") {
+      return;
+    }
+    const policy = response.headers()["content-security-policy"];
+    if (policy !== undefined) {
+      documentPolicies.push(policy);
+    }
+  });
   // Exceção nomeada, deliberadamente estreita. O painel do cartaz consulta
   // GET /accommodations/{id}/invite assim que monta, e "não há cartaz ativo" é
   // 404 declarado no contrato, não falha. Tolerar 404 em geral cegaria o gate
@@ -524,6 +537,34 @@ test("percorre a jornada local sem persistir authorities", async ({
   // A tolerância do console também não pode sobreviver à sua causa: se nunca
   // ocorrer, ela virou cegueira e sai daqui. E cada ocorrência precisa vir da
   // rota do cartaz, não de qualquer 404 que o navegador resolva registrar.
+  // N-20: sem esta política o formulário público poderia abrir conexão para
+  // qualquer host, e o comentário "sem requisição externa" viraria afirmação sem
+  // lastro. Nenhum documento pode chegar ao navegador sem ela.
+  expect(documentPolicies.length).toBeGreaterThan(0);
+  for (const policy of documentPolicies) {
+    expect(policy).toContain("default-src 'self'");
+    expect(policy).toContain("connect-src 'self'");
+    expect(policy).toContain("script-src 'self'");
+    // data: é o que permite o QR desenhado no navegador; blob: seria bloqueado.
+    expect(policy).toContain("img-src 'self' data:");
+    expect(policy).toContain("frame-ancestors 'none'");
+    // Nenhuma origem externa em diretiva de busca: o toContain acima passaria se
+    // alguém apenas acrescentasse um host ao lado de 'self'.
+    for (const directive of ["connect-src", "script-src", "img-src"]) {
+      const value = policy
+        .split(";")
+        .map((part) => part.trim())
+        .find((part) => part.startsWith(`${directive} `));
+      expect(value, `${directive} is missing from the policy`).toBeDefined();
+      const sources = (value ?? "").slice(directive.length + 1).split(/\s+/u);
+      expect(
+        sources.filter((source) =>
+          !["'self'", "'none'", "data:"].includes(source)
+        ),
+        `${directive} admits an external source`,
+      ).toEqual([]);
+    }
+  }
   expect(declaredPosterConsoleErrors.length).toBeGreaterThan(0);
   for (const logged of declaredPosterConsoleErrors) {
     expect(logged).toMatch(

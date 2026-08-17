@@ -528,4 +528,56 @@ if test "${active_posters}" != "2"; then
   fail "expected one active poster per accommodation after rotation, found ${active_posters}"
 fi
 
-echo "phase 7 full stack passed: contract surface, generated client, uniform 404 for absent capabilities, header-only capability transport, the approval queue as a listStays filter, the real proof-of-work pair over HTTP with tampered, mismatched and replayed controls, and poster rotation invalidating the previous token"
+# ---------------------------------------------------------------------------
+# Content-Security-Policy (N-20, metade não afirmada).
+#
+# A promessa mais forte do canal aberto — o formulário público não fala com
+# terceiro — repousa inteiramente nesta política. Até aqui ela existia no nginx e
+# em nenhum teste: podia sumir numa edição de configuração sem quebrar nada.
+#
+# A asserção é sobre a política SERVIDA, não sobre o arquivo de configuração:
+# ler default.conf provaria a intenção, não a entrega.
+csp_header="$(request_headers "the served security policy" GET / '' '' |
+  tr -d '\r' | sed -n 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: //p')"
+if test -z "${csp_header}"; then
+  fail "the web surface served no Content-Security-Policy header"
+fi
+
+# Diretivas exigidas, com o valor exato. 'self' em connect-src é o que impede a
+# página de abrir conexão para qualquer host; data: em img-src é o que permite o
+# QR desenhado no navegador sem abrir espaço para imagem remota.
+for directive in \
+  "default-src 'self'" \
+  "connect-src 'self'" \
+  "script-src 'self'" \
+  "img-src 'self' data:" \
+  "style-src 'self'" \
+  "base-uri 'none'" \
+  "frame-ancestors 'none'" \
+  "form-action 'self'"; do
+  case "${csp_header}" in
+    *"${directive}"*) ;;
+    *) fail "the Content-Security-Policy lost the directive [${directive}]: ${csp_header}" ;;
+  esac
+done
+
+# Nenhuma diretiva de busca pode admitir origem externa. A checagem acima casa
+# prefixo e passaria se alguém ACRESCENTASSE um host — "connect-src 'self'
+# https://terceiro" contém "connect-src 'self'". Esta segunda varredura fecha
+# essa porta olhando o valor inteiro de cada diretiva.
+for directive in connect-src script-src img-src default-src style-src; do
+  value="$(printf '%s' "${csp_header}" |
+    tr ';' '\n' |
+    sed -n "s/^ *${directive} //p")"
+  if test -z "${value}"; then
+    continue
+  fi
+  for token in ${value}; do
+    case "${token}" in
+      "'self'" | "'none'" | "data:") ;;
+      *) fail "the Content-Security-Policy admits an external source in ${directive}: [${token}]" ;;
+    esac
+  done
+done
+
+echo "phase 7 full stack passed: contract surface, generated client, uniform 404 for absent capabilities, header-only capability transport, the approval queue as a listStays filter, the real proof-of-work pair over HTTP with tampered, mismatched and replayed controls, poster rotation invalidating the previous token, and a Content-Security-Policy that admits no external source"

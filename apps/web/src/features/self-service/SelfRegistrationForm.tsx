@@ -12,8 +12,7 @@ import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import { deleteDraft, saveDraft } from "../../shared/offline/encrypted-drafts";
 import { solveProofOfWork } from "../../shared/security/proof-of-work";
 import {
-  clearSelfServiceCapability,
-  markSelfRegistrationCompleted,
+  completeSelfRegistration,
   peekSelfServiceCapability,
 } from "../../shared/security/self-service-capability";
 import { setSurveyCapability } from "../../shared/security/survey-capability";
@@ -194,12 +193,11 @@ export function SelfRegistrationForm() {
       });
       setSurveyCapability(result.surveyCapability);
       await discardDraft(draftIdRef);
-      // O sinal de conclusão é registrado antes de o token ser descartado, e
-      // sobrevive a ele. `setCompleted` continua valendo para o caso em que
-      // este subtree não é desmontado; os dois caminhos renderizam a mesma
+      // Consome o cartaz e registra a conclusão numa transição só. O sinal
+      // sobrevive ao token; `setCompleted` continua valendo para o caso em que
+      // este subtree não é desmontado, e os dois caminhos renderizam a mesma
       // confirmação, de modo que a tela não depende de quem redesenha primeiro.
-      markSelfRegistrationCompleted();
-      clearSelfServiceCapability();
+      completeSelfRegistration();
       setCompleted(true);
     } catch (error) {
       await preserveDraft(draft, error);

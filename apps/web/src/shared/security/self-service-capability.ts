@@ -29,18 +29,30 @@ export function captureSelfServiceCapability(
   return captured;
 }
 
-export const clearSelfServiceCapability = capability.clear;
-export const peekSelfServiceCapability = capability.peek;
+/**
+ * O sinal morre com a capability que o originou. Sem isto, descartar o token
+ * deixava a aba afirmando uma conclusão que ela já não podia comprovar, e um
+ * `/i` aberto sem fragmento mostrava confirmação obsoleta.
+ */
+export function clearSelfServiceCapability() {
+  selfRegistrationCompleted = false;
+  capability.forget();
+  notifyCapabilityChange();
+}
 
 /**
- * Notifica por conta própria para que a ordem entre marcar e descartar o token
- * deixe de ser carga oculta: qualquer uma das duas chamadas basta para a tela
- * se atualizar.
+ * Transição atômica do sucesso: o cartaz é consumido — a ADR-019 exige que ele
+ * não sobreviva — e a conclusão passa a valer, com **uma** notificação. Fazer
+ * as duas coisas em chamadas separadas obrigaria a confiar no lote de render do
+ * React para que a tela não piscasse "Cartaz necessário" entre elas.
  */
-export function markSelfRegistrationCompleted() {
+export function completeSelfRegistration() {
+  capability.forget();
   selfRegistrationCompleted = true;
   notifyCapabilityChange();
 }
+
+export const peekSelfServiceCapability = capability.peek;
 
 export function peekSelfRegistrationCompleted() {
   return selfRegistrationCompleted;

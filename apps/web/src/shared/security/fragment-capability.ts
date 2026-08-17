@@ -13,6 +13,13 @@ const capabilityPattern = /^[A-Za-z0-9_-]{64,128}$/;
 export interface FragmentCapability {
   capture: (url: URL, replace: (path: string) => void) => boolean;
   clear: () => void;
+  /**
+   * Esquece o token **sem** notificar, para quem precisa compor o descarte com
+   * outra mudança de estado e emitir uma notificação só. Duas notificações em
+   * sequência fazem a tela passar por um estado intermediário que nunca foi
+   * verdadeiro.
+   */
+  forget: () => void;
   peek: () => string | null;
 }
 
@@ -58,6 +65,9 @@ export function createFragmentCapability(
     clear() {
       capability = null;
       notifyCapabilityChange();
+    },
+    forget() {
+      capability = null;
     },
     peek() {
       return capability;

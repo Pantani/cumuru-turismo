@@ -70,14 +70,29 @@ function requestFrom(
   };
 }
 
+/**
+ * O convite é tela de hóspede, então `problem.title` não chega até ele: o
+ * título do problema é escrito para quem opera o serviço e pode ser jargão sem
+ * ação possível. Os status que a pessoa pode resolver têm cópia própria aqui;
+ * o resto vira uma frase que ela consegue usar.
+ */
+const guestMessages: Readonly<Record<number, string>> = {
+  404: "Convite expirado.",
+  409: "O aviso de privacidade mudou desde que este convite foi criado. Peça outro à hospedagem.",
+  422: "Alguns dados não foram aceitos. Revise e tente de novo.",
+};
+
 function errorMessage(error: unknown) {
-  if (error instanceof Phase2ApiError) {
-    if (error.status === 429 && error.retryAfterSeconds !== null) {
-      return `Muitas tentativas. Aguarde ${error.retryAfterSeconds} segundos.`;
-    }
-    return error.problem.title;
+  if (!(error instanceof Phase2ApiError)) {
+    return "Sem conexão. O rascunho foi preservado neste dispositivo.";
   }
-  return "Sem conexão. O rascunho foi preservado neste dispositivo.";
+  if (error.status === 429 && error.retryAfterSeconds !== null) {
+    return `Muitas tentativas. Aguarde ${error.retryAfterSeconds} segundos.`;
+  }
+  return (
+    guestMessages[error.status] ??
+    "Não conseguimos falar com o serviço agora. Tente de novo em alguns instantes."
+  );
 }
 
 async function removeDraft(id: string | null) {

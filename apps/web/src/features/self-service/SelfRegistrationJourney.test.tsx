@@ -59,6 +59,23 @@ function acceptedResponse() {
   );
 }
 
+/**
+ * O passo de setup carrega a página por `import()` dinâmico e ainda espera o
+ * contexto do cartaz. O padrão de 1s do `findBy*` é orçamento de asserção, não
+ * de partida: sob carga isso estourava e a falha aparecia no setup, escondendo
+ * o que o teste realmente afirma. As asserções seguintes continuam com o
+ * padrão — só a largada ganhou folga.
+ */
+const FORM_READY_TIMEOUT_MS = 10_000;
+
+function formReady() {
+  return screen.findByRole(
+    "heading",
+    { name: "Confirme os dados da estadia" },
+    { timeout: FORM_READY_TIMEOUT_MS },
+  );
+}
+
 function renderApp() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -96,7 +113,7 @@ describe("jornada do autocadastro dentro do App", () => {
       .mockResolvedValueOnce(apiResponse(inviteContext))
       .mockResolvedValueOnce(acceptedResponse());
     renderApp();
-    await screen.findByRole("heading", { name: "Confirme os dados da estadia" });
+    await formReady();
     await user.type(
       screen.getByLabelText("UF de residência do visitante 1"),
       "BA",
@@ -123,7 +140,7 @@ describe("jornada do autocadastro dentro do App", () => {
       .mockResolvedValueOnce(apiResponse(inviteContext))
       .mockResolvedValueOnce(acceptedResponse());
     renderApp();
-    await screen.findByRole("heading", { name: "Confirme os dados da estadia" });
+    await formReady();
     await user.type(
       screen.getByLabelText("UF de residência do visitante 1"),
       "BA",

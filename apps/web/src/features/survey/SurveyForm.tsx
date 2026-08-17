@@ -36,14 +36,27 @@ import {
 
 const surveyClient = createPhase3Client({ getAccessToken: () => null });
 
+/**
+ * Mesma regra da tela de convite: a pesquisa é respondida pelo hóspede, e o
+ * `problem.title` é escrito para quem opera o serviço.
+ */
+const guestMessages: Readonly<Record<number, string>> = {
+  404: "Esta pesquisa não está mais disponível.",
+  409: "A pesquisa mudou desde que você abriu esta página. Recarregue para ver a versão atual.",
+  422: "Algumas respostas não foram aceitas. Revise e tente de novo.",
+};
+
 function errorMessage(error: unknown) {
-  if (error instanceof Phase3ApiError) {
-    if (error.status === 429 && error.retryAfterSeconds !== null) {
-      return `Muitas tentativas. Aguarde ${error.retryAfterSeconds} segundos.`;
-    }
-    return error.problem.title;
+  if (!(error instanceof Phase3ApiError)) {
+    return "Sem conexão. Você pode preservar um rascunho cifrado neste dispositivo.";
   }
-  return "Sem conexão. Você pode preservar um rascunho cifrado neste dispositivo.";
+  if (error.status === 429 && error.retryAfterSeconds !== null) {
+    return `Muitas tentativas. Aguarde ${error.retryAfterSeconds} segundos.`;
+  }
+  return (
+    guestMessages[error.status] ??
+    "Não conseguimos falar com o serviço agora. Tente de novo em alguns instantes."
+  );
 }
 
 interface SurveyDraft {

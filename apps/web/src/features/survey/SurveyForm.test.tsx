@@ -72,6 +72,31 @@ describe("pesquisa pública", () => {
     vi.unstubAllGlobals();
   });
 
+  // Tela de hóspede: `problem.title` é escrito para quem opera o serviço.
+  it("não mostra ao hóspede o texto de erro do servidor que não sabe explicar", async () => {
+    const engineeringTitle = "Upstream dependency returned an unexpected shape.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json(
+          { type: "about:blank", title: engineeringTitle, status: 503 },
+          {
+            status: 503,
+            headers: { ...headers, "Content-Type": "application/problem+json" },
+          },
+        ),
+      ),
+    );
+    setSurveyCapability("payload.signature");
+
+    renderSurvey();
+
+    expect(
+      await screen.findByText(/Não conseguimos falar com o serviço/u),
+    ).toBeInTheDocument();
+    expect(document.documentElement.innerHTML).not.toContain(engineeringTitle);
+  });
+
   it("falha fechada sem capability e não consulta a API", () => {
     const fetcher = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", fetcher);
