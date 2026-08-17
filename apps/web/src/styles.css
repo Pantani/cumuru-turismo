@@ -176,10 +176,14 @@ summary:focus-visible,
   background: var(--brand-wash);
 }
 
+/* minmax(0, 1fr): a coluna implícita seria max-content, e aí qualquer conteúdo
+   largo — a navegação que deveria rolar sozinha, uma tabela — empurraria o
+   cabeçalho, o rodapé e a página inteira para fora da viewport. */
 .site-shell {
   min-height: 100dvh;
   display: grid;
   grid-template-rows: auto auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .skip-link {
