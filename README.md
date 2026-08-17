@@ -157,7 +157,7 @@ entregues pela fundação.
 
 Versões principais fixadas:
 
-- Go 1.26.5;
+- Go 1.26.6;
 - PostgreSQL 17.10;
 - React e React DOM 19.2.8;
 - TypeScript 7.0.2;
