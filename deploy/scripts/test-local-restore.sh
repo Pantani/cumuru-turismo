@@ -16,6 +16,19 @@ COMPOSE=(
 )
 MIGRATION_URL="postgres://cumuru_migration:cumuru-local-migration-only@postgres:5432/${SOURCE_DATABASE}?sslmode=disable"
 
+# A versão esperada vem do diretório de migrations, não de um literal: fixá-la
+# fazia o drill quebrar em toda migration nova por um motivo que nada tem a ver
+# com dump e restore.
+latest_migration_version() {
+  local latest
+  latest="$(find "${ROOT_DIR}/apps/api/migrations" -name '*.up.sql' -print |
+    sed -e 's|.*/||' -e 's|_.*||' |
+    sort -n |
+    tail -n 1)"
+  test -n "${latest}"
+  printf '%s' "$((10#${latest}))"
+}
+
 cleanup() {
   local primary_status=$?
   local cleanup_status=0
@@ -45,6 +58,16 @@ psql_as() {
     -e "PGPASSWORD=${password}" \
     postgres psql --no-psqlrc --set=ON_ERROR_STOP=1 \
     --username="${user}" --dbname="${database}" "$@"
+}
+
+# `test a = b` falha sem dizer nada e o log do CI termina no erro do make, sem
+# o valor que divergiu. A comparação passa a nomear os dois lados.
+assert_fingerprint() {
+  local label="$1" actual="$2" expected="$3"
+  if test "${actual}" != "${expected}"; then
+    echo "fingerprint da ${label}: ${actual}, esperado ${expected}" >&2
+    return 1
+  fi
 }
 
 expect_psql_failure() {
@@ -186,8 +209,9 @@ VALUES (
 );
 SQL
 
+expected_fingerprint="$(latest_migration_version):false:1:1:1:1:6:4"
 source_fingerprint="$(database_fingerprint "${SOURCE_DATABASE}")"
-test "${source_fingerprint}" = "1:false:1:1:1:1:6:4"
+assert_fingerprint "origem" "${source_fingerprint}" "${expected_fingerprint}"
 
 "${COMPOSE[@]}" exec -T \
   -e "PGPASSWORD=${ADMIN_PASSWORD}" \
@@ -227,7 +251,7 @@ SQL
   "${DUMP_PATH}"
 
 restore_fingerprint="$(database_fingerprint "${RESTORE_DATABASE}")"
-test "${restore_fingerprint}" = "${source_fingerprint}"
+assert_fingerprint "restauração" "${restore_fingerprint}" "${source_fingerprint}"
 
 schema_owners="$(
   psql_as "${RESTORE_DATABASE}" postgres "${ADMIN_PASSWORD}" \
