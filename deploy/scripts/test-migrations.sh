@@ -48,7 +48,6 @@ acquire_gate_lock() {
 }
 
 cleanup() {
-  cumuru_release_subnet
   local primary_status=$?
   trap - EXIT
   set +e
@@ -56,6 +55,9 @@ cleanup() {
   local cleanup_status=$?
   release_gate_lock
   set -e
+  # O lock só cai depois do teardown: é isso que impede a execução seguinte de
+  # pedir um endereço que ainda está sendo liberado.
+  cumuru_release_subnet
   if test "${primary_status}" -ne 0; then
     exit "${primary_status}"
   fi
