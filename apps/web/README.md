@@ -67,11 +67,12 @@ enquanto a aba estiver aberta: nada é persistido em `localStorage` ou
 
 ## Guias em PDF
 
-`public/guias/` serve as duas cartilhas que a capa oferece para download. Os
-originais versionados ficam na raiz do repositório
-(`guia-simples-observatorio-fnrh-prefeitura.pdf` e
-`guia-gerar-chave-fnrh-hospedagens.pdf`); ao atualizar um deles, copie a nova
-versão para `public/guias/` na mesma mudança.
+`public/guias/` é a única localização das duas cartilhas que a capa oferece
+para download: o README da raiz aponta para cá em vez de manter uma segunda
+cópia. Uma cópia só significa que não existe passo de sincronização para
+esquecer nem versão para divergir, e o contexto do build da imagem já é
+`apps/web/`, então o Nginx serve os arquivos sem etapa extra. Os `.docx` de
+origem continuam na raiz, fora do que a aplicação publica.
 
 O lint usa `apps/web/.oxlintrc.json` e cobre todo arquivo TypeScript, TSX e
 JavaScript próprio dentro de `apps/web`, incluindo `vite.config.ts`, testes e o

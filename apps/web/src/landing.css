@@ -92,6 +92,7 @@
   --lp-ink: var(--ink);
   --lp-muted: var(--ink-2);
   --lp-rule: var(--line);
+
   color: var(--lp-ink);
   background: var(--bg);
 }
@@ -100,6 +101,7 @@
   --lp-ink: var(--ink);
   --lp-muted: var(--ink-2);
   --lp-rule: var(--line);
+
   color: var(--lp-ink);
   background: var(--surface);
 }
@@ -108,6 +110,7 @@
   --lp-ink: var(--on-accent);
   --lp-muted: var(--on-accent-2);
   --lp-rule: color-mix(in srgb, var(--on-accent) 22%, transparent);
+
   color: var(--lp-ink);
   background: var(--ink);
 }
@@ -116,6 +119,7 @@
   --lp-ink: var(--on-accent);
   --lp-muted: var(--on-accent-2);
   --lp-rule: color-mix(in srgb, var(--on-accent) 22%, transparent);
+
   color: var(--lp-ink);
   background: var(--sand-2);
 }
@@ -124,6 +128,7 @@
   --lp-ink: var(--on-accent);
   --lp-muted: color-mix(in srgb, var(--on-accent) 80%, transparent);
   --lp-rule: color-mix(in srgb, var(--on-accent) 85%, transparent);
+
   color: var(--lp-ink);
   background: var(--coral);
 }
