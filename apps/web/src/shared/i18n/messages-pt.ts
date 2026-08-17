@@ -223,7 +223,7 @@ export const messagesPt = {
   // ----------------------------------------------------------- Landing: contato
   "landing.contact.title": "Quer entender melhor antes de entrar?",
   "landing.contact.lead":
-    "A equipe passa nas hospedagens para explicar pessoalmente e ajudar no primeiro cadastro. Chame pelo WhatsApp ou peça uma visita.",
+    "A equipe passa nas hospedagens para explicar pessoalmente e ajudar no primeiro cadastro. Escreva para a equipe ou peça uma visita.",
   "landing.contact.write": "Escrever para a equipe",
   "landing.contact.visit": "Pedir uma visita",
   "landing.contact.email": "E-mail",

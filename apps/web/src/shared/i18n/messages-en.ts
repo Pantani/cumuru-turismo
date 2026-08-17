@@ -14,7 +14,7 @@ export const messagesEn: Messages = {
   "app.brand.name": "Tourism Observatory",
   "app.brand.place": "Cumuruxatiba · Prado, Bahia",
   "app.signOut": "Sign out",
-  "app.documentTitle": "{page} · Observatório Turístico de Cumuruxatiba",
+  "app.documentTitle": "{page} · Tourism Observatory of Cumuruxatiba",
   "app.routeAnnounce": "Current page: {title}",
   "app.routeLoading": "Loading page…",
   "app.footer.note":
@@ -216,7 +216,7 @@ export const messagesEn: Messages = {
   // ----------------------------------------------------------- Landing: contato
   "landing.contact.title": "Want to understand it better before joining?",
   "landing.contact.lead":
-    "The team visits lodgings to explain in person and help with the first registration. Message on WhatsApp or ask for a visit.",
+    "The team visits lodgings to explain in person and help with the first registration. Email the team or ask for a visit.",
   "landing.contact.write": "Email the team",
   "landing.contact.visit": "Ask for a visit",
   "landing.contact.email": "Email",

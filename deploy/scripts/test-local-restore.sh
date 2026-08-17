@@ -21,11 +21,23 @@ MIGRATION_URL="postgres://cumuru_migration:cumuru-local-migration-only@postgres:
 # com dump e restore.
 latest_migration_version() {
   local latest
-  latest="$(find "${ROOT_DIR}/apps/api/migrations" -name '*.up.sql' -print |
+  # Mesmo escopo de `test-migrations.sh`: apenas arquivo comum no primeiro
+  # nível. Uma fixture aninhada não pode eleger uma versão que a checagem de
+  # migrations não reconhece.
+  latest="$(find "${ROOT_DIR}/apps/api/migrations" \
+    -maxdepth 1 -type f -name '*.up.sql' -print |
     sed -e 's|.*/||' -e 's|_.*||' |
-    sort -n |
+    LC_ALL=C sort -n |
     tail -n 1)"
   test -n "${latest}"
+  # `10#` sobre prefixo não numérico aborta com erro de sintaxe do shell; a
+  # recusa explícita diz qual arquivo está fora da convenção.
+  case "${latest}" in
+    *[!0-9]*)
+      echo "prefixo de migration fora da convenção numérica: ${latest}" >&2
+      return 1
+      ;;
+  esac
   printf '%s' "$((10#${latest}))"
 }
 
