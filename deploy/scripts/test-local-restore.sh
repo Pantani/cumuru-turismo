@@ -186,8 +186,17 @@ VALUES (
 );
 SQL
 
+# A primeira coluna é a versão aplicada em public.schema_migrations. Ao
+# adicionar uma migration, atualize esta expectativa junto.
+EXPECTED_SOURCE_FINGERPRINT="2:false:1:1:1:1:6:4"
+
 source_fingerprint="$(database_fingerprint "${SOURCE_DATABASE}")"
-test "${source_fingerprint}" = "1:false:1:1:1:1:6:4"
+if test "${source_fingerprint}" != "${EXPECTED_SOURCE_FINGERPRINT}"; then
+  echo "source fingerprint mismatch" >&2
+  echo "expected=${EXPECTED_SOURCE_FINGERPRINT}" >&2
+  echo "actual=${source_fingerprint}" >&2
+  exit 1
+fi
 
 "${COMPOSE[@]}" exec -T \
   -e "PGPASSWORD=${ADMIN_PASSWORD}" \
@@ -227,7 +236,12 @@ SQL
   "${DUMP_PATH}"
 
 restore_fingerprint="$(database_fingerprint "${RESTORE_DATABASE}")"
-test "${restore_fingerprint}" = "${source_fingerprint}"
+if test "${restore_fingerprint}" != "${source_fingerprint}"; then
+  echo "restored fingerprint diverged from the source" >&2
+  echo "source=${source_fingerprint}" >&2
+  echo "restore=${restore_fingerprint}" >&2
+  exit 1
+fi
 
 schema_owners="$(
   psql_as "${RESTORE_DATABASE}" postgres "${ADMIN_PASSWORD}" \

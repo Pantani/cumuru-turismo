@@ -50,9 +50,9 @@ export DOCKER_SERVICES DOCKER_LOG_TAIL
 	local-demo-test local-demo-e2e phase4-remediation \
 	phase7-integration phase7-full-stack phase7-build \
 	docker-dev docker-dev-down docker-dev-logs docker-dev-status \
-	docker-rm docker-renew seed prod-config-check \
+	docker-rm docker-renew seed prod-config-check prod-config-example \
 	post-task-quality lint-shell lint lint-fix images sbom image-sbom scanner-images scan image-scan compose-config up down migrate-up \
-	migrate-down-local smoke ci
+	migrate-down-local smoke smoke-local ci
 
 help: ## Lista os targets públicos disponíveis
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "  %-28s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -495,6 +495,10 @@ prod-config-check: ## Valida RUNTIME_ENV com os loaders reais de produção; nã
 	esac; \
 	go -C apps/api run ./cmd/configcheck "$$target"
 
+prod-config-example: ## Valida deploy/runtime.env.example com os loaders reais de produção
+	@$(MAKE) --no-print-directory prod-config-check \
+		RUNTIME_ENV=deploy/runtime.env.example
+
 docker-dev-down: ## Para a stack de hot reload; preserva volumes e a stack estática
 	@"$(WITH_BUILD_METADATA)" $(DEV_COMPOSE) down --remove-orphans
 
@@ -587,9 +591,23 @@ smoke: ## Executa o smoke da stack Compose local
 	@LOCAL_FAKE_OIDC_TOKEN=cumuru-local-platform-read \
 		SMOKE_PROFILE=local-demo bash deploy/scripts/smoke.sh
 
+smoke-local: ## Sobe a stack local, executa o smoke e derruba a stack mesmo em falha
+	@set -eu; \
+	$(MAKE) --no-print-directory up; \
+	smoke_status=0; \
+	$(MAKE) --no-print-directory smoke || smoke_status=$$?; \
+	down_status=0; \
+	$(MAKE) --no-print-directory down || down_status=$$?; \
+	if test "$$smoke_status" -ne 0; then exit "$$smoke_status"; fi; \
+	exit "$$down_status"
+
 ci: ## Executa o gate completo sequencial; pesado, usa Docker e rede
+	@# Espelha os jobs de .github/workflows/ci.yml; o workflow os executa em
+	@# paralelo e este alvo mantém a mesma cobertura em execução local.
 	@$(MAKE) --no-print-directory openapi-lint
 	@$(MAKE) --no-print-directory generated-check
+	@$(MAKE) --no-print-directory compose-config
+	@$(MAKE) --no-print-directory prod-config-example
 	@$(MAKE) --no-print-directory migration-test
 	@$(MAKE) --no-print-directory local-restore-drill
 	@$(MAKE) --no-print-directory local-demo-test
@@ -609,6 +627,7 @@ ci: ## Executa o gate completo sequencial; pesado, usa Docker e rede
 	@$(MAKE) --no-print-directory phase2-full-stack
 	@$(MAKE) --no-print-directory phase4-benchmark
 	@$(MAKE) --no-print-directory local-demo-e2e
+	@$(MAKE) --no-print-directory smoke-local
 	@$(MAKE) --no-print-directory sbom
 	@$(MAKE) --no-print-directory scan
 	@$(MAKE) --no-print-directory image-scan
