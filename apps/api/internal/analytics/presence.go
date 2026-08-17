@@ -19,8 +19,12 @@ const (
 )
 
 type PresenceSource struct {
-	StayID           uuid.UUID
-	Status           stay.Status
+	StayID uuid.UUID
+	Status stay.Status
+	// Approval has no usable zero value: a source assembled without reading
+	// approval_state is refused by validPresenceSource instead of being
+	// materialized as if somebody had approved it.
+	Approval         stay.ApprovalState
 	PlannedArrival   stay.CivilDate
 	PlannedDeparture stay.CivilDate
 	CheckedInAt      *time.Time
@@ -48,7 +52,8 @@ func MaterializePresence(
 		return nil, ErrInvalidPresenceSource
 	}
 	days, err := stay.PresenceDaysAt(stay.Stay{
-		Status: source.Status, PlannedArrival: source.PlannedArrival,
+		Status: source.Status, Approval: source.Approval,
+		PlannedArrival:   source.PlannedArrival,
 		PlannedDeparture: source.PlannedDeparture,
 		CheckedInAt:      source.CheckedInAt, CheckedOutAt: source.CheckedOutAt,
 	}, asOf)
@@ -69,13 +74,21 @@ func MaterializePresence(
 }
 
 func validPresenceSource(source PresenceSource, preRegisteredWeight float64) bool {
-	if source.StayID == uuid.Nil || source.Version < 1 {
+	if !validSourceIdentity(source) {
 		return false
 	}
 	if preRegisteredWeight <= 0 || preRegisteredWeight > 1 {
 		return false
 	}
 	return distinctVisitors(source.VisitorIDs)
+}
+
+// The approval decision is part of the identity of a presence source: a source
+// assembled without it is not incomplete, it is undecided.
+func validSourceIdentity(source PresenceSource) bool {
+	return source.StayID != uuid.Nil &&
+		source.Version >= 1 &&
+		source.Approval.Valid()
 }
 
 func distinctVisitors(visitorIDs []uuid.UUID) bool {

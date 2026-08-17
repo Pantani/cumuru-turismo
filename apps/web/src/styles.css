@@ -1,63 +1,74 @@
 /* ===========================================================================
-   Cumuru — sistema visual
+   Cumuru — sistema visual do Observatório
 
    Uma única fonte de verdade para cor, tipografia, superfície e movimento.
-   Nenhum valor de cor é escrito fora deste bloco de tokens: o tema escuro
-   redefine apenas os tokens e todo o resto acompanha.
+   Nenhum valor de cor é escrito fora deste bloco de tokens.
 
-   A paleta vem do próprio lugar: mar aberto (teal), falésia de argila
-   (coral) e areia clara. Observado é sempre teal, previsto é sempre coral e
-   dado protegido é sempre neutro — a cor carrega significado, não decoração.
+   O sistema é escuro por desenho, não por preferência do sistema operacional:
+   o Observatório tem uma identidade só, da capa pública à área da hospedagem.
+   Trocar de rota não pode trocar a marca.
+
+   A paleta vem do próprio lugar: mar aberto (teal), falésia de argila (coral)
+   e areia clara. Observado é sempre teal, previsto é sempre coral e dado
+   protegido é sempre neutro — a cor carrega significado, não decoração.
    =========================================================================== */
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
   /* Superfícies */
-  --bg: #eff5f5;
-  --bg-tint-a: rgba(0, 120, 110, 0.07);
-  --bg-tint-b: rgba(224, 86, 58, 0.05);
-  --surface: #ffffff;
-  --surface-2: #f6faf9;
-  --surface-sunken: #e3edec;
-  --line: #ccdedd;
-  --line-strong: #a9c5c3;
+  --bg: #04171a;
+  --bg-tint-a: rgba(47, 194, 175, 0.08);
+  --bg-tint-b: rgba(255, 90, 54, 0.07);
+  --surface: #0a2529;
+  --surface-2: #0e2c31;
+  --surface-sunken: #04171a;
+  --line: rgba(242, 233, 220, 0.14);
+  --line-strong: rgba(242, 233, 220, 0.28);
 
   /* Texto */
-  --ink: #072429;
-  --ink-2: #23474e;
-  --ink-3: #446a71;
+  --ink: #f2e9dc;
+  --ink-2: #b7c9c6;
+  --ink-3: #7f9995;
+
+  /* Tinta para superfícies claras: coral, teal e areia são fundos, não texto. */
+  --on-accent: #04171a;
+  --on-accent-2: #3d5a5c;
+  /* Argila: a única faixa editorial da capa que não é um tom já nomeado. */
+  --sand-2: #e8dbc8;
 
   /* Marca e dados */
-  --brand: #00786e;
-  --brand-strong: #005b53;
-  --brand-wash: #d5efeb;
-  --brand-ring: rgba(0, 120, 110, 0.32);
+  --brand: #2fc2af;
+  --brand-strong: #63dbc8;
+  --brand-wash: rgba(47, 194, 175, 0.14);
+  --brand-ring: rgba(47, 194, 175, 0.38);
 
-  --coral: #d9542f;
-  --coral-strong: #a63a1c;
-  --coral-wash: #fbe4dc;
+  --coral: #ff5a36;
+  --coral-strong: #ff8a6d;
+  --coral-wash: rgba(255, 90, 54, 0.16);
 
-  --positive: #0b7a55;
-  --positive-wash: #d7ede3;
-  --danger: #b8331b;
-  --danger-wash: #fbe2dd;
+  --positive: #35c48c;
+  --positive-wash: rgba(53, 196, 140, 0.14);
+  --danger: #ff7a63;
+  --danger-wash: rgba(255, 122, 99, 0.16);
 
   /* Neutro de "sem dado": nunca compete com observado nem com previsto */
-  --muted-mark: #8ba7a9;
+  --muted-mark: #3c565a;
 
-  /* Sombras tingidas com o matiz do fundo, nunca preto puro */
-  --shadow-sm: 0 1px 2px rgba(7, 36, 41, 0.05);
-  --shadow: 0 2px 4px rgba(7, 36, 41, 0.04), 0 8px 20px -12px rgba(7, 36, 41, 0.18);
-  --shadow-lg: 0 4px 8px rgba(7, 36, 41, 0.05), 0 24px 48px -24px rgba(7, 36, 41, 0.28);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 20px -12px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.35), 0 24px 48px -24px rgba(0, 0, 0, 0.8);
 
   /* Escala */
   --space-section: clamp(2.75rem, 5vw, 4.5rem);
   --space-block: clamp(1.5rem, 3vw, 2.25rem);
-  --shell: min(100% - 2.5rem, 78rem);
-  --radius-sm: 0.375rem;
-  --radius: 0.625rem;
-  --radius-lg: 1rem;
+  --shell: min(100% - 2.5rem, 82.5rem);
+  --radius-sm: 0.5rem;
+  --radius: 0.875rem;
+  --radius-lg: 1.25rem;
+  --radius-pill: 999px;
+  /* Altura do cabeçalho de rotas; o índice de seções da capa gruda logo abaixo. */
+  --header-h: 4.8125rem;
 
   /* Movimento */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -66,6 +77,10 @@
   --font-ui:
     "Geist Variable", ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Display editorial: títulos e números grandes, nunca texto corrido. */
+  --font-display:
+    "Bricolage Grotesque Variable", "Geist Variable", ui-sans-serif, system-ui,
+    sans-serif;
   --font-num:
     "Geist Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
     Consolas, monospace;
@@ -76,45 +91,6 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-
-    --bg: #061a1d;
-    --bg-tint-a: rgba(47, 194, 175, 0.1);
-    --bg-tint-b: rgba(255, 126, 92, 0.07);
-    --surface: #0d262a;
-    --surface-2: #123036;
-    --surface-sunken: #04161a;
-    --line: #1d3d43;
-    --line-strong: #2d5b62;
-
-    --ink: #e6f2f1;
-    --ink-2: #bdd5d5;
-    --ink-3: #8fadb0;
-
-    --brand: #2fc2af;
-    --brand-strong: #63dbc8;
-    --brand-wash: #0a3b37;
-    --brand-ring: rgba(47, 194, 175, 0.38);
-
-    --coral: #ff7e5c;
-    --coral-strong: #ff9d80;
-    --coral-wash: #3d1d14;
-
-    --positive: #35c48c;
-    --positive-wash: #0a3a2a;
-    --danger: #ff7a63;
-    --danger-wash: #3d1712;
-
-    --muted-mark: #62838a;
-
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow: 0 2px 4px rgba(0, 0, 0, 0.28), 0 8px 20px -12px rgba(0, 0, 0, 0.6);
-    --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.3), 0 24px 48px -24px rgba(0, 0, 0, 0.75);
-  }
 }
 
 * {
@@ -176,10 +152,14 @@ summary:focus-visible,
   background: var(--brand-wash);
 }
 
+/* minmax(0, 1fr): a coluna implícita seria max-content, e aí qualquer conteúdo
+   largo — a navegação que deveria rolar sozinha, uma tabela — empurraria o
+   cabeçalho, o rodapé e a página inteira para fora da viewport. */
 .site-shell {
   min-height: 100dvh;
   display: grid;
   grid-template-rows: auto auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .skip-link {
@@ -260,7 +240,7 @@ summary:focus-visible,
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  color: #ffffff;
+  color: var(--on-accent);
   background: linear-gradient(145deg, var(--brand) 0%, var(--brand-strong) 100%);
   border-radius: 0.85rem;
   box-shadow:
@@ -282,16 +262,20 @@ summary:focus-visible,
 }
 
 .brand strong {
-  font-size: 0.98rem;
-  font-weight: 650;
-  letter-spacing: -0.015em;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
 }
 
 .brand small {
   margin-top: 0.1rem;
-  color: var(--ink-3);
-  font-size: 0.71rem;
-  letter-spacing: 0.02em;
+  color: var(--coral);
+  font-family: var(--font-num);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .navigation {
@@ -308,9 +292,12 @@ summary:focus-visible,
   display: inline-block;
   padding: 0.55rem 0.75rem;
   color: var(--ink-2);
-  border-radius: var(--radius-sm);
-  font-size: 0.88rem;
-  font-weight: 550;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   text-decoration: none;
   transition:
     color var(--dur) var(--ease),
@@ -405,33 +392,39 @@ p {
   margin-top: 0;
 }
 
+/* Display no que é título; o texto corrido continua em Geist, que aguenta
+   parágrafo longo melhor que a Bricolage. */
 h1,
 h2,
 h3,
 h4 {
   color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
   text-wrap: balance;
 }
 
 h1 {
-  max-width: 20ch;
+  max-width: 18ch;
   margin-bottom: 1.25rem;
-  font-size: clamp(2.1rem, 4vw, 3.05rem);
-  font-weight: 680;
-  line-height: 1.04;
-  letter-spacing: -0.035em;
+  font-size: clamp(2.4rem, 5vw, 4.25rem);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
 }
 
 h2 {
-  font-size: clamp(1.3rem, 2.2vw, 1.75rem);
-  font-weight: 650;
-  line-height: 1.15;
-  letter-spacing: -0.022em;
+  font-size: clamp(1.5rem, 2.6vw, 2.25rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
 }
 
 h3 {
-  font-weight: 640;
-  letter-spacing: -0.015em;
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
+}
+
+h4 {
+  letter-spacing: -0.025em;
 }
 
 .lead {
@@ -965,10 +958,10 @@ h3 {
 .analytics-error button {
   min-height: 2.75rem;
   padding: 0.65rem 1.1rem;
-  color: var(--surface);
+  color: var(--on-accent);
   background: var(--ink);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   font-weight: 650;
   transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
@@ -1039,10 +1032,10 @@ h3 {
 .status-panel button {
   min-height: 2.75rem;
   padding: 0.6rem 1.1rem;
-  color: var(--surface);
+  color: var(--on-accent);
   background: var(--ink);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   font-weight: 650;
 }
@@ -1224,11 +1217,11 @@ h3 {
 .workspace-heading button,
 .qr-panel button {
   min-height: 2.75rem;
-  padding: 0.65rem 1.1rem;
+  padding: 0.65rem 1.35rem;
   color: var(--ink);
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   font-weight: 650;
   transition:
@@ -1591,8 +1584,8 @@ h3 {
 .ghost-action,
 .quiet-action {
   min-height: 2.75rem;
-  padding: 0.6rem 1.15rem;
-  border-radius: var(--radius-sm);
+  padding: 0.6rem 1.35rem;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   font-weight: 650;
   font-size: 0.9rem;
@@ -1603,8 +1596,9 @@ h3 {
     transform var(--dur) var(--ease);
 }
 
+/* Teal e coral são fundos claros: recebem a tinta profunda, nunca branco. */
 .primary-action {
-  color: #ffffff;
+  color: var(--on-accent);
   background: var(--brand);
   border: 1px solid var(--brand);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 8px 18px -12px var(--brand-ring);
@@ -1651,17 +1645,6 @@ h3 {
 .quiet-action:disabled {
   cursor: not-allowed;
   opacity: 0.5;
-}
-
-/* Em tema escuro o teal é claro demais para receber texto branco. */
-@media (prefers-color-scheme: dark) {
-  .primary-action {
-    color: #04211f;
-  }
-
-  .brand-mark {
-    color: #04211f;
-  }
 }
 
 /* --------------------------------------------------------------------------
@@ -2507,4 +2490,128 @@ h3 {
   .weekday-list li::before {
     display: none;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Fase 7 — autocadastro aberto, fila de aprovação e acessos da acomodação.
+
+   O formulário do cartaz é a superfície mais pública do produto: o aviso de
+   privacidade precisa ler-se como texto, não como aviso legal escondido, e a
+   recusa precisa ser visível antes de qualquer campo.
+   --------------------------------------------------------------------------- */
+
+.privacy-notice {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1.25rem 1.35rem;
+  margin-bottom: 1.25rem;
+  background: var(--brand-wash);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--radius);
+}
+
+.privacy-notice h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.privacy-notice p,
+.privacy-notice li {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.privacy-notice ul {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.notice-version {
+  color: var(--ink-3);
+  font-size: 0.8rem;
+}
+
+.planned-window {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  margin: 0 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.planned-window legend {
+  padding: 0 0.35rem;
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.queue-hint,
+.rejection-hint {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.approval-queue,
+.poster-panel,
+.activation-panel {
+  display: grid;
+  gap: 1rem;
+  padding-top: var(--space-block);
+  border-top: 1px solid var(--line);
+}
+
+.approval-queue h2,
+.poster-panel h2,
+.activation-panel h2 {
+  margin: 0;
+}
+
+.accommodation-access {
+  display: grid;
+  gap: var(--space-block);
+}
+
+.approval-card {
+  align-items: flex-start;
+}
+
+.approval-deadline {
+  color: var(--coral-strong);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.approval-followup,
+.rejection-reason {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem 1.1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.approval-followup h3,
+.rejection-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.approval-followup p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.88rem;
+  line-height: 1.55;
 }

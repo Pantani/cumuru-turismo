@@ -1,6 +1,10 @@
 export const appPaths = [
   "/",
   "/registro",
+  // Short by design: the poster token rides in the fragment of `/i#<token>`
+  // and the printed code is read by phone cameras (ADR-039).
+  "/i",
+  "/ativacao",
   "/pesquisa",
   "/acesso",
   "/questionarios",

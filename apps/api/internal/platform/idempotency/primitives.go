@@ -67,12 +67,26 @@ func (h *KeyHasher) Hash(value string) (Digest, error) {
 	return Digest{Version: h.version, Sum: mac.Sum(nil)}, nil
 }
 
-func RequestHash(value any) ([sha256.Size]byte, error) {
+// RequestHash keys the digest of the request body. The key is not optional and
+// there is no unkeyed variant: the same digest is persisted in
+// platform.idempotency_records and core.group_submissions, and an unkeyed
+// SHA-256 over a body would let anyone holding the dump confirm a guess about
+// data the rejection or the expiry already erased. The erasure has to survive
+// the digest, otherwise it is fiction (ADR-040).
+func RequestHash(key []byte, value any) ([sha256.Size]byte, error) {
+	if len(key) < 32 {
+		return [sha256.Size]byte{}, ErrInvalidKey
+	}
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		return [sha256.Size]byte{}, err
 	}
-	return sha256.Sum256(encoded), nil
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte("idempotency-request\x00"))
+	_, _ = mac.Write(encoded)
+	var digest [sha256.Size]byte
+	copy(digest[:], mac.Sum(nil))
+	return digest, nil
 }
 
 type Operation string
@@ -96,6 +110,12 @@ const (
 	OperationPublishQuestionnaire        Operation = "publishQuestionnaireVersion"
 	OperationRetireQuestionnaire         Operation = "retireQuestionnaireVersion"
 	OperationSubmitSurveyResponse        Operation = "submitSurveyResponse"
+	OperationCreateAccommodationInvite   Operation = "createAccommodationInvite"
+	OperationRevokeAccommodationInvite   Operation = "revokeAccommodationInvite"
+	OperationSubmitSelfRegistration      Operation = "submitAccommodationSelfRegistration"
+	OperationApproveStay                 Operation = "approveStay"
+	OperationRejectStay                  Operation = "rejectStay"
+	OperationCreateActivation            Operation = "createAccommodationActivation"
 )
 
 var validOperations = map[Operation]bool{
@@ -117,6 +137,12 @@ var validOperations = map[Operation]bool{
 	OperationPublishQuestionnaire:        true,
 	OperationRetireQuestionnaire:         true,
 	OperationSubmitSurveyResponse:        true,
+	OperationCreateAccommodationInvite:   true,
+	OperationRevokeAccommodationInvite:   true,
+	OperationSubmitSelfRegistration:      true,
+	OperationApproveStay:                 true,
+	OperationRejectStay:                  true,
+	OperationCreateActivation:            true,
 }
 
 type Identity struct {

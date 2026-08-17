@@ -1,6 +1,8 @@
-import { useState, type KeyboardEvent } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 
-import { formatDay, slotLines } from "./presence-format";
+import { useLocale } from "../../shared/i18n/LocaleProvider";
+import type { Translate } from "../../shared/i18n/translate";
+import { usePresenceFormat, type PresenceFormat } from "./presence-format";
 import {
   isWeekend,
   movingAverage,
@@ -27,16 +29,20 @@ const TOOLTIP_MARGIN_PERCENT = 12;
 /** A week of trailing days: shorter keeps the weekday noise it should remove. */
 const SMOOTH_DAYS = 7;
 
-const axisDateFormatter = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "2-digit",
-  timeZone: "America/Bahia",
-});
-
 interface Plotted {
   point: PresencePoint;
   x: number;
   width: number;
+}
+
+/** Eixo horizontal: dia e mês bastam, e o ano faria os rótulos colidirem. */
+function axisDateFormatter(tag: string) {
+  const formatter = new Intl.DateTimeFormat(tag, {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/Bahia",
+  });
+  return (value: string) => formatter.format(new Date(`${value}T12:00:00-03:00`));
 }
 
 const NICE_STEPS = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50, 75, 100];
@@ -86,10 +92,6 @@ function plot(series: readonly PresencePoint[]): Plotted[] {
     x: PADDING_LEFT + index * span,
     width: Math.max(span - 2, 1),
   }));
-}
-
-function axisDate(value: string) {
-  return axisDateFormatter.format(new Date(`${value}T12:00:00-03:00`));
 }
 
 function centreOf(slot: Plotted) {
@@ -151,6 +153,7 @@ function AverageLine({
   average: number | null;
   bound: number;
 }) {
+  const { t } = useLocale();
   if (average === null) {
     return null;
   }
@@ -165,7 +168,7 @@ function AverageLine({
         y2={y}
       />
       <text className="chart-average-label" x={PADDING_LEFT + 6} y={y - 6}>
-        média {Math.round(average)}
+        {t("analytics.chart.average", { value: Math.round(average) })}
       </text>
     </g>
   );
@@ -173,6 +176,8 @@ function AverageLine({
 
 /** Roughly six labels: one tick per day would collide at any usable width. */
 function DateAxis({ slots }: { slots: readonly Plotted[] }) {
+  const { tag } = useLocale();
+  const axisDate = useMemo(() => axisDateFormatter(tag), [tag]);
   const step = Math.max(Math.ceil(slots.length / AXIS_LABELS), 1);
   return (
     <g aria-hidden="true">
@@ -314,6 +319,7 @@ function TrendLine({
 
 /** Boundary between the observed stretch and the forecast one, when both show. */
 function TodayMarker({ slots }: { slots: readonly Plotted[] }) {
+  const { t } = useLocale();
   const index = slots.findIndex((slot) => slot.point.kind === "forecast");
   const slot = index > 0 ? slots[index] : undefined;
   if (slot === undefined) {
@@ -329,7 +335,7 @@ function TodayMarker({ slots }: { slots: readonly Plotted[] }) {
         y2={BASELINE}
       />
       <text className="chart-today-label" x={slot.x + 4} y={PADDING_TOP - 10}>
-        previsão a partir daqui
+        {t("analytics.chart.forecastFrom")}
       </text>
     </g>
   );
@@ -398,9 +404,11 @@ function tooltipPercent(slot: Plotted) {
  */
 function ChartTooltip({
   average,
+  format,
   slot,
 }: {
   average: number | null;
+  format: PresenceFormat;
   slot: Plotted | null;
 }) {
   if (slot === null) {
@@ -412,21 +420,25 @@ function ChartTooltip({
       className="chart-tooltip"
       style={{ left: `${tooltipPercent(slot)}%` }}
     >
-      <strong>{formatDay(slot.point.date)}</strong>
-      {slotLines(slot.point, average).map((line) => (
+      <strong>{format.day(slot.point.date)}</strong>
+      {format.slotLines(slot.point, average).map((line) => (
         <span key={line}>{line}</span>
       ))}
     </div>
   );
 }
 
-function summarize(series: readonly PresencePoint[]) {
+function summarize(t: Translate, series: readonly PresencePoint[]) {
   const published = series.filter((point) => point.status === "published");
   const withheld = series.length - published.length;
   if (published.length === 0) {
-    return "Nenhum dia da janela tem valor publicável; toda a série está protegida ou indisponível.";
+    return t("analytics.chart.empty");
   }
-  return `Série de ${series.length} dias em pessoas-dia. ${published.length} dias com valor publicado e ${withheld} protegidos ou indisponíveis, exibidos como falha na base do gráfico.`;
+  return t("analytics.chart.summary", {
+    days: series.length,
+    published: published.length,
+    withheld,
+  });
 }
 
 const KEY_STEPS: Record<string, number> = {
@@ -458,14 +470,24 @@ function movedIndex(key: string, current: number | null, length: number) {
   return clampIndex((current ?? startIndex(step, length)) + step, length);
 }
 
-function readout(slot: Plotted | null, average: number | null) {
+function readout(
+  t: Translate,
+  format: PresenceFormat,
+  slot: Plotted | null,
+  average: number | null,
+) {
   if (slot === null) {
-    return "Aponte um dia no gráfico ou use as setas ← → do teclado para ler cada dia. Home e End vão ao primeiro e ao último dia.";
+    return t("analytics.chart.readoutIdle");
   }
-  return `${formatDay(slot.point.date)}. ${slotLines(slot.point, average).join(". ")}.`;
+  return t("analytics.chart.readoutDay", {
+    day: format.day(slot.point.date),
+    lines: format.slotLines(slot.point, average).join(". "),
+  });
 }
 
 export function PresenceChart({ series, stats }: PresenceChartProps) {
+  const { t } = useLocale();
+  const format = usePresenceFormat();
   const [active, setActive] = useState<number | null>(null);
   const bound = upperBound(series);
   const slots = plot(series);
@@ -488,7 +510,7 @@ export function PresenceChart({ series, stats }: PresenceChartProps) {
     <figure className="presence-chart">
       <div className="chart-frame">
         <svg
-          aria-label={summarize(series)}
+          aria-label={summarize(t, series)}
           onBlur={() => setActive(null)}
           onKeyDown={handleKeyDown}
           onMouseLeave={() => setActive(null)}
@@ -519,16 +541,17 @@ export function PresenceChart({ series, stats }: PresenceChartProps) {
           <DateAxis slots={slots} />
           <HoverTargets slots={slots} onEnter={setActive} />
         </svg>
-        <ChartTooltip average={stats.average} slot={activeSlot} />
+        <ChartTooltip
+          average={stats.average}
+          format={format}
+          slot={activeSlot}
+        />
       </div>
       <p className="chart-readout" role="status">
-        {readout(activeSlot, stats.average)}
+        {readout(t, format, activeSlot, stats.average)}
       </p>
       <figcaption>
-        Escala até {bound} pessoas-dia. Fim de semana aparece com fundo
-        sombreado, a linha tracejada marca a média da janela, a linha cheia é a
-        média móvel de {SMOOTH_DAYS} dias e dias protegidos aparecem como falha,
-        sem valor substituto. A média móvel interrompe onde faltam valores.
+        {t("analytics.chart.caption", { bound, days: SMOOTH_DAYS })}
       </figcaption>
     </figure>
   );

@@ -1,8 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import axe from "axe-core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Phase4Client } from "../shared/api/phase4-client";
+import { LocaleProvider } from "../shared/i18n/LocaleProvider";
+import type { Locale } from "../shared/i18n/locale";
 import PublicFoundationPage from "./PublicFoundationPage";
 
 const pending = new Promise<never>(() => undefined);
@@ -14,26 +17,118 @@ const client: Phase4Client = {
   getQuality: vi.fn(() => pending),
 };
 
-describe("página pública do observatório", () => {
-  it("introduz o dashboard como protótipo não censitário", () => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={queryClient}>
+function renderPage(locale: Locale = "pt") {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <LocaleProvider initial={locale}>
         <PublicFoundationPage client={client} />
-      </QueryClientProvider>,
-    );
+      </LocaleProvider>
+    </QueryClientProvider>,
+  );
+}
+
+describe("capa pública do observatório", () => {
+  afterEach(cleanup);
+
+  it("abre com o número da vila como título da página", () => {
+    renderPage();
 
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "Observatório Turístico de Cumuruxatiba",
+        name: "O turismo da nossa praia, finalmente em números.",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("mantém o aviso de protótipo não censitário", () => {
+    renderPage();
+
     expect(screen.getByText(/somente dados fictícios/i)).toBeInTheDocument();
     expect(
       screen.getByText(/não substitui estatística oficial nem censo/i),
     ).toBeInTheDocument();
+  });
+
+  it("não publica número enquanto o contrato não responde", () => {
+    renderPage();
+
+    expect(screen.getAllByText("Carregando").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Atualizando indicadores públicos…"),
+    ).toBeInTheDocument();
+  });
+
+  it("aponta cada âncora do índice para uma seção que existe", () => {
+    const { container } = renderPage();
+
+    const index = screen.getByRole("navigation", {
+      name: "Seções desta página",
+    });
+    const anchors = within(index).getAllByRole("link");
+    const targets = anchors
+      .map((anchor) => anchor.getAttribute("href"))
+      .filter((href): href is string => href?.startsWith("#") === true);
+
+    expect(targets).toEqual([
+      "#numeros",
+      "#como",
+      "#anfitrioes",
+      "#comercio",
+      "#privacidade",
+      "#sobre",
+    ]);
+    for (const target of targets) {
+      expect(container.querySelector(target)).not.toBeNull();
+    }
+  });
+
+  it("liga os guias aos PDFs servidos pela aplicação", () => {
+    renderPage();
+
+    expect(
+      screen.getByRole("link", {
+        name: /Guia do Observatório para a Prefeitura/,
+      }),
+    ).toHaveAttribute("href", "/guias/observatorio-prefeitura.pdf");
+    expect(
+      screen.getByRole("link", { name: /Guia para gerar a chave FNRH/ }),
+    ).toHaveAttribute("href", "/guias/chave-fnrh-hospedagens.pdf");
+  });
+
+  it("responde às perguntas frequentes sem depender de script", () => {
+    renderPage();
+
+    expect(
+      screen.getByText("Preciso ter CNPJ para participar?"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Quanto custa?")).toBeInTheDocument();
+  });
+
+  it("publica a capa inteira no idioma escolhido", () => {
+    renderPage("es");
+
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "El turismo de nuestra playa, por fin en números.",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Actualizando indicadores públicos…"),
+    ).toBeInTheDocument();
+  });
+
+  it("não apresenta violações automáticas de acessibilidade", async () => {
+    const { container } = renderPage();
+
+    const report = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+
+    expect(report.violations).toEqual([]);
   });
 });

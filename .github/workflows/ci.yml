@@ -184,6 +184,11 @@ jobs:
             go: "false"
             node: "true"
             npm: "true"
+          - name: phase7
+            targets: phase7-integration
+            go: "true"
+            node: "false"
+            npm: "false"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
@@ -216,6 +221,12 @@ jobs:
           - name: phase4-benchmark
             targets: phase4-benchmark
             go: "true"
+            node: "true"
+            npm: "false"
+          # O solucionador de proof-of-work usa só node:crypto, sem pacotes.
+          - name: phase7
+            targets: phase7-full-stack
+            go: "false"
             node: "true"
             npm: "false"
     steps:

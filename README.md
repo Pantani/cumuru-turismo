@@ -51,8 +51,8 @@ credencial. Consulte a decisão completa em
 
 Materiais simples para apresentação e treinamento:
 
-- [`Guia do Observatório para a Prefeitura (PDF)`](guia-simples-observatorio-fnrh-prefeitura.pdf);
-- [`Guia para gerar a chave FNRH (PDF)`](guia-gerar-chave-fnrh-hospedagens.pdf).
+- [`Guia do Observatório para a Prefeitura (PDF)`](apps/web/public/guias/observatorio-prefeitura.pdf);
+- [`Guia para gerar a chave FNRH (PDF)`](apps/web/public/guias/chave-fnrh-hospedagens.pdf).
 
 ## Stack de referência
 
@@ -102,8 +102,8 @@ controlada. Não use Create React App.
 13. [`contracts/openapi.yaml`](contracts/openapi.yaml)
 14. [`database/schema.sql`](database/schema.sql)
 15. [`prompts/BOOTSTRAP-CODEX.md`](prompts/BOOTSTRAP-CODEX.md)
-16. [`Guia do Observatório para a Prefeitura`](guia-simples-observatorio-fnrh-prefeitura.pdf)
-17. [`Guia para gerar a chave FNRH`](guia-gerar-chave-fnrh-hospedagens.pdf)
+16. [`Guia do Observatório para a Prefeitura`](apps/web/public/guias/observatorio-prefeitura.pdf)
+17. [`Guia para gerar a chave FNRH`](apps/web/public/guias/chave-fnrh-hospedagens.pdf)
 
 ## Como começar com o Codex
 
@@ -246,11 +246,12 @@ openapi-lint          generated-check       compose-config
 prod-config-example   migration-test        local-restore-drill
 local-demo-test       phase2-integration    phase2-proxy-test
 phase3-integration    phase3-proxy-test     phase4-integration
-phase4-proxy-test     test                  test-backend-race
-typecheck             post-task-quality     infra-validation
-build                 images                phase2-full-stack
-phase4-benchmark      local-demo-e2e        smoke-local
-sbom                  scan                  image-scan
+phase4-proxy-test     phase7-integration    test
+test-backend-race     typecheck             post-task-quality
+infra-validation      build                 images
+phase2-full-stack     phase4-benchmark      phase7-full-stack
+local-demo-e2e        smoke-local           sbom
+scan                  image-scan
 ```
 
 Na GitHub Actions esses mesmos gates rodam em paralelo, um job por prova, em

@@ -51,11 +51,17 @@ const (
 	OperationCreateStay          Operation = "create_stay"
 	OperationUpdateStay          Operation = "update_stay"
 	OperationIssueInvite         Operation = "issue_invite"
+	OperationIssueActivation     Operation = "issue_activation"
 	OperationSubmitGroup         Operation = "submit_group"
-	OperationCheckIn             Operation = "check_in"
-	OperationCheckOut            Operation = "check_out"
-	OperationCancel              Operation = "cancel"
-	OperationNoShow              Operation = "no_show"
+	// OperationApproveStay is deliberately not update_stay. Reusing the edit
+	// permission would hand approval to every operator who may correct a date,
+	// and approval is the one control standing between an anonymous submission
+	// and a statistic (ADR-040).
+	OperationApproveStay Operation = "approve_stay"
+	OperationCheckIn     Operation = "check_in"
+	OperationCheckOut    Operation = "check_out"
+	OperationCancel      Operation = "cancel"
+	OperationNoShow      Operation = "no_show"
 )
 
 var allowedOperations = map[Status]map[Operation]bool{
@@ -69,7 +75,9 @@ var allowedOperations = map[Status]map[Operation]bool{
 		OperationCreateStay:          true,
 		OperationUpdateStay:          true,
 		OperationIssueInvite:         true,
+		OperationIssueActivation:     true,
 		OperationSubmitGroup:         true,
+		OperationApproveStay:         true,
 		OperationCheckIn:             true,
 		OperationCheckOut:            true,
 		OperationCancel:              true,

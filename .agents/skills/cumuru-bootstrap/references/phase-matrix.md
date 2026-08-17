@@ -277,14 +277,16 @@ incidente simulados, métricas observadas e decisão do comitê.
 
 ### Gate externo
 
-O link genérico aceita identidade completa submetida por terceiro sobre titular
-possivelmente ausente. Essa é decisão de produto tomada, e o risco não é
-técnico: é base legal. Registre em
+O link genérico coleta sem operador identificado e sem contato com o titular.
+Não coleta identidade: nome, documento, e-mail e telefone são rejeitados no
+canal aberto, e a identidade só é preenchida pelo próprio titular depois da
+aprovação, pelo convite nominal já existente da Fase 2. O risco remanescente
+não é técnico: é base legal para coleta aberta sem intermediário. Registre em
 `_workspace/cumuru-bootstrap/phase-7/external-gates.env`:
 
 ```text
-THIRD_PARTY_IDENTITY_BASIS=PASS
-THIRD_PARTY_IDENTITY_BASIS_EVIDENCE=evidence/third-party-identity-basis.md
+SELF_SERVICE_LEGAL_BASIS=PASS
+SELF_SERVICE_LEGAL_BASIS_EVIDENCE=evidence/self-service-legal-basis.md
 ```
 
 As regras de contenção e formato são as mesmas da Fase 5. Sem esse gate, a fase
@@ -298,8 +300,8 @@ a titulares reais.
    convite por acomodação e ativação de conta.
 2. Contrato/UI: endpoints de ativação, convite reutilizável, submissão aberta,
    fila de aprovação e QR no navegador.
-3. Privacidade/segurança: consentimento sem operador, identidade de terceiro,
-   segunda prova, rate limit e ausência de token em log.
+3. Privacidade/segurança: consentimento sem operador, minimização do canal
+   aberto, segunda prova, rate limit e ausência de token em log.
 
 ### Ordem de escrita
 
@@ -323,24 +325,33 @@ a titulares reais.
   keyring;
 - conta pendente não autentica antes da ativação;
 - convite reutilizável é revogável e a rotação invalida o token anterior;
-- `max_uses` nulo significa ilimitado e o invariante segue válido quando
-  presente;
+- `max_uses` nulo significa ilimitado, `invites_usage_valid` nunca avalia o
+  termo comparativo como `UNKNOWN`, e o convite de estadia continua obrigado a
+  `max_uses NOT NULL`;
+- `ConsumeInvite` e `FinalizeInviteSubmission` operam sobre convite ilimitado;
+  o teste que reproduz a falha silenciosa vem antes da correção;
+- o `purpose` entra no MAC e é conferido no `Verify`;
+- o token trafega no fragmento da URL e nunca no caminho;
 - token, URL e HMAC ausentes de log, trace, métrica, audit e outbox;
 - estadia autocadastrada nasce sem membership autora e com proveniência
   `self_service`;
+- o canal aberto rejeita nome, documento, e-mail, telefone e `role='minor'`;
 - estadia não aprovada não aparece em `analytics.presence_days` nem em
-  `public_data`;
+  `public_data`, provado nos três pontos de filtro;
 - aprovação e rejeição são idempotentes e respeitam `If-Match`;
 - aprovação exige operação própria; operador com `update_stay` não aprova;
-- rejeição exige motivo, é auditada sem valor pessoal e elimina a identidade
-  cifrada do autocadastro;
-- pendência expira por prazo configurável e a expiração é auditada;
+- rejeição exige motivo de lista fechada e é auditada sem valor pessoal;
+- rejeição **e** expiração eliminam os dados do autocadastro, provado por
+  varredura de `information_schema.columns` em ambos os caminhos;
+- pendência expira em 72 horas e a expiração é auditada;
 - consentimento e aviso de privacidade versionados no formulário aberto;
 - rate limit e proof-of-work provados com `429` e `Retry-After`, sem serviço de
-  terceiro e sem cookie;
+  terceiro e sem cookie, com gasto de nonce impedindo replay do desafio;
+- `RequestHash` é com chave;
 - isolamento A/B do convite reutilizável entre acomodações.
 
 ### Fora de escopo
 
-Envio de e-mail, FNRH, alteração do dashboard público além do filtro de
-aprovação e qualquer novo valor no enum `core.stay_status`.
+Envio de e-mail, FNRH, cofre `identity.visitor_identities`, alteração do
+dashboard público além do filtro de aprovação e qualquer novo valor no enum
+`core.stay_status`.

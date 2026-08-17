@@ -38,7 +38,7 @@ export function StayBoard({ accommodation }: StayBoardProps) {
   const refresh = useCallback(async () => {
     setLoading(true);
     const result = await run("Atualizando as estadias", () =>
-      client.listStays(accommodation.id),
+      client.listStays({ accommodationId: accommodation.id }),
     );
     setStays(result?.data.items ?? []);
     setLoading(false);

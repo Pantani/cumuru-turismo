@@ -138,6 +138,7 @@ Para lacunas legais, credenciais, infraestrutura externa ou mudança de produto,
 pare e solicite decisão.
 ```
 
+
 ## Prompt 7 — Autoatendimento e aprovação
 
 ```text
@@ -150,70 +151,139 @@ auditoria 6A anterior.
 
 Antes de qualquer patch, crie os ADRs:
 - supersedência parcial da ADR-019 para convite reutilizável por acomodação;
-- autocadastro com aprovação do estabelecimento e proveniência de estadia;
+- autocadastro generalizado com aprovação do estabelecimento e proveniência de
+  estadia;
 - ativação de conta de acomodação por capability de uso único.
 
 Implemente:
 
 1. Ativação da acomodação.
-   O administrador cadastra a acomodação e o sistema emite uma capability de
-   ativação de uso único, exibida na própria tela como link e QR gerado no
-   navegador. A conta nasce sem senha, em estado pendente, e só se torna
-   utilizável quando a acomodação define a senha pela capability. Nenhum envio
-   de e-mail pertence a esta fase.
+   A ADR-035 já implementa autoprovisionamento: o principal cria a acomodação
+   e vira manager. Esta fase não inventa um papel de administrador
+   provisionador. Ela acrescenta a emissão de uma capability de ativação de uso
+   único para uma conta ainda sem credencial, exibida na própria tela como link
+   e QR gerado no navegador. auth.accounts ganha o estado pending_activation:
+   o CHECK do algoritmo passa a ser condicional a password_hash IS NOT NULL, e
+   um CHECK novo amarra a ausência de hash exclusivamente a esse estado, para
+   que conta active sem credencial continue impossível. Nenhum envio de e-mail
+   pertence a esta fase.
 
 2. Convite reutilizável por acomodação.
    Estenda core.invites com accommodation_id, torne stay_id nulo e acrescente o
-   novo purpose. Torne max_uses nulo para representar uso ilimitado; mantenha
-   invites_usage_valid válido quando max_uses estiver presente, em vez de
-   escolher um teto artificial alto. O convite reutilizável é rotacionável e
-   revogável; a rotação invalida o cartaz anterior. Mantenha o armazenamento
-   por HMAC e a regra de que token, URL e HMAC nunca entram em log, trace,
-   métrica, audit ou outbox.
+   novo purpose. Reescreva invites_usage_valid como
+   use_count >= 0 AND (max_uses IS NULL OR (max_uses > 0 AND use_count <=
+   max_uses)), preserve o DEFAULT 1 da coluna e acrescente invites_target_valid
+   reimpondo max_uses NOT NULL para o convite de estadia, de modo que
+   ilimitado só exista no purpose novo.
+
+   Corrija ConsumeInvite e FinalizeInviteSubmission: hoje comparam
+   use_count < max_uses e use_count = max_uses, que viram UNKNOWN com nulo e
+   fazem o UPDATE afetar zero linhas, transformando convite ilimitado em
+   convite consumido. Essa é falha silenciosa: escreva primeiro o teste que a
+   reproduz.
+
+   Parametrize o purpose dentro do MAC e confira o purpose no Verify. A ADR-019
+   promete HMAC(key_version, purpose || invite_id) mas o código fixa a
+   constante; com dois purposes a promessa deixa de valer sem essa correção.
+
+   O convite reutilizável é rotacionável e revogável; a rotação invalida o
+   cartaz anterior. Mantenha o armazenamento por HMAC.
+
+   O token trafega no fragmento da URL (/i#<token>), nunca no caminho. O nginx
+   só desliga access log em ^~ /api/v1/invites/, e um prefixo novo gravaria em
+   disco, permanentemente, o token de um cartaz de parede. Fragmento não chega
+   a servidor, log, WAF ou CDN.
 
 3. Autocadastro pelo link genérico.
    A submissão cria estadia com proveniência self_service e sem membership
-   autora, usando o terceiro valor de collection_channel. A identidade completa
-   é cifrada em identity.visitor_identities como no fluxo nominal; os dados
-   generalizados continuam em core.visitors. Exiba consentimento e aviso de
-   privacidade versionados no formulário aberto, porque não há operador
-   intermediando a coleta.
+   autora, usando o terceiro valor de collection_channel; preserve o nome da
+   CHECK de ator existente com três ramos mutuamente exclusivos.
+
+   O canal aberto coleta somente dados generalizados: faixa etária, UF e
+   município IBGE, país, papel no grupo e datas. Nome, documento, e-mail e
+   telefone são rejeitados neste canal. Não crie identity.visitor_identities
+   nesta fase: a ADR-020 vetou a tabela, ela não existe na cadeia executável e
+   construir cofre de cifra sem KMS não pertence a esta wave.
+
+   Recuse role='minor' no canal self_service. O formulário é aberto e não
+   autenticado; aceitar submissão sobre criança feita por estranho é
+   indefensável.
+
+   Exiba consentimento e aviso de privacidade versionados, porque não há
+   operador intermediando a coleta.
 
 4. Aprovação pelo estabelecimento.
-   Fila por acomodação com aprovar e rejeitar, motivo obrigatório na rejeição,
-   Idempotency-Key e If-Match. Acrescente uma operação própria de aprovação ao
-   mapa allowedOperations de accommodation, disponível somente na acomodação
-   ativa; não reaproveite update_stay, porque isso daria aprovação a qualquer
-   operador com permissão de edição. Estadia não aprovada nunca entra em
-   analytics.presence_days nem em qualquer agregado público. Pendência expira
-   automaticamente por prazo configurável e a expiração é auditada.
+   Fila por acomodação com aprovar e rejeitar, Idempotency-Key e If-Match.
+   Acrescente uma operação própria de aprovação ao mapa allowedOperations de
+   accommodation, disponível somente na acomodação ativa; não reaproveite
+   update_stay, porque isso daria aprovação a qualquer operador com permissão
+   de edição.
 
-   A rejeição elimina a identidade cifrada do autocadastro e preserva apenas o
-   fato auditável: houve tentativa, foi rejeitada, com motivo e sem valor
-   pessoal. Não retenha dado de titular que o próprio estabelecimento declarou
-   falso. Prove a eliminação com teste, não apenas o carimbo de rejeição.
+   A rejeição exige motivo de uma lista fechada, no precedente de
+   questionnaire_change_reason_valid. Não aceite texto livre: audit é
+   append-only sem UPDATE nem DELETE, e texto livre ali vira dado pessoal
+   permanente.
 
-5. Abuso.
-   Reuse platform.rate_limit_buckets para o convite reutilizável e acrescente
-   proof-of-work como segunda prova do formulário aberto: o desafio é emitido e
-   verificado pela própria API e resolvido em JavaScript no cliente. Não use
-   CAPTCHA nem qualquer serviço de terceiro, porque o formulário público não
-   pode depender de rede externa e a ADR-019 já proíbe terceiro na geração do
-   QR. O desafio não usa cookie nem qualquer dado do titular. Token e IP bruto
-   continuam fora de persistência e log.
+   Pendência não aprovada expira em 72 horas, mesmo prazo do convite da Fase 2,
+   para o produto não passar a ter duas noções de validade. Rejeição e
+   expiração eliminam os dados generalizados do autocadastro e preservam apenas
+   o fato auditável, sem valor pessoal. Eliminar só na rejeição permitiria
+   retenção indefinida por inação. Prove a eliminação com teste que varra o
+   banco por information_schema.columns, depois da rejeição e depois da
+   expiração.
 
-Use contracts/openapi.yaml como contrato e atualize-o na mesma mudança.
+   Depois de aprovar, a acomodação pode emitir o convite nominal já existente
+   da Fase 2 para que a própria pessoa preencha identidade quando a finalidade
+   exigir. Não construa um segundo caminho de identidade.
 
-Não implemente envio de e-mail, FNRH, nem mudança do dashboard público além do
-filtro de aprovação. Não acrescente valor ao enum core.stay_status; a espera de
-aprovação é proveniência mais carimbo de aprovação, não um novo estado da
-máquina de estadia.
+5. Presença e publicação.
+   Estadia não aprovada nunca entra em analytics.presence_days nem em qualquer
+   agregado público. O filtro tem três pontos obrigatórios, não um:
+   - projeção de approval_state em ListPresenceReconciliationStays, sem tocar o
+     WHERE, senão presence_days fica órfão de estadia rejeitada;
+   - presenceEligible() em analytics_repository.go, choke point compartilhado
+     por addPresenceVisitors e incompleteStayCount;
+   - predicado em analytics.aggregate_eligible_preferences, sem o qual o gate
+     vale para presença e é falso para first_visit_share.
+   Ao substituir a função SECURITY DEFINER, reafirme owner, search_path e ACLs,
+   senão o dump diverge do esperado pelo teste de migrations.
 
-A coleta de identidade completa submetida por terceiro sobre titular ausente é
-decisão de produto já tomada e registrada. Ela permanece limitada a dados
-fictícios enquanto o gate THIRD_PARTY_IDENTITY_BASIS não estiver PASS em
-_workspace/cumuru-bootstrap/phase-7/external-gates.env. Não conclua a fase como
-apta a dados reais sem esse gate.
+6. Abuso.
+   Reuse platform.rate_limit_buckets e acrescente proof-of-work emitido e
+   verificado pela própria API, resolvido em JavaScript no cliente. Não use
+   CAPTCHA nem serviço de terceiro: o formulário público não pode depender de
+   rede externa e a ADR-019 proíbe terceiro na geração do QR. O desafio não usa
+   cookie nem dado do titular.
+
+   Registre gasto de nonce em tabela própria, guardando apenas HMAC do nonce e
+   prazo, sem IP, token ou titular. Sem livro de nonces a mesma solução é
+   reenviada dentro do TTL e o controle vale zero.
+
+   Com o cartaz, o invite_id é comum a todos, então balde por (invite_id, IP)
+   vira balde por bairro: sobrebloqueia hóspede em CGNAT e não toca atacante
+   com rotação de IP. Derive dificuldade adaptativa de
+   rate_limit_buckets.request_count em vez de endurecer o balde.
+
+   Torne RequestHash com chave. Hoje é sha256 sem chave gravado em duas
+   tabelas; com payload mais rico o digest vira oráculo de confirmação por
+   palpite sobre dado já eliminado.
+
+Use contracts/openapi.yaml como contrato e atualize-o na mesma mudança. A
+migração é 000002; não reabra a baseline 000001, congelada pela ADR-032.
+deploy/scripts/test-migrations.sh afirma literalmente o par 000001 e precisa
+ser atualizado pelo owner de platform.
+
+Não implemente envio de e-mail, FNRH, cofre de identidade, nem mudança do
+dashboard público além do filtro de aprovação. Não acrescente valor ao enum
+core.stay_status; a espera de aprovação é proveniência mais carimbo de
+aprovação, não um novo estado da máquina de estadia.
+
+O canal aberto coleta sem operador identificado e sem contato com o titular.
+Enquanto o gate SELF_SERVICE_LEGAL_BASIS não estiver PASS em
+_workspace/cumuru-bootstrap/phase-7/external-gates.env, a fase opera somente
+com dados fictícios. Não conclua a fase como apta a dados reais sem esse gate.
+
+O gate de complexidade deste repositório é 5/8, não 10.
 
 Ao terminar, execute todos os gates aplicáveis e apresente PASS/FAIL/UNVERIFIED,
 arquivos principais, migrações, riscos e próximo passo.

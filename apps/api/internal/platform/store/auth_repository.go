@@ -44,11 +44,27 @@ type SessionGrant struct {
 }
 
 type authAccount struct {
-	id           uuid.UUID
-	passwordHash string
+	id uuid.UUID
+	// A nil hash is an account still in pending_activation: the credential does
+	// not exist yet, which is a different fact from an empty one.
+	passwordHash *string
 	scopes       []string
 	status       string
 	lockedUntil  time.Time
+}
+
+// credential answers with an unmatchable encoding when the account carries no
+// hash. The refusal still comes from the status test in applyPasswordAttempt;
+// this only makes sure it is not reached any sooner than a wrong password.
+func (a authAccount) credential() string {
+	return storedCredential(a.passwordHash)
+}
+
+func storedCredential(hash *string) string {
+	if hash == nil {
+		return access.UnmatchableHash()
+	}
+	return *hash
 }
 
 // Authenticate verifies an e-mail and password pair and opens a session. The
@@ -114,8 +130,10 @@ func (s *Store) openSession(
 		return SessionGrant{}, missingAccountError(err)
 	}
 	account := newAuthAccount(row)
-	if err := s.checkAccountUsable(account); err != nil {
-		return SessionGrant{}, err
+	// The lockout is the one signal that stays distinct, because the caller
+	// answers 429 with Retry-After instead of 401.
+	if account.lockedUntil.After(s.now()) {
+		return SessionGrant{}, ErrAuthLocked
 	}
 	if err := s.applyPasswordAttempt(ctx, queries, account, password); err != nil {
 		return SessionGrant{}, err
@@ -123,25 +141,20 @@ func (s *Store) openSession(
 	return s.issueSession(ctx, queries, row)
 }
 
-// checkAccountUsable folds the disabled status into the generic rejection and
-// keeps the lockout as its own signal.
-func (s *Store) checkAccountUsable(account authAccount) error {
-	if account.status != accountStatusActive {
-		return ErrAuthRejected
-	}
-	if account.lockedUntil.After(s.now()) {
-		return ErrAuthLocked
-	}
-	return nil
-}
-
+// applyPasswordAttempt always pays for one Argon2id verification, including for
+// an account that could never authenticate. A pending_activation account has no
+// hash and a disabled one has a hash nobody may use; refusing either before the
+// derivation would answer sooner than a wrong password and disclose the account
+// state through timing. The status is therefore folded into the same decision,
+// after the constant work rather than before it.
 func (s *Store) applyPasswordAttempt(
 	ctx context.Context,
 	queries generated.Querier,
 	account authAccount,
 	password string,
 ) error {
-	if err := access.VerifyPassword(account.passwordHash, password); err != nil {
+	verified := access.VerifyPassword(account.credential(), password) == nil
+	if !verified || account.status != accountStatusActive {
 		return s.registerFailure(ctx, queries, account.id)
 	}
 	if err := queries.ClearAuthFailures(ctx, pgUUID(account.id)); err != nil {
@@ -362,7 +375,10 @@ func (s *Store) applyRotation(
 	if err != nil {
 		return missingAccountError(err)
 	}
-	if access.VerifyPassword(account.PasswordHash, current) != nil {
+	// A session only exists for an active account, so a nil hash is unreachable
+	// here; the fallback keeps the refusal a single shape instead of adding a
+	// second one for a state that should never arrive.
+	if access.VerifyPassword(storedCredential(account.PasswordHash), current) != nil {
 		return ErrAuthRejected
 	}
 	return s.writeRotation(ctx, queries, accountID, next)
@@ -397,7 +413,7 @@ func (s *Store) writeRotation(
 		return access.ErrInvalidPassword
 	}
 	rotate := generated.RotateAccountPasswordParams{
-		PasswordHash: hash,
+		PasswordHash: &hash,
 		ChangedAt:    pgTime(s.now()),
 		ID:           pgUUID(accountID),
 	}

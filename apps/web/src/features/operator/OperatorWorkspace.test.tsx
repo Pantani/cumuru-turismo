@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { renderWithSession } from "../../test/session";
+import {
+  renderWithSession,
+  stubAuthClient,
+  testAccountScopes,
+  testSession,
+} from "../../test/session";
 import { OperatorWorkspace } from "./OperatorWorkspace";
 
 const { toCanvas } = vi.hoisted(() => ({ toCanvas: vi.fn() }));
@@ -51,10 +56,67 @@ function stay(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * O escopo `stays:approve` é o único concedido exclusivamente pelo caminho de
+ * ativação da Fase 7 (`activation.go:97`), e nenhuma conta semeada o tem. Narrar
+ * a lista de escopos é como o resto da suíte simula "esta capacidade está
+ * desligada" — ver `test/session.tsx`.
+ */
+const selfServiceScopes = [...testAccountScopes, "stays:approve"];
+
+/** Deixa os efeitos de montagem dispararem antes de afirmar que nada saiu. */
+async function settleEffects(ticks = 6) {
+  for (let tick = 0; tick < ticks; tick += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+function stayBoardHeading() {
+  return screen.getByRole("heading", { name: /Estadias de/u });
+}
+
+/** The accommodation starts with no reusable poster; Phase 7 answers 404. */
+function noActivePoster() {
+  return apiResponse(
+    {
+      type: "urn:cumuru:problem:invite-not-found",
+      title: "Sem cartaz ativo.",
+      status: 404,
+    },
+    { status: 404, headers: { "Content-Type": "application/problem+json" } },
+  );
+}
+
+/** The approval queue reads the same listing behind `approval_state`. */
+function staysFor(url: URL, stays: readonly unknown[]) {
+  return url.searchParams.has("approval_state") ? [] : stays;
+}
+
 interface RouteTable {
   accommodations?: unknown[];
   stays?: unknown[];
   onRequest?: (request: Request) => Response | undefined;
+}
+
+function isPosterLookup(input: Request, url: URL) {
+  return input.method === "GET" && url.pathname.endsWith("/invite");
+}
+
+function routedResponse(input: Request, table: Required<Omit<RouteTable, "onRequest">>) {
+  const url = new URL(input.url);
+  if (url.pathname.endsWith("/accommodations")) {
+    return apiResponse({ items: table.accommodations, next_cursor: null });
+  }
+  if (isPosterLookup(input, url)) {
+    return noActivePoster();
+  }
+  if (url.pathname.endsWith("/stays")) {
+    return apiResponse({
+      items: staysFor(url, table.stays),
+      next_cursor: null,
+    });
+  }
+  return apiResponse({ items: [], next_cursor: null });
 }
 
 function stubApi({ accommodations = [accommodation()], stays = [], onRequest }: RouteTable) {
@@ -64,19 +126,9 @@ function stubApi({ accommodations = [accommodation()], stays = [], onRequest }: 
     vi.fn((input: Request) => {
       calls.push(input);
       const override = onRequest?.(input);
-      if (override !== undefined) {
-        return Promise.resolve(override);
-      }
-      const url = new URL(input.url);
-      if (url.pathname.endsWith("/accommodations")) {
-        return Promise.resolve(
-          apiResponse({ items: accommodations, next_cursor: null }),
-        );
-      }
-      if (url.pathname.endsWith("/stays")) {
-        return Promise.resolve(apiResponse({ items: stays, next_cursor: null }));
-      }
-      return Promise.resolve(apiResponse({ items: [], next_cursor: null }));
+      return Promise.resolve(
+        override ?? routedResponse(input, { accommodations, stays }),
+      );
     }),
   );
   return calls;
@@ -199,6 +251,45 @@ describe("área da hospedagem", () => {
     expect(scoped.queryByLabelText(/CPF/i)).toBeNull();
     expect(scoped.queryByLabelText(/Cadastur/i)).toBeNull();
     expect(form?.textContent).toContain("Não pedimos CPF, CNPJ, Cadastur");
+  });
+
+  // Regressão D-02. `PHASE7_ENABLED` tem default `false` e não está em nenhum
+  // compose, então em todo runtime de hoje o servidor não registra as rotas da
+  // fase. Montar os painéis sem condição fazia o operador tomar `404` a cada
+  // acomodação aberta — foi o que derrubou `make local-demo-e2e`.
+  it("não consulta o cartaz quando a conta não tem o escopo da Fase 7", async () => {
+    const calls = stubApi({ stays: [stay()] });
+
+    renderWithSession(<OperatorWorkspace />);
+    await screen.findByRole("button", { name: /Pousada Farol Fictícia/ });
+    await settleEffects();
+
+    expect(calls.filter((call) => call.url.endsWith("/invite"))).toEqual([]);
+    expect(
+      screen.queryByRole("heading", { name: "Cartaz de autocadastro" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Aguardando aprovação" }),
+    ).toBeNull();
+    expect(stayBoardHeading()).toBeInTheDocument();
+  });
+
+  it("monta os painéis da Fase 7 quando o servidor concede o escopo próprio", async () => {
+    const calls = stubApi({ stays: [stay()] });
+
+    renderWithSession(<OperatorWorkspace />, {
+      authClient: stubAuthClient(testSession(selfServiceScopes)),
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Cartaz de autocadastro" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Aguardando aprovação" }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(calls.some((call) => call.url.endsWith("/invite"))).toBe(true),
+    );
   });
 
   it("não apresenta violações axe na área da hospedagem", async () => {

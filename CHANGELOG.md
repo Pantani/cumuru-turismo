@@ -42,10 +42,11 @@ arquivo.
 - média móvel de 7 dias sobre a série, que só aparece com a janela completa e
   com metade dos dias publicados, e interrompe onde faltam valores;
 - bloco "ritmo da semana" com a média por dia da semana da janela observada;
-- `make compose-config`, `make prod-config-example` e `make smoke-local` no gate
-  `make ci`, cobrindo os overlays do Compose, os loaders reais de produção sobre
-  `deploy/runtime.env.example` e o smoke da stack local, que antes existiam como
-  targets sem nenhuma execução automatizada;
+- `make compose-config`, `make prod-config-example`, `make smoke-local`,
+  `make phase7-integration` e `make phase7-full-stack` no gate `make ci`,
+  cobrindo os overlays do Compose, os loaders reais de produção sobre
+  `deploy/runtime.env.example`, o smoke da stack local e as duas provas da
+  Fase 7, que existiam como targets sem nenhuma execução automatizada;
 - `make smoke-local` e `make prod-config-example` como targets públicos:
   `smoke-local` sobe a stack, executa o smoke e derruba a stack mesmo quando o
   smoke falha, propagando o primeiro exit code diferente de zero.
@@ -81,23 +82,10 @@ arquivo.
 
 ### Corrigido
 
-- `make image-scan` acusava oito CVEs HIGH da biblioteca padrão do Go nas duas
-  imagens, todas corrigidas em `1.26.6`. O toolchain sobe de `1.26.5` para
-  `1.26.6` no `apps/api/Dockerfile` (com digest), no `go.mod` e no pin da CI,
-  o que também recoloca o projeto na regra do `AGENTS.md` de usar a última
-  patch suportada da linha `1.26`;
-- `make scan` acusava três vulnerabilidades high: o override de `js-yaml`
-  apontava para `4.3.0`, dentro da faixa vulnerável de
-  [GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj), e
-  `nanoid` resolvia para `3.3.16` sob
-  [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8). Os
-  overrides passam para `4.3.1` e `3.3.18`, ambos dentro da mesma major, sem
-  alterar a superfície de `@redocly/openapi-core` nem de `postcss`;
-- `make local-restore-drill` falhava desde a migration
-  `000002_organization_document`: o fingerprint fixo do dump ainda esperava a
-  versão `1` de `public.schema_migrations`. A comparação era um `test` nu que,
-  sob `set -e`, encerrava com exit 1 sem imprimir nada; agora informa o valor
-  esperado e o obtido, e a expectativa acompanha a migration;
+- `make scan` acusava `nanoid` em `3.3.16`, sob
+  [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8). O
+  pacote chega por `vite → postcss` e não tinha override; passa a `3.3.18`,
+  dentro da mesma major e sem alterar a superfície de `postcss`;
 - navegação para `/registro` depois de "Abrir registro neste navegador": a
   guarda de rota comparava com a URL que `captureInviteCapability` já havia
   reescrito, o que anulava o clique e deixava o fluxo do convite sem saída;

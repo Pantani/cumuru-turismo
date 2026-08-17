@@ -13,8 +13,10 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/access"
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
 	"github.com/Pantani/cumuru/apps/api/internal/audit"
+	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/idempotency"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/outbox"
+	"github.com/Pantani/cumuru/apps/api/internal/platform/proofofwork"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store/generated"
 	"github.com/Pantani/cumuru/apps/api/internal/stay"
 	"github.com/google/uuid"
@@ -25,6 +27,12 @@ import (
 type StayRepository struct {
 	store *Store
 	codec *stay.InviteCodec
+	// challenges is nil when the phase is off, and every open-channel route
+	// answers not-found rather than issuing a challenge with no key.
+	challenges *proofofwork.Issuer
+	// hashKey is resolved once so no write path can reach the request digest
+	// without it. There is no unkeyed fallback to degrade into.
+	hashKey []byte
 }
 
 func NewStayRepository(store *Store) (*StayRepository, error) {
@@ -35,7 +43,30 @@ func NewStayRepository(store *Store) (*StayRepository, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &StayRepository{store: store, codec: codec}, nil
+	hashKey, err := store.requestHashKey()
+	if err != nil {
+		return nil, err
+	}
+	challenges, err := newChallengeIssuer(store.phase7)
+	if err != nil {
+		return nil, err
+	}
+	return &StayRepository{
+		store: store, codec: codec, hashKey: hashKey, challenges: challenges,
+	}, nil
+}
+
+// newChallengeIssuer fails closed: with the phase on and no usable key the
+// repository refuses to exist, because a challenge signed with an empty key is
+// a MAC anybody can forge.
+func newChallengeIssuer(phase7 config.Phase7Config) (*proofofwork.Issuer, error) {
+	if !phase7.Enabled {
+		return nil, nil
+	}
+	return proofofwork.NewIssuer(proofofwork.Keyring{
+		CurrentVersion: phase7.ProofOfWorkKeys.CurrentVersion,
+		Keys:           phase7.ProofOfWorkKeys.Keys,
+	}, phase7.ChallengeTTL)
 }
 
 var _ stay.Repository = (*StayRepository)(nil)
@@ -187,7 +218,7 @@ func (r *StayRepository) updateStay(
 			ctx, q, command.Actor, command.StayID, command.ExpectedVersion, err,
 		)
 	}
-	result = stayFromUpdate(updated, current.VisitorCount)
+	result = stayFromUpdate(updated, current.VisitorCount, factsFromGet(current))
 	err = r.store.recordStayUpdate(ctx, q, command, current, result)
 	return result, err
 }
@@ -270,6 +301,7 @@ func (r *StayRepository) SubmitAssistedGroup(
 func writeAssistedGroup(
 	ctx context.Context,
 	q generated.Querier,
+	hashKey []byte,
 	command stay.GroupCommand,
 	locked generated.LockStayForCommandRow,
 	now time.Time,
@@ -280,7 +312,7 @@ func writeAssistedGroup(
 	}); err != nil {
 		return 0, stay.ErrUnavailable
 	}
-	if _, err := insertAssistedGroup(ctx, q, command, now); err != nil {
+	if _, err := insertAssistedGroup(ctx, q, hashKey, command, now); err != nil {
 		return 0, err
 	}
 	if err := insertAssistedVisitors(ctx, q, command); err != nil {
@@ -322,7 +354,7 @@ func (r *StayRepository) submitAssistedGroup(
 	if err != nil {
 		return storedMutation{}, err
 	}
-	version, err := writeAssistedGroup(ctx, q, command, locked, now)
+	version, err := writeAssistedGroup(ctx, q, r.hashKey, command, locked, now)
 	if err != nil {
 		return storedMutation{}, err
 	}
@@ -474,7 +506,7 @@ func (r *StayRepository) insertInvite(
 	if err != nil {
 		return inviteReplayPayload{}, stay.ErrUnavailable
 	}
-	token, keyVersion, err := r.codec.Issue(inviteID)
+	token, keyVersion, err := r.codec.Issue(stay.PurposeStayGroupSubmission, inviteID)
 	if err != nil {
 		return inviteReplayPayload{}, stay.ErrUnavailable
 	}
@@ -498,7 +530,7 @@ func (r *StayRepository) insertInvite(
 }
 
 func (r *StayRepository) reconstructInvite(payload inviteReplayPayload) (stay.InviteCreated, error) {
-	token, err := r.codec.Reconstruct(payload.InviteID, payload.KeyVersion)
+	token, err := r.codec.Reconstruct(stay.PurposeStayGroupSubmission, payload.InviteID, payload.KeyVersion)
 	if err != nil {
 		return stay.InviteCreated{}, stay.ErrUnavailable
 	}
@@ -602,7 +634,7 @@ func (r *StayRepository) transition(
 	if err != nil {
 		return storedMutation{}, stayUpdateError(err)
 	}
-	result := stayFromTransition(updated, locked.VisitorCount)
+	result := stayFromTransition(updated, locked.VisitorCount, factsFromLock(locked))
 	if err := r.recordTransitionEvents(ctx, q, command, locked, result, occurredAt); err != nil {
 		return storedMutation{}, err
 	}
@@ -711,7 +743,7 @@ func (r *StayRepository) verifiedDigest(
 	inviteID uuid.UUID,
 	row generated.GetInviteForCapabilityRow,
 ) ([]byte, error) {
-	verifiedID, err := r.codec.Verify(token, row.TokenKeyVersion)
+	verifiedID, err := r.codec.Verify(stay.PurposeStayGroupSubmission, token, row.TokenKeyVersion)
 	if err != nil || verifiedID != inviteID {
 		return nil, stay.ErrNotFound
 	}
@@ -748,6 +780,7 @@ func consumeInvite(
 func writeInviteGroup(
 	ctx context.Context,
 	q generated.Querier,
+	hashKey []byte,
 	command stay.InviteGroupCommand,
 	capability resolvedCapability,
 	now time.Time,
@@ -757,7 +790,7 @@ func writeInviteGroup(
 	if err != nil {
 		return consumed, finalized, err
 	}
-	if _, err := insertInviteGroup(ctx, q, command, capability, now); err != nil {
+	if _, err := insertInviteGroup(ctx, q, hashKey, command, capability, now); err != nil {
 		return consumed, finalized, err
 	}
 	if err := insertInviteVisitors(ctx, q, command, capability, now); err != nil {
@@ -784,7 +817,7 @@ func (r *StayRepository) submitInviteGroup(
 	if command.PrivacyNoticeVersion != capability.row.PrivacyNoticeVersion {
 		return storedMutation{}, stay.ErrConflict
 	}
-	consumed, finalized, err := writeInviteGroup(ctx, q, command, capability, now)
+	consumed, finalized, err := writeInviteGroup(ctx, q, r.hashKey, command, capability, now)
 	if err != nil {
 		return storedMutation{}, err
 	}
@@ -967,7 +1000,9 @@ func listStaysParams(
 	return generated.ListAccessibleStaysParams{
 		OidcIssuer: actor.Issuer, OidcSubject: actor.Subject,
 		AccommodationID: idToPG(page.AccommodationID), StayStatus: status,
-		ArrivalFrom: dateToPG(page.ArrivalFrom), ArrivalTo: dateToPG(page.ArrivalTo),
+		ApprovalState: optionalText(string(page.ApprovalState)),
+		Provenance:    optionalText(string(page.Provenance)),
+		ArrivalFrom:   dateToPG(page.ArrivalFrom), ArrivalTo: dateToPG(page.ArrivalTo),
 		CursorCreatedAt: timeToPG(page.CursorCreatedAt), CursorID: idToPG(page.CursorID),
 		PageLimit: page.Limit + 1,
 	}
@@ -1056,9 +1091,36 @@ func stayPage(rows []generated.ListAccessibleStaysRow, limit int32) stay.Page {
 	return stay.Page{Items: items, NextCursor: cursor}
 }
 
+// approvalFacts travels from the row that projected it to the record that has
+// to emit it. CreateStay, UpdateStay and ApplyStayTransition do not project the
+// three columns, so the facts come from the row the command already read to
+// authorize itself, never from a default.
+type approvalFacts struct {
+	provenance stay.Provenance
+	state      *string
+	expiresAt  *time.Time
+}
+
+func factsFromLock(row generated.LockStayForCommandRow) approvalFacts {
+	return approvalFacts{
+		provenance: stay.Provenance(row.Provenance),
+		state:      row.ApprovalState,
+		expiresAt:  timePointer(row.ApprovalExpiresAt),
+	}
+}
+
+func factsFromGet(row generated.GetAccessibleStayRow) approvalFacts {
+	return approvalFacts{
+		provenance: stay.Provenance(row.Provenance),
+		state:      row.ApprovalState,
+		expiresAt:  timePointer(row.ApprovalExpiresAt),
+	}
+}
+
 func stayFromCreate(row generated.CreateStayRow) stay.Record {
 	return stay.Record{
-		ID: idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
+		Provenance: stay.ProvenanceAssisted,
+		ID:         idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
 		Status: stay.Status(row.Status), PlannedArrivalOn: dateString(row.PlannedArrivalOn),
 		PlannedDepartureOn: dateString(row.PlannedDepartureOn),
 		ExpectedGuestCount: row.ExpectedGuestCount, VisitorCount: 0,
@@ -1071,7 +1133,10 @@ func stayFromCreate(row generated.CreateStayRow) stay.Record {
 
 func stayFromGet(row generated.GetAccessibleStayRow) stay.Record {
 	return stay.Record{
-		ID: idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
+		Provenance:        stay.Provenance(row.Provenance),
+		ApprovalState:     row.ApprovalState,
+		ApprovalExpiresAt: timePointer(row.ApprovalExpiresAt),
+		ID:                idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
 		Status: stay.Status(row.Status), PlannedArrivalOn: dateString(row.PlannedArrivalOn),
 		PlannedDepartureOn: dateString(row.PlannedDepartureOn),
 		ExpectedGuestCount: row.ExpectedGuestCount, VisitorCount: row.VisitorCount,
@@ -1084,7 +1149,10 @@ func stayFromGet(row generated.GetAccessibleStayRow) stay.Record {
 
 func stayFromList(row generated.ListAccessibleStaysRow) stay.Record {
 	return stay.Record{
-		ID: idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
+		Provenance:        stay.Provenance(row.Provenance),
+		ApprovalState:     row.ApprovalState,
+		ApprovalExpiresAt: timePointer(row.ApprovalExpiresAt),
+		ID:                idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
 		Status: stay.Status(row.Status), PlannedArrivalOn: dateString(row.PlannedArrivalOn),
 		PlannedDepartureOn: dateString(row.PlannedDepartureOn),
 		ExpectedGuestCount: row.ExpectedGuestCount, VisitorCount: row.VisitorCount,
@@ -1095,9 +1163,16 @@ func stayFromList(row generated.ListAccessibleStaysRow) stay.Record {
 	}
 }
 
-func stayFromUpdate(row generated.UpdateStayRow, visitorCount int32) stay.Record {
+func stayFromUpdate(
+	row generated.UpdateStayRow,
+	visitorCount int32,
+	facts approvalFacts,
+) stay.Record {
 	return stay.Record{
-		ID: idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
+		Provenance:        facts.provenance,
+		ApprovalState:     facts.state,
+		ApprovalExpiresAt: facts.expiresAt,
+		ID:                idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
 		Status: stay.Status(row.Status), PlannedArrivalOn: dateString(row.PlannedArrivalOn),
 		PlannedDepartureOn: dateString(row.PlannedDepartureOn),
 		ExpectedGuestCount: row.ExpectedGuestCount, VisitorCount: visitorCount,
@@ -1108,9 +1183,16 @@ func stayFromUpdate(row generated.UpdateStayRow, visitorCount int32) stay.Record
 	}
 }
 
-func stayFromTransition(row generated.ApplyStayTransitionRow, visitorCount int32) stay.Record {
+func stayFromTransition(
+	row generated.ApplyStayTransitionRow,
+	visitorCount int32,
+	facts approvalFacts,
+) stay.Record {
 	return stay.Record{
-		ID: idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
+		Provenance:        facts.provenance,
+		ApprovalState:     facts.state,
+		ApprovalExpiresAt: facts.expiresAt,
+		ID:                idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
 		Status: stay.Status(row.Status), PlannedArrivalOn: dateString(row.PlannedArrivalOn),
 		PlannedDepartureOn: dateString(row.PlannedDepartureOn),
 		ExpectedGuestCount: row.ExpectedGuestCount, VisitorCount: visitorCount,
@@ -1133,6 +1215,7 @@ func visitorRecord(row generated.ListVisitorsForStayRow) stay.VisitorRecord {
 func insertAssistedGroup(
 	ctx context.Context,
 	q generated.Querier,
+	hashKey []byte,
 	command stay.GroupCommand,
 	now time.Time,
 ) (uuid.UUID, error) {
@@ -1140,7 +1223,7 @@ func insertAssistedGroup(
 	if err != nil {
 		return uuid.Nil, stay.ErrUnavailable
 	}
-	hash, err := idempotency.RequestHash(groupRequestHashValue(
+	hash, err := idempotency.RequestHash(hashKey, groupRequestHashValue(
 		command.ClientSubmissionID, command.PrivacyNoticeVersion, command.Visitors,
 	))
 	if err != nil {
@@ -1213,6 +1296,7 @@ func updateAssistedStay(
 func insertInviteGroup(
 	ctx context.Context,
 	q generated.Querier,
+	hashKey []byte,
 	command stay.InviteGroupCommand,
 	capability resolvedCapability,
 	now time.Time,
@@ -1221,7 +1305,7 @@ func insertInviteGroup(
 	if err != nil {
 		return uuid.Nil, stay.ErrUnavailable
 	}
-	hash, err := idempotency.RequestHash(groupRequestHashValue(
+	hash, err := idempotency.RequestHash(hashKey, groupRequestHashValue(
 		command.ClientSubmissionID, command.PrivacyNoticeVersion, command.Visitors,
 	))
 	if err != nil {
@@ -1490,12 +1574,21 @@ func validCapabilityLifetime(row generated.GetInviteForCapabilityRow, now time.T
 func validCapabilityUse(row generated.GetInviteForCapabilityRow, allowConsumed bool) bool {
 	status := stay.Status(row.StayStatus)
 	if status == stay.StatusPreRegistered {
-		return allowConsumed && row.UseCount >= row.MaxUses
+		return allowConsumed && exhaustedInvite(row)
 	}
 	if !openStayStatus(status) {
 		return false
 	}
-	return allowConsumed || row.UseCount < row.MaxUses
+	return allowConsumed || !exhaustedInvite(row)
+}
+
+// max_uses nulo significa uso ilimitado, e só o convite por acomodação pode
+// tê-lo (ADR-039): invites_target_valid mantém o convite de estadia com o
+// limite obrigatório. O caminho de estadia nunca chega aqui com nulo, mas o
+// tipo passou a admiti-lo e "ilimitado" precisa ser explícito em vez de virar
+// zero por acidente, o que declararia todo convite esgotado.
+func exhaustedInvite(row generated.GetInviteForCapabilityRow) bool {
+	return row.MaxUses != nil && row.UseCount >= *row.MaxUses
 }
 
 func openStayStatus(status stay.Status) bool {

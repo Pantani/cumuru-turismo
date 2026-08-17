@@ -617,6 +617,7 @@ ci: ## Executa o gate completo sequencial; pesado, usa Docker e rede
 	@$(MAKE) --no-print-directory phase3-proxy-test
 	@$(MAKE) --no-print-directory phase4-integration
 	@$(MAKE) --no-print-directory phase4-proxy-test
+	@$(MAKE) --no-print-directory phase7-integration
 	@$(MAKE) --no-print-directory test
 	@$(MAKE) --no-print-directory test-backend-race
 	@$(MAKE) --no-print-directory typecheck
@@ -626,6 +627,7 @@ ci: ## Executa o gate completo sequencial; pesado, usa Docker e rede
 	@$(MAKE) --no-print-directory images
 	@$(MAKE) --no-print-directory phase2-full-stack
 	@$(MAKE) --no-print-directory phase4-benchmark
+	@$(MAKE) --no-print-directory phase7-full-stack
 	@$(MAKE) --no-print-directory local-demo-e2e
 	@$(MAKE) --no-print-directory smoke-local
 	@$(MAKE) --no-print-directory sbom

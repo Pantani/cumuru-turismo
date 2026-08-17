@@ -277,3 +277,33 @@ func TestServiceRejectsEmptyAccommodationPatch(t *testing.T) {
 		t.Fatalf("Update() error = %v, want ErrInvalidInput", err)
 	}
 }
+
+// N-25: approval is its own operation. An operator holding update_stay must not
+// inherit it, and neither must a suspended or closed accommodation.
+func TestApprovalIsAnOperationOfItsOwnAndOnlyWhenActive(t *testing.T) {
+	t.Parallel()
+
+	if OperationApproveStay == OperationUpdateStay {
+		t.Fatal("approval reuses the edit permission")
+	}
+	allowed := map[Status]bool{
+		StatusActive:        true,
+		StatusPendingReview: false,
+		StatusSuspended:     false,
+		StatusClosed:        false,
+	}
+	for status, want := range allowed {
+		got := status.Allows(OperationApproveStay)
+		if got != want {
+			t.Fatalf("%s allows approve_stay = %t, want %t", status, got, want)
+		}
+		if issue := status.Allows(OperationIssueActivation); issue != want {
+			t.Fatalf("%s allows issue_activation = %t, want %t", status, issue, want)
+		}
+	}
+	// The edit permission must stay available where approval is not, otherwise
+	// the test would pass for the wrong reason.
+	if !StatusActive.Allows(OperationUpdateStay) {
+		t.Fatal("update_stay disappeared from the active accommodation")
+	}
+}

@@ -101,6 +101,86 @@ func (q *Queries) CreateAccommodationMembership(ctx context.Context, arg CreateA
 	return i, err
 }
 
+const createActivationManagerMembership = `-- name: CreateActivationManagerMembership :one
+INSERT INTO core.memberships (
+  id,
+  accommodation_id,
+  oidc_issuer,
+  oidc_subject,
+  role
+)
+SELECT
+  $1,
+  a.id,
+  $2,
+  $3,
+  'manager'
+FROM core.accommodations AS a
+WHERE a.id = $4
+  AND a.status = 'active'
+  AND EXISTS (
+    SELECT 1
+    FROM core.memberships AS actor
+    WHERE actor.accommodation_id = a.id
+      AND actor.oidc_issuer = $5
+      AND actor.oidc_subject = $6
+      AND actor.active = true
+      AND actor.role = 'manager'
+  )
+RETURNING
+  id,
+  accommodation_id,
+  role,
+  active,
+  version,
+  created_at,
+  updated_at
+`
+
+type CreateActivationManagerMembershipParams struct {
+	MembershipID      pgtype.UUID `json:"membership_id"`
+	TargetOidcIssuer  string      `json:"target_oidc_issuer"`
+	TargetOidcSubject string      `json:"target_oidc_subject"`
+	AccommodationID   pgtype.UUID `json:"accommodation_id"`
+	OidcIssuer        string      `json:"oidc_issuer"`
+	OidcSubject       string      `json:"oidc_subject"`
+}
+
+type CreateActivationManagerMembershipRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	AccommodationID pgtype.UUID        `json:"accommodation_id"`
+	Role            string             `json:"role"`
+	Active          bool               `json:"active"`
+	Version         int64              `json:"version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Vínculo da conta pendente com a acomodação (ADR-041). Gated em
+// a.status = 'active' porque issue_activation só existe na acomodação ativa;
+// CreateAccommodationMembership é mais permissiva (<> 'closed') e não serve.
+func (q *Queries) CreateActivationManagerMembership(ctx context.Context, arg CreateActivationManagerMembershipParams) (CreateActivationManagerMembershipRow, error) {
+	row := q.db.QueryRow(ctx, createActivationManagerMembership,
+		arg.MembershipID,
+		arg.TargetOidcIssuer,
+		arg.TargetOidcSubject,
+		arg.AccommodationID,
+		arg.OidcIssuer,
+		arg.OidcSubject,
+	)
+	var i CreateActivationManagerMembershipRow
+	err := row.Scan(
+		&i.ID,
+		&i.AccommodationID,
+		&i.Role,
+		&i.Active,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const findOnboardedAccommodation = `-- name: FindOnboardedAccommodation :one
 SELECT
   accommodation.id,

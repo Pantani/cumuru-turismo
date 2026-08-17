@@ -11,6 +11,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateAccountPassword = `-- name: ActivateAccountPassword :execrows
+UPDATE auth.accounts
+SET
+  password_hash = $1,
+  password_changed_at = $2,
+  status = 'active',
+  updated_at = $2
+WHERE id = $3
+  AND status = 'pending_activation'
+  AND password_hash IS NULL
+`
+
+type ActivateAccountPasswordParams struct {
+	PasswordHash *string            `json:"password_hash"`
+	ChangedAt    pgtype.Timestamptz `json:"changed_at"`
+	AccountID    pgtype.UUID        `json:"account_id"`
+}
+
+// Condicionado ao estado pendente: repetir a ativação não reescreve a senha de
+// uma conta já ativa.
+func (q *Queries) ActivateAccountPassword(ctx context.Context, arg ActivateAccountPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, activateAccountPassword, arg.PasswordHash, arg.ChangedAt, arg.AccountID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearAuthFailures = `-- name: ClearAuthFailures :exec
 UPDATE auth.accounts
 SET
@@ -24,6 +52,153 @@ WHERE id = $1
 func (q *Queries) ClearAuthFailures(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, clearAuthFailures, id)
 	return err
+}
+
+const consumeActivationCapability = `-- name: ConsumeActivationCapability :one
+UPDATE auth.activation_capabilities AS c
+SET consumed_at = $1
+WHERE c.token_hmac = $2
+  AND c.consumed_at IS NULL
+  AND c.revoked_at IS NULL
+  AND c.expires_at > $1
+RETURNING id, account_id, accommodation_id
+`
+
+type ConsumeActivationCapabilityParams struct {
+	ConsumedAt pgtype.Timestamptz `json:"consumed_at"`
+	TokenHmac  []byte             `json:"token_hmac"`
+}
+
+type ConsumeActivationCapabilityRow struct {
+	ID              pgtype.UUID `json:"id"`
+	AccountID       pgtype.UUID `json:"account_id"`
+	AccommodationID pgtype.UUID `json:"accommodation_id"`
+}
+
+// Uso único, atômico com a escrita do hash pelo chamador. Zero linhas é o mesmo
+// 404 uniforme de token ausente, errado, expirado, consumido ou revogado.
+func (q *Queries) ConsumeActivationCapability(ctx context.Context, arg ConsumeActivationCapabilityParams) (ConsumeActivationCapabilityRow, error) {
+	row := q.db.QueryRow(ctx, consumeActivationCapability, arg.ConsumedAt, arg.TokenHmac)
+	var i ConsumeActivationCapabilityRow
+	err := row.Scan(&i.ID, &i.AccountID, &i.AccommodationID)
+	return i, err
+}
+
+const createActivationAccount = `-- name: CreateActivationAccount :one
+INSERT INTO auth.accounts (
+  id,
+  email,
+  display_name,
+  scopes,
+  status
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  'pending_activation'
+)
+RETURNING id, email, display_name, scopes, status, created_at
+`
+
+type CreateActivationAccountParams struct {
+	AccountID   pgtype.UUID `json:"account_id"`
+	Email       string      `json:"email"`
+	DisplayName string      `json:"display_name"`
+	Scopes      []string    `json:"scopes"`
+}
+
+type CreateActivationAccountRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	Email       string             `json:"email"`
+	DisplayName string             `json:"display_name"`
+	Scopes      []string           `json:"scopes"`
+	Status      string             `json:"status"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+// Conta pendente: nasce sem hash, com password_must_change false, sem
+// tentativas e sem bloqueio, exatamente o que accounts_credential_state_valid
+// exige do estado pending_activation (ADR-041).
+func (q *Queries) CreateActivationAccount(ctx context.Context, arg CreateActivationAccountParams) (CreateActivationAccountRow, error) {
+	row := q.db.QueryRow(ctx, createActivationAccount,
+		arg.AccountID,
+		arg.Email,
+		arg.DisplayName,
+		arg.Scopes,
+	)
+	var i CreateActivationAccountRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.Scopes,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createActivationCapability = `-- name: CreateActivationCapability :one
+INSERT INTO auth.activation_capabilities (
+  id,
+  account_id,
+  accommodation_id,
+  token_hmac,
+  token_key_version,
+  purpose,
+  expires_at
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  'accommodation_activation',
+  $6
+)
+RETURNING id, account_id, accommodation_id, token_key_version, expires_at, created_at
+`
+
+type CreateActivationCapabilityParams struct {
+	CapabilityID    pgtype.UUID        `json:"capability_id"`
+	AccountID       pgtype.UUID        `json:"account_id"`
+	AccommodationID pgtype.UUID        `json:"accommodation_id"`
+	TokenHmac       []byte             `json:"token_hmac"`
+	TokenKeyVersion string             `json:"token_key_version"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+}
+
+type CreateActivationCapabilityRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	AccountID       pgtype.UUID        `json:"account_id"`
+	AccommodationID pgtype.UUID        `json:"accommodation_id"`
+	TokenKeyVersion string             `json:"token_key_version"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CreateActivationCapability(ctx context.Context, arg CreateActivationCapabilityParams) (CreateActivationCapabilityRow, error) {
+	row := q.db.QueryRow(ctx, createActivationCapability,
+		arg.CapabilityID,
+		arg.AccountID,
+		arg.AccommodationID,
+		arg.TokenHmac,
+		arg.TokenKeyVersion,
+		arg.ExpiresAt,
+	)
+	var i CreateActivationCapabilityRow
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.AccommodationID,
+		&i.TokenKeyVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const deleteExpiredAuthSessions = `-- name: DeleteExpiredAuthSessions :exec
@@ -55,7 +230,7 @@ type FindAuthAccountByEmailRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	Email              string             `json:"email"`
 	DisplayName        string             `json:"display_name"`
-	PasswordHash       string             `json:"password_hash"`
+	PasswordHash       *string            `json:"password_hash"`
 	Scopes             []string           `json:"scopes"`
 	Status             string             `json:"status"`
 	FailedAttempts     int32              `json:"failed_attempts"`
@@ -97,7 +272,7 @@ type FindAuthAccountByIDRow struct {
 	ID                 pgtype.UUID `json:"id"`
 	Email              string      `json:"email"`
 	DisplayName        string      `json:"display_name"`
-	PasswordHash       string      `json:"password_hash"`
+	PasswordHash       *string     `json:"password_hash"`
 	Scopes             []string    `json:"scopes"`
 	Status             string      `json:"status"`
 	PasswordMustChange bool        `json:"password_must_change"`
@@ -160,6 +335,65 @@ func (q *Queries) FindAuthSession(ctx context.Context, tokenHash []byte) (FindAu
 		&i.Scopes,
 		&i.Status,
 		&i.PasswordMustChange,
+	)
+	return i, err
+}
+
+const getActivationCapability = `-- name: GetActivationCapability :one
+SELECT
+  c.id,
+  c.account_id,
+  c.accommodation_id,
+  c.token_hmac,
+  c.token_key_version,
+  c.expires_at,
+  c.consumed_at,
+  c.revoked_at,
+  a.name AS accommodation_name,
+  a.status AS accommodation_status,
+  account.display_name,
+  account.status AS account_status
+FROM auth.activation_capabilities AS c
+JOIN core.accommodations AS a
+  ON a.id = c.accommodation_id
+JOIN auth.accounts AS account
+  ON account.id = c.account_id
+WHERE c.id = $1
+`
+
+type GetActivationCapabilityRow struct {
+	ID                  pgtype.UUID             `json:"id"`
+	AccountID           pgtype.UUID             `json:"account_id"`
+	AccommodationID     pgtype.UUID             `json:"accommodation_id"`
+	TokenHmac           []byte                  `json:"token_hmac"`
+	TokenKeyVersion     string                  `json:"token_key_version"`
+	ExpiresAt           pgtype.Timestamptz      `json:"expires_at"`
+	ConsumedAt          pgtype.Timestamptz      `json:"consumed_at"`
+	RevokedAt           pgtype.Timestamptz      `json:"revoked_at"`
+	AccommodationName   string                  `json:"accommodation_name"`
+	AccommodationStatus CoreAccommodationStatus `json:"accommodation_status"`
+	DisplayName         string                  `json:"display_name"`
+	AccountStatus       string                  `json:"account_status"`
+}
+
+// O e-mail NÃO é projetado: a capability não é prova de titularidade do
+// endereço, então o contexto público não pode devolvê-lo.
+func (q *Queries) GetActivationCapability(ctx context.Context, capabilityID pgtype.UUID) (GetActivationCapabilityRow, error) {
+	row := q.db.QueryRow(ctx, getActivationCapability, capabilityID)
+	var i GetActivationCapabilityRow
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.AccommodationID,
+		&i.TokenHmac,
+		&i.TokenKeyVersion,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.RevokedAt,
+		&i.AccommodationName,
+		&i.AccommodationStatus,
+		&i.DisplayName,
+		&i.AccountStatus,
 	)
 	return i, err
 }
@@ -261,6 +495,29 @@ func (q *Queries) RevokeAuthSession(ctx context.Context, arg RevokeAuthSessionPa
 	return err
 }
 
+const revokeOpenActivationCapabilities = `-- name: RevokeOpenActivationCapabilities :execrows
+UPDATE auth.activation_capabilities AS c
+SET revoked_at = $1
+WHERE c.account_id = $2
+  AND c.consumed_at IS NULL
+  AND c.revoked_at IS NULL
+`
+
+type RevokeOpenActivationCapabilitiesParams struct {
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+	AccountID pgtype.UUID        `json:"account_id"`
+}
+
+// A reemissão revoga a capability anterior na mesma transação: o índice parcial
+// activation_capabilities_open_idx garante no máximo uma aberta por conta.
+func (q *Queries) RevokeOpenActivationCapabilities(ctx context.Context, arg RevokeOpenActivationCapabilitiesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOpenActivationCapabilities, arg.RevokedAt, arg.AccountID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const rotateAccountPassword = `-- name: RotateAccountPassword :exec
 UPDATE auth.accounts
 SET
@@ -272,7 +529,7 @@ WHERE id = $3
 `
 
 type RotateAccountPasswordParams struct {
-	PasswordHash string             `json:"password_hash"`
+	PasswordHash *string            `json:"password_hash"`
 	ChangedAt    pgtype.Timestamptz `json:"changed_at"`
 	ID           pgtype.UUID        `json:"id"`
 }

@@ -601,6 +601,7 @@ func fullReconciliationSources(
 	for _, row := range rows {
 		source := analytics.PresenceSource{
 			StayID: uuidFromPG(row.ID), Status: stay.Status(row.Status),
+			Approval:         stay.ApprovalStateFromColumn(row.ApprovalState),
 			PlannedArrival:   civilDateFromPG(row.PlannedArrivalOn),
 			PlannedDeparture: civilDateFromPG(row.PlannedDepartureOn),
 			CheckedInAt:      timePointer(row.CheckedInAt), CheckedOutAt: timePointer(row.CheckedOutAt),
@@ -625,7 +626,7 @@ func addPresenceVisitors(
 	queries generated.Querier,
 	source *analytics.PresenceSource,
 ) error {
-	if !presenceEligible(source.Status) {
+	if !presenceEligible(source.Status, source.Approval) {
 		return nil
 	}
 	rows, err := queries.ListStayVisitorsForPresence(ctx, idToPG(source.StayID))
@@ -643,7 +644,15 @@ func addPresenceVisitors(
 	return nil
 }
 
-func presenceEligible(status stay.Status) bool {
+// presenceEligible is the second of the three mandatory filter points, and the
+// choke point addPresenceVisitors and incompleteStayCount share. The status
+// alone is not enough: a pending self-registration sits in pre_registered — the
+// phase adds no value to core.stay_status — and would accrue forecast
+// person-days that reach public_data.metric_cells without anybody approving it.
+func presenceEligible(status stay.Status, approval stay.ApprovalState) bool {
+	if !approval.Countable() {
+		return false
+	}
 	return status == stay.StatusPreRegistered ||
 		status == stay.StatusCheckedIn ||
 		status == stay.StatusCheckedOut
@@ -678,7 +687,7 @@ func (r *AnalyticsRepository) reconcilePresenceSource(
 	asOf stay.CivilDate,
 ) error {
 	desired := []analytics.PresenceFact{}
-	if presenceEligible(source.presence.Status) {
+	if presenceEligible(source.presence.Status, source.presence.Approval) {
 		var err error
 		desired, err = analytics.MaterializePresence(
 			source.presence, asOf, r.phase4.PreRegisteredWeight,
@@ -1092,7 +1101,8 @@ func incompleteStayCount(
 ) (int32, error) {
 	var count int32
 	for _, source := range sources {
-		if !presenceEligible(stay.Status(source.Status)) {
+		approval := stay.ApprovalStateFromColumn(source.ApprovalState)
+		if !presenceEligible(stay.Status(source.Status), approval) {
 			continue
 		}
 		rows, err := queries.ListStayVisitorsForPresence(ctx, source.ID)

@@ -73,3 +73,36 @@ func (q *Queries) ListActiveTenantMemberships(ctx context.Context, arg ListActiv
 	}
 	return items, nil
 }
+
+const spendProofOfWorkChallenge = `-- name: SpendProofOfWorkChallenge :execrows
+INSERT INTO platform.proof_of_work_spends (
+  challenge_hmac,
+  key_version,
+  expires_at
+)
+VALUES (
+  $1,
+  $2,
+  $3
+)
+ON CONFLICT (challenge_hmac) DO NOTHING
+`
+
+type SpendProofOfWorkChallengeParams struct {
+	ChallengeHmac []byte             `json:"challenge_hmac"`
+	KeyVersion    string             `json:"key_version"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
+// Livro de nonces do proof-of-work. O INSERT com conflito na chave primária
+// afeta zero linhas e é exatamente o replay: sem este gasto, a mesma solução
+// seria reenviada durante todo o TTL e o controle valeria zero. O chamador
+// devolve a mesma resposta indistinguível dada a um desafio inválido, para o
+// endpoint não virar oráculo.
+func (q *Queries) SpendProofOfWorkChallenge(ctx context.Context, arg SpendProofOfWorkChallengeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, spendProofOfWorkChallenge, arg.ChallengeHmac, arg.KeyVersion, arg.ExpiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

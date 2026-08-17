@@ -17,8 +17,11 @@ import {
 import { createPhase2Client, type Phase2Client } from "../api/phase2-client";
 import { createPhase3Client, type Phase3Client } from "../api/phase3-client";
 import { createPhase4Client, type Phase4Client } from "../api/phase4-client";
+import { createPhase7Client, type Phase7Client } from "../api/phase7-client";
 import { clearAllDrafts } from "../offline/encrypted-drafts";
+import { clearActivationCapability } from "../security/activation-capability";
 import { clearInviteCapability } from "../security/invite-capability";
+import { clearSelfServiceCapability } from "../security/self-service-capability";
 import { clearSurveyCapability } from "../security/survey-capability";
 
 interface AuthSessionValue {
@@ -28,6 +31,7 @@ interface AuthSessionValue {
   client: Phase2Client;
   mustChangePassword: boolean;
   questionnaireClient: Phase3Client;
+  selfServiceClient: Phase7Client;
   signIn: (email: string, password: string) => Promise<void>;
   rotatePassword: (current: string, next: string) => Promise<void>;
   endSession: () => Promise<void>;
@@ -45,9 +49,14 @@ const failClosedQuestionnaireClient = createPhase3Client({
 const failClosedAnalyticsClient = createPhase4Client({
   getAccessToken: () => null,
 });
+const failClosedSelfServiceClient = createPhase7Client({
+  getAccessToken: () => null,
+});
 
 async function clearLocalTraces() {
   clearInviteCapability();
+  clearSelfServiceCapability();
+  clearActivationCapability();
   clearSurveyCapability();
   await clearAllDrafts();
 }
@@ -59,6 +68,7 @@ const failClosedSession: AuthSessionValue = {
   client: failClosedClient,
   mustChangePassword: false,
   questionnaireClient: failClosedQuestionnaireClient,
+  selfServiceClient: failClosedSelfServiceClient,
   signIn: async () => {
     throw new Error("Sessão indisponível fora do provedor de autenticação.");
   },
@@ -156,6 +166,7 @@ function buildClients(tokenRef: { current: string | null }) {
     client: createPhase2Client({ getAccessToken }),
     questionnaireClient: createPhase3Client({ getAccessToken }),
     analyticsClient: createPhase4Client({ getAccessToken }),
+    selfServiceClient: createPhase7Client({ getAccessToken }),
   };
 }
 

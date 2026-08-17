@@ -11,6 +11,7 @@ import (
 
 	"github.com/Pantani/cumuru/apps/api/internal/access"
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
+	"github.com/Pantani/cumuru/apps/api/internal/activation"
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/database"
@@ -61,10 +62,14 @@ func runAPIWithTelemetry(
 	if err != nil {
 		return err
 	}
+	activations, err := activationService(platformStore, cfg)
+	if err != nil {
+		return errors.New("activation repository initialization failed")
+	}
 	publicHandler, operationsHandler := httpapi.New(apiDependencies(
 		cfg, build, logger, tracing, verifier,
 		platformStore, accommodationService, stayService, questionnaireService,
-		publicAnalytics, analyticsQuality,
+		publicAnalytics, analyticsQuality, activations,
 	))
 	publicListener, operationsListener, err := apiListeners(cfg)
 	if err != nil {
@@ -127,6 +132,7 @@ func apiDependencies(
 	questionnaireService *questionnaire.Service,
 	publicAnalytics analytics.PublicReader,
 	analyticsQuality analytics.QualityReader,
+	activationService *activation.Service,
 ) httpapi.Dependencies {
 	return httpapi.Dependencies{
 		Readiness:                      platformStore,
@@ -136,6 +142,8 @@ func apiDependencies(
 		Accommodations:                 accommodationService,
 		AccommodationOnboardingEnabled: cfg.Phase2.AccommodationOnboardingEnabled,
 		Stays:                          stayService,
+		SelfServiceEnabled:             cfg.Phase7.Enabled,
+		Activation:                     activationService,
 		Questionnaires:                 questionnaireService,
 		PublicAnalytics:                publicAnalytics,
 		AnalyticsQuality:               analyticsQuality,
@@ -182,6 +190,22 @@ func services(
 	return accommodationService, stay.NewService(stayRepository), questionnaireService, nil
 }
 
+// activationService is nil when the phase is off, which is what keeps the two
+// public activation routes unregistered instead of half configured.
+func activationService(
+	platformStore *store.Store,
+	cfg config.Config,
+) (*activation.Service, error) {
+	if !cfg.Phase7.Enabled {
+		return nil, nil
+	}
+	repository, err := store.NewActivationRepository(platformStore)
+	if err != nil {
+		return nil, err
+	}
+	return activation.NewService(repository), nil
+}
+
 func openServices(
 	ctx context.Context,
 	cfg config.Config,
@@ -202,6 +226,7 @@ func openServices(
 	platformStore, err := store.NewPhase3(
 		pool, cfg.DatabaseTimeout, cfg.Phase2, cfg.Phase3,
 		store.WithAuthConfig(cfg.Auth),
+		store.WithPhase7Config(cfg.Phase7),
 	)
 	if err != nil {
 		pool.Close()

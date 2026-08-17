@@ -16,6 +16,31 @@ COMPOSE=(
 )
 MIGRATION_URL="postgres://cumuru_migration:cumuru-local-migration-only@postgres:5432/${SOURCE_DATABASE}?sslmode=disable"
 
+# A versão esperada vem do diretório de migrations, não de um literal: fixá-la
+# fazia o drill quebrar em toda migration nova por um motivo que nada tem a ver
+# com dump e restore.
+latest_migration_version() {
+  local latest
+  # Mesmo escopo de `test-migrations.sh`: apenas arquivo comum no primeiro
+  # nível. Uma fixture aninhada não pode eleger uma versão que a checagem de
+  # migrations não reconhece.
+  latest="$(find "${ROOT_DIR}/apps/api/migrations" \
+    -maxdepth 1 -type f -name '*.up.sql' -print |
+    sed -e 's|.*/||' -e 's|_.*||' |
+    LC_ALL=C sort -n |
+    tail -n 1)"
+  test -n "${latest}"
+  # `10#` sobre prefixo não numérico aborta com erro de sintaxe do shell; a
+  # recusa explícita diz qual arquivo está fora da convenção.
+  case "${latest}" in
+    *[!0-9]*)
+      echo "prefixo de migration fora da convenção numérica: ${latest}" >&2
+      return 1
+      ;;
+  esac
+  printf '%s' "$((10#${latest}))"
+}
+
 cleanup() {
   local primary_status=$?
   local cleanup_status=0
@@ -45,6 +70,16 @@ psql_as() {
     -e "PGPASSWORD=${password}" \
     postgres psql --no-psqlrc --set=ON_ERROR_STOP=1 \
     --username="${user}" --dbname="${database}" "$@"
+}
+
+# `test a = b` falha sem dizer nada e o log do CI termina no erro do make, sem
+# o valor que divergiu. A comparação passa a nomear os dois lados.
+assert_fingerprint() {
+  local label="$1" actual="$2" expected="$3"
+  if test "${actual}" != "${expected}"; then
+    echo "fingerprint da ${label}: ${actual}, esperado ${expected}" >&2
+    return 1
+  fi
 }
 
 expect_psql_failure() {
@@ -186,17 +221,9 @@ VALUES (
 );
 SQL
 
-# A primeira coluna é a versão aplicada em public.schema_migrations. Ao
-# adicionar uma migration, atualize esta expectativa junto.
-EXPECTED_SOURCE_FINGERPRINT="2:false:1:1:1:1:6:4"
-
+expected_fingerprint="$(latest_migration_version):false:1:1:1:1:6:4"
 source_fingerprint="$(database_fingerprint "${SOURCE_DATABASE}")"
-if test "${source_fingerprint}" != "${EXPECTED_SOURCE_FINGERPRINT}"; then
-  echo "source fingerprint mismatch" >&2
-  echo "expected=${EXPECTED_SOURCE_FINGERPRINT}" >&2
-  echo "actual=${source_fingerprint}" >&2
-  exit 1
-fi
+assert_fingerprint "origem" "${source_fingerprint}" "${expected_fingerprint}"
 
 "${COMPOSE[@]}" exec -T \
   -e "PGPASSWORD=${ADMIN_PASSWORD}" \
@@ -236,12 +263,7 @@ SQL
   "${DUMP_PATH}"
 
 restore_fingerprint="$(database_fingerprint "${RESTORE_DATABASE}")"
-if test "${restore_fingerprint}" != "${source_fingerprint}"; then
-  echo "restored fingerprint diverged from the source" >&2
-  echo "source=${source_fingerprint}" >&2
-  echo "restore=${restore_fingerprint}" >&2
-  exit 1
-fi
+assert_fingerprint "restauração" "${restore_fingerprint}" "${source_fingerprint}"
 
 schema_owners="$(
   psql_as "${RESTORE_DATABASE}" postgres "${ADMIN_PASSWORD}" \

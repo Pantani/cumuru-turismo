@@ -7,6 +7,7 @@ SELECT
   planned_departure_on,
   checked_in_at,
   checked_out_at,
+  approval_state,
   version,
   updated_at
 FROM core.stays
@@ -22,9 +23,15 @@ SELECT
   stay.planned_departure_on,
   stay.checked_in_at,
   stay.checked_out_at,
+  stay.approval_state,
   stay.version AS expected_version,
   stay.updated_at
 FROM core.stays AS stay
+-- O WHERE não muda de propósito. A elegibilidade por aprovação é decidida em
+-- presenceEligible(), no Go, sobre esta projeção. Filtrar aqui deixaria os
+-- fatos já materializados de uma estadia rejeitada órfãos: a cláusula EXISTS
+-- abaixo precisa continuar trazendo a estadia agora inelegível justamente para
+-- que o diff apague o que existia.
 WHERE stay.status IN ('pre_registered', 'checked_in', 'checked_out')
   OR EXISTS (
     SELECT 1
