@@ -12,64 +12,305 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CUMURU_IMAGE_TAG: ${{ github.sha }}
+  CUMURU_BUILD_REVISION: ${{ github.sha }}
+
 jobs:
-  verify:
+  # ----------------------------------------------------------------------
+  # Gates estáticos: sem Docker, sem rede além das dependências fixadas.
+  # ----------------------------------------------------------------------
+  quality:
+    name: quality
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      CUMURU_IMAGE_TAG: ${{ github.sha }}
-      CUMURU_BUILD_REVISION: ${{ github.sha }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - uses: ./.github/actions/setup
         with:
-          go-version: 1.26.6
-          cache-dependency-path: apps/api/go.sum
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 26.5.0
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: 1.15.8
-          terraform_wrapper: false
-
-      - name: Install pinned ripgrep
-        env:
-          RIPGREP_VERSION: 15.2.0
-          RIPGREP_SHA256: 33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c
-        run: |
-          archive="${RUNNER_TEMP}/ripgrep.tar.gz"
-          extracted="${RUNNER_TEMP}/ripgrep-${RIPGREP_VERSION}-x86_64-unknown-linux-musl"
-          curl --fail --location --silent --show-error \
-            "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/ripgrep-${RIPGREP_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
-            --output "${archive}"
-          echo "${RIPGREP_SHA256}  ${archive}" | sha256sum --check -
-          tar --extract --gzip --file "${archive}" --directory "${RUNNER_TEMP}"
-          install -m 0755 "${extracted}/rg" "${RUNNER_TEMP}/rg"
-          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
-          "${RUNNER_TEMP}/rg" --version
-
-      - name: Install locked dependencies
-        run: make install
-
-      - name: Install pinned Go quality tools
-        run: make tools
-
-      - name: Install Chromium for the canonical browser gate
-        run: npm exec -- playwright install --with-deps chromium
-
+          go: "true"
+          node: "true"
+          npm-install: "true"
+          go-tools: "true"
+          ripgrep: "true"
       - name: Run explicit post-task quality gate
-        run: |
-          make post-task-quality
+        run: make post-task-quality
+      - name: Run strict web typecheck
+        run: make typecheck
 
-      - name: Run canonical CI gate
-        run: make ci
+  contracts:
+    name: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+          node: "true"
+          npm-install: "true"
+      - name: Lint the OpenAPI contract
+        run: make openapi-lint
+      - name: Prove generated artifacts are reproducible
+        run: make generated-check
 
+  build:
+    name: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+          node: "true"
+          npm-install: "true"
+      - name: Build API, worker and web
+        run: make build
+
+  test-backend:
+    name: test-backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+      - name: Run the Go suite
+        run: make test-backend
+
+  test-backend-race:
+    name: test-backend-race
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+      - name: Run the Go suite with the race detector
+        run: make test-backend-race
+
+  test-frontend:
+    name: test-frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+          npm-install: "true"
+      - name: Run the Vitest suite
+        run: make test-frontend
+
+  config:
+    name: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+          dotenv: "true"
+      - name: Validate the Compose base and every local overlay
+        run: make compose-config
+      - name: Validate the production runtime contract with the real loaders
+        run: make prod-config-example
+
+  infra:
+    name: infra
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          terraform: "true"
+      - name: Validate the infrastructure without applying it
+        run: make infra-validation
+
+  # ----------------------------------------------------------------------
+  # Integrações com PostgreSQL real e proxies. Cada entrada sobe o próprio
+  # projeto Compose efêmero, então roda isolada e em paralelo.
+  # ----------------------------------------------------------------------
+  integration:
+    name: integration (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: migrations
+            targets: migration-test
+            go: "false"
+            node: "false"
+            npm: "false"
+          - name: restore-drill
+            targets: local-restore-drill
+            go: "false"
+            node: "false"
+            npm: "false"
+          - name: local-demo
+            targets: local-demo-test
+            go: "false"
+            node: "false"
+            npm: "false"
+          - name: phase2
+            targets: phase2-integration
+            go: "true"
+            node: "false"
+            npm: "false"
+          - name: phase3
+            targets: phase3-integration
+            go: "true"
+            node: "false"
+            npm: "false"
+          - name: phase4
+            targets: phase4-integration
+            go: "false"
+            node: "false"
+            npm: "false"
+          - name: proxy-hardening
+            targets: phase2-proxy-test phase3-proxy-test
+            go: "false"
+            node: "true"
+            npm: "true"
+          - name: phase4-proxy
+            targets: phase4-proxy-test
+            go: "false"
+            node: "true"
+            npm: "true"
+          - name: phase7
+            targets: phase7-integration
+            go: "true"
+            node: "false"
+            npm: "false"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          go: ${{ matrix.go }}
+          node: ${{ matrix.node }}
+          npm-install: ${{ matrix.npm }}
+      - name: Run ${{ matrix.targets }}
+        run: make ${{ matrix.targets }}
+
+  # ----------------------------------------------------------------------
+  # Stacks completas. Cada script constrói as próprias imagens com --build;
+  # rodar em paralelo troca minutos de runner por tempo de parede.
+  # ----------------------------------------------------------------------
+  full-stack:
+    name: full-stack (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: phase2
+            targets: phase2-full-stack
+            go: "false"
+            node: "false"
+            npm: "false"
+          # O script da Fase 4 usa apenas heredoc de node; o benchmark roda em
+          # Go. Nenhum dos dois lê o node_modules, então npm ci fica de fora.
+          - name: phase4-benchmark
+            targets: phase4-benchmark
+            go: "true"
+            node: "true"
+            npm: "false"
+          # O solucionador de proof-of-work usa só node:crypto, sem pacotes.
+          - name: phase7
+            targets: phase7-full-stack
+            go: "false"
+            node: "true"
+            npm: "false"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          go: ${{ matrix.go }}
+          node: ${{ matrix.node }}
+          npm-install: ${{ matrix.npm }}
+      - name: Run ${{ matrix.targets }}
+        run: make ${{ matrix.targets }}
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+          npm-install: "true"
+          chromium: "true"
+      - name: Run the canonical browser journey
+        run: make local-demo-e2e
+      - name: Upload browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: e2e-failure-evidence
+          path: _workspace/playwright/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  smoke:
+    name: smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          # smoke.sh asserta as respostas num heredoc de node, sem pacotes.
+          node: "true"
+          dotenv: "true"
+      - name: Run the local stack smoke
+        run: make smoke-local
+
+  # ----------------------------------------------------------------------
+  # Cadeia de suprimentos: scanners de código e evidência das imagens.
+  # ----------------------------------------------------------------------
+  scan:
+    name: scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+          node: "true"
+          npm-install: "true"
+          go-tools: "true"
+      - name: Run govulncheck, npm audit, Trivy fs and Gitleaks
+        run: make scan
+
+  supply-chain:
+    name: supply-chain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+          node: "true"
+          npm-install: "true"
+          go-tools: "true"
+      - name: Build the reproducible OCI images
+        run: make images
+      - name: Generate Go, npm and image SBOMs
+        run: make sbom
+      - name: Scan the built images
+        run: make image-scan
       - name: Upload SBOM evidence
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -78,3 +319,42 @@ jobs:
             artifacts/sbom/*.json
           if-no-files-found: error
           retention-days: 14
+
+  # ----------------------------------------------------------------------
+  # Porta única de proteção de branch: falha se qualquer gate acima não
+  # tiver sucesso, inclusive quando um job é pulado ou cancelado.
+  # ----------------------------------------------------------------------
+  ci:
+    name: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - quality
+      - contracts
+      - build
+      - test-backend
+      - test-backend-race
+      - test-frontend
+      - config
+      - infra
+      - integration
+      - full-stack
+      - e2e
+      - smoke
+      - scan
+      - supply-chain
+    steps:
+      - name: Require every gate to succeed
+        env:
+          GATE_RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          set -eu
+          echo "gate results: ${GATE_RESULTS}"
+          for result in ${GATE_RESULTS}; do
+            if test "${result}" != "success"; then
+              echo "CI_GATE=FAIL" >&2
+              exit 1
+            fi
+          done
+          echo "CI_GATE=PASS"

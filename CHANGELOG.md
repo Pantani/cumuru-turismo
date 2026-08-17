@@ -41,9 +41,23 @@ arquivo.
   as comparações continuam medidos contra o nível observado;
 - média móvel de 7 dias sobre a série, que só aparece com a janela completa e
   com metade dos dias publicados, e interrompe onde faltam valores;
-- bloco "ritmo da semana" com a média por dia da semana da janela observada.
+- bloco "ritmo da semana" com a média por dia da semana da janela observada;
+- `make compose-config`, `make prod-config-example`, `make smoke-local`,
+  `make phase7-integration` e `make phase7-full-stack` no gate `make ci`,
+  cobrindo os overlays do Compose, os loaders reais de produção sobre
+  `deploy/runtime.env.example`, o smoke da stack local e as duas provas da
+  Fase 7, que existiam como targets sem nenhuma execução automatizada;
+- `make smoke-local` e `make prod-config-example` como targets públicos:
+  `smoke-local` sobe a stack, executa o smoke e derruba a stack mesmo quando o
+  smoke falha, propagando o primeiro exit code diferente de zero.
 
 ### Alterado
+
+- a CI deixou de ser um job sequencial único e passa a executar catorze jobs
+  paralelos com uma porta única `ci` exigida pela proteção de branch; cada job
+  instala apenas a cadeia de ferramentas que usa através da action composta
+  `.github/actions/setup`, e as ferramentas Go fixadas são restauradas de cache
+  em vez de recompiladas a cada execução;
 
 - a cadeia pré-lançamento `000002`–`000004` foi absorvida pelo par
   `000001_initial_schema`, preservando a ordem efetiva de `up` e a ordem reversa

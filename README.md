@@ -231,25 +231,40 @@ exige confirmação explícita:
 ALLOW_DESTRUCTIVE_MIGRATION_DOWN=yes make migrate-down-local
 ```
 
-Os gates completos são:
+O gate completo é `make ci`, que executa sequencialmente todos os targets
+abaixo. Localmente ele é a referência única; use os targets isolados quando
+quiser reexecutar apenas uma prova. `make compose-config` e `make smoke-local`
+leem os overlays locais do Compose, então o `.env` da seção anterior precisa
+existir:
 
 ```bash
-make openapi-lint
-make generated-check
-make migration-test
-make local-restore-drill
-make phase2-integration
-make phase2-proxy-test
-make phase2-full-stack
-make test
-make typecheck
-make post-task-quality
-make build
-make images
-make image-scan
-make sbom
-make scan
+make ci
 ```
+
+```text
+openapi-lint          generated-check       compose-config
+prod-config-example   migration-test        local-restore-drill
+local-demo-test       phase2-integration    phase2-proxy-test
+phase3-integration    phase3-proxy-test     phase4-integration
+phase4-proxy-test     phase7-integration    test
+test-backend-race     typecheck             post-task-quality
+infra-validation      build                 images
+phase2-full-stack     phase4-benchmark      phase7-full-stack
+local-demo-e2e        smoke-local           sbom
+scan                  image-scan
+```
+
+Na GitHub Actions esses mesmos gates rodam em paralelo, um job por prova, em
+vez de um job sequencial único. `.github/workflows/ci.yml` define os jobs e
+`.github/actions/setup` instala em cada um somente a cadeia de ferramentas que
+ele usa — Go, Node, `.tools/bin`, Terraform, ripgrep, Chromium ou `.env` —, o
+que evita pagar `npm ci` num job que só compila Go. O job `ci` é a porta única:
+depende de todos os outros e falha quando qualquer um não termina em `success`,
+inclusive se for pulado ou cancelado. É esse o check que a proteção de branch
+deve exigir.
+
+`make ci` e o workflow cobrem o mesmo conjunto de provas; ao adicionar um gate,
+adicione nos dois.
 
 `make local-restore-drill` cria uma base PostgreSQL descartável, aplica a
 migration consolidada, grava apenas canários fictícios, executa `pg_dump` e

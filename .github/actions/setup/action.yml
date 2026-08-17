@@ -1,0 +1,158 @@
+name: Cumuru toolchain setup
+description: >
+  Prepara somente a cadeia de ferramentas que o job pede. Cada entrada é
+  opcional para que os gates rápidos não paguem instalação de Go, Node,
+  Terraform, ripgrep ou navegador que não usam.
+
+inputs:
+  go:
+    description: Instala o Go fixado e baixa os módulos de apps/api
+    required: false
+    default: "false"
+  node:
+    description: >
+      Instala o Node fixado. Vários scripts do gate usam apenas heredocs de
+      node, sem nenhum pacote, e por isso não precisam de npm-install.
+    required: false
+    default: "false"
+  npm-install:
+    description: >
+      Executa npm ci no workspace. Exige node=true e só é necessário quando o
+      job usa dependências do package-lock.json.
+    required: false
+    default: "false"
+  go-tools:
+    description: >
+      Materializa .tools/bin com as ferramentas Go fixadas. Exige go=true
+      porque make tools compila cada binário com o toolchain do job.
+    required: false
+    default: "false"
+  terraform:
+    description: Instala o Terraform fixado usado pela validação de infraestrutura
+    required: false
+    default: "false"
+  ripgrep:
+    description: Instala o ripgrep fixado exigido pelo gate de complexidade
+    required: false
+    default: "false"
+  chromium:
+    description: Instala o Chromium do Playwright para o gate de navegador real
+    required: false
+    default: "false"
+  dotenv:
+    description: >
+      Materializa .env a partir de .env.example. Os overlays locais do Compose
+      exigem SEED_ADMIN_EMAIL e SEED_ADMIN_PASSWORD e falham sem o arquivo.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # As entradas têm dependências entre si. Pular a instalação em silêncio
+    # faria o job cair no Go ou no Node do runner, que não são fixados, e o
+    # gate passaria sobre uma toolchain diferente da declarada.
+    - name: Validate setup inputs
+      shell: bash
+      env:
+        INPUT_GO: ${{ inputs.go }}
+        INPUT_NODE: ${{ inputs.node }}
+        INPUT_NPM_INSTALL: ${{ inputs.npm-install }}
+        INPUT_GO_TOOLS: ${{ inputs.go-tools }}
+        INPUT_CHROMIUM: ${{ inputs.chromium }}
+      run: |
+        set -eu
+        status=0
+        require() {
+          if test "$1" = "true" && test "$2" != "true"; then
+            echo "setup: $3 exige $4=true" >&2
+            status=1
+          fi
+        }
+        require "${INPUT_NPM_INSTALL}" "${INPUT_NODE}" npm-install node
+        require "${INPUT_CHROMIUM}" "${INPUT_NPM_INSTALL}" chromium npm-install
+        require "${INPUT_GO_TOOLS}" "${INPUT_GO}" go-tools go
+        exit "${status}"
+
+    - name: Set up Go
+      if: inputs.go == 'true'
+      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      with:
+        go-version: 1.26.6
+        cache-dependency-path: apps/api/go.sum
+
+    - name: Download locked Go modules
+      if: inputs.go == 'true'
+      shell: bash
+      run: go -C apps/api mod download
+
+    - name: Set up Node
+      if: inputs.node == 'true'
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      with:
+        node-version: 26.5.0
+        cache: npm
+        cache-dependency-path: package-lock.json
+
+    - name: Install locked npm dependencies
+      if: inputs.npm-install == 'true'
+      shell: bash
+      run: npm ci
+
+    - name: Restore pinned Go quality tools
+      id: go-tools-cache
+      if: inputs.go-tools == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: .tools/bin
+        # O próprio action.yml entra na chave: go-version mora aqui, e binário
+        # compilado com outro toolchain não pode ser restaurado como se fosse
+        # o mesmo. O Makefile entra porque fixa a versão de cada ferramenta.
+        key: cumuru-go-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile', '.github/actions/setup/action.yml') }}
+
+    - name: Install pinned Go quality tools
+      if: inputs.go-tools == 'true' && steps.go-tools-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: make tools
+
+    - name: Set up Terraform
+      if: inputs.terraform == 'true'
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      with:
+        terraform_version: 1.15.8
+        terraform_wrapper: false
+
+    - name: Install pinned ripgrep
+      if: inputs.ripgrep == 'true'
+      shell: bash
+      env:
+        RIPGREP_VERSION: 15.2.0
+        RIPGREP_SHA256: 33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c
+      run: |
+        archive="${RUNNER_TEMP}/ripgrep.tar.gz"
+        extracted="${RUNNER_TEMP}/ripgrep-${RIPGREP_VERSION}-x86_64-unknown-linux-musl"
+        # Sem limite, uma requisição travada segura o job até o timeout do
+        # runner e a falha aparece como lentidão, não como erro de rede.
+        curl --fail --location --silent --show-error \
+          --connect-timeout 10 \
+          --max-time 120 \
+          --retry 3 \
+          --retry-delay 2 \
+          --retry-all-errors \
+          "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/ripgrep-${RIPGREP_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+          --output "${archive}"
+        echo "${RIPGREP_SHA256}  ${archive}" | sha256sum --check -
+        tar --extract --gzip --file "${archive}" --directory "${RUNNER_TEMP}"
+        install -m 0755 "${extracted}/rg" "${RUNNER_TEMP}/rg"
+        echo "${RUNNER_TEMP}" >>"${GITHUB_PATH}"
+        "${RUNNER_TEMP}/rg" --version
+
+    - name: Install Chromium for the canonical browser gate
+      if: inputs.chromium == 'true'
+      shell: bash
+      run: npm exec -- playwright install --with-deps chromium
+
+    - name: Materialize .env for the local Compose overlays
+      if: inputs.dotenv == 'true'
+      shell: bash
+      run: cp .env.example .env

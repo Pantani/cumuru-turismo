@@ -35,8 +35,15 @@ export CUMURU_BUILD_VERSION="${build_metadata[0]}"
 export CUMURU_BUILD_REVISION="${build_metadata[1]}"
 export CUMURU_BUILD_TIME="${build_metadata[2]}"
 
+# Compose interpola `compose.local.yaml` inteiro, inclusive o serviço de seed
+# sob profile, então as credenciais fictícias do demo são exigidas mesmo aqui.
+# Em clone limpo e na CI não há `.env`; o exemplo versionado entra como origem.
+LOCAL_ENV_FILE="${ROOT_DIR}/.env"
+test -f "${LOCAL_ENV_FILE}" || LOCAL_ENV_FILE="${ROOT_DIR}/.env.example"
+
 COMPOSE=(
   docker compose
+  --env-file "${LOCAL_ENV_FILE}"
   --file "${ROOT_DIR}/compose.yaml"
   --file "${ROOT_DIR}/compose.local.yaml"
   --project-name "${PROJECT_NAME}"
