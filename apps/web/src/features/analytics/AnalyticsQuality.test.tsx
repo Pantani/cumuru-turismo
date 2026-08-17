@@ -5,11 +5,8 @@ import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../generated/schema";
-import {
-  Phase4ApiError,
-  type Phase4Client,
-  type Phase4Result,
-} from "../../shared/api/phase4-client";
+import { ApiError } from "../../shared/api/http-client";
+import { type AnalyticsClient, type AnalyticsResult } from "../../shared/api/analytics-client";
 import { AnalyticsQuality } from "./AnalyticsQuality";
 
 type QualitySnapshot = components["schemas"]["QualitySnapshot"];
@@ -27,7 +24,7 @@ const snapshot: QualitySnapshot = {
   },
   fnrh_failures: {
     status: "not_available",
-    reason_code: "phase_not_implemented",
+    reason_code: "not_implemented",
   },
   coverage_by_category: [
     { category_code: "formal_lodging", status: "available", ratio: 0.75 },
@@ -35,7 +32,7 @@ const snapshot: QualitySnapshot = {
   ],
 };
 
-function qualityResult(): Promise<Phase4Result<QualitySnapshot>> {
+function qualityResult(): Promise<AnalyticsResult<QualitySnapshot>> {
   return Promise.resolve({
     data: snapshot,
     etag: null,
@@ -43,7 +40,7 @@ function qualityResult(): Promise<Phase4Result<QualitySnapshot>> {
   });
 }
 
-function client(getQuality: Phase4Client["getQuality"]): Phase4Client {
+function client(getQuality: AnalyticsClient["getQuality"]): AnalyticsClient {
   return {
     getSummary: vi.fn(),
     getPresence: vi.fn(),
@@ -53,13 +50,13 @@ function client(getQuality: Phase4Client["getQuality"]): Phase4Client {
   };
 }
 
-function renderQuality(phase4Client: Phase4Client) {
+function renderQuality(analyticsClient: AnalyticsClient) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AnalyticsQuality client={phase4Client} />
+      <AnalyticsQuality client={analyticsClient} />
     </QueryClientProvider>,
   );
 }
@@ -76,7 +73,9 @@ describe("painel interno agregado de qualidade", () => {
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.getAllByText("N/A")).toHaveLength(3);
     expect(screen.getByText(/pseudônimo transversal/i)).toBeInTheDocument();
-    expect(screen.getByText(/FNRH pertence à Fase 5/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/FNRH ainda não foi implementada/i),
+    ).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(
       /stay_id|visitor_id|accommodation_id/i,
@@ -89,7 +88,7 @@ describe("painel interno agregado de qualidade", () => {
   });
 
   it("nega o conteúdo para 403 e permite tentar novamente", async () => {
-    const denied = new Phase4ApiError(
+    const denied = new ApiError(
       403,
       {
         type: "about:blank",
@@ -99,7 +98,7 @@ describe("painel interno agregado de qualidade", () => {
       null,
     );
     const getQuality = vi
-      .fn<Phase4Client["getQuality"]>()
+      .fn<AnalyticsClient["getQuality"]>()
       .mockRejectedValueOnce(denied)
       .mockImplementationOnce(qualityResult);
     const user = userEvent.setup();

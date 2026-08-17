@@ -45,11 +45,11 @@ export DOCKER_SERVICES DOCKER_LOG_TAIL
 	generate-web generate-sqlc generated-check migration-test build test \
 	subnet-release-order-test \
 	local-restore-drill \
-	phase2-integration phase2-proxy-test phase2-full-stack typecheck complexity \
-	phase3-integration phase3-proxy-test \
-	phase4-integration phase4-proxy-test phase4-full-stack phase4-benchmark \
-	local-demo-test local-demo-e2e phase4-remediation \
-	phase7-integration phase7-full-stack phase7-build \
+	core-integration core-proxy-test core-full-stack typecheck complexity \
+	questionnaire-integration questionnaire-proxy-test \
+	analytics-integration analytics-proxy-test analytics-full-stack analytics-benchmark \
+	local-demo-test local-demo-e2e analytics-remediation \
+	self-service-integration self-service-full-stack self-service-build \
 	docker-dev docker-dev-down docker-dev-logs docker-dev-status \
 	docker-rm docker-renew seed prod-config-check prod-config-example \
 	post-task-quality lint-shell lint lint-fix images sbom image-sbom scanner-images scan image-scan compose-config up down migrate-up \
@@ -125,32 +125,32 @@ migration-test: ## Testa migrations e grants em PostgreSQL real via Docker
 local-restore-drill: ## Prova dump/restore sintético em PostgreSQL isolado
 	@bash deploy/scripts/test-local-restore.sh
 
-phase2-integration: ## Executa a integração PostgreSQL da Fase 2 via Docker
-	@bash deploy/scripts/test-phase2-integration.sh
+core-integration: ## Executa a integração PostgreSQL do núcleo via Docker
+	@bash deploy/scripts/test-core-integration.sh
 
-phase2-proxy-test: ## Testa o hardening dos proxies da Fase 2 via Docker
+core-proxy-test: ## Testa o hardening dos proxies do núcleo via Docker
 	@bash deploy/scripts/test-proxy-hardening.sh
 
-phase2-full-stack: ## Testa a stack completa da Fase 2 via Docker
-	@bash deploy/scripts/test-phase2-full-stack.sh
+core-full-stack: ## Testa a stack completa do núcleo via Docker
+	@bash deploy/scripts/test-core-full-stack.sh
 
-phase3-integration: ## Executa a integração PostgreSQL da Fase 3 via Docker
-	@bash deploy/scripts/test-phase3-integration.sh
+questionnaire-integration: ## Executa a integração PostgreSQL do questionário via Docker
+	@bash deploy/scripts/test-questionnaire-integration.sh
 
-phase3-proxy-test: ## Testa o proxy da Fase 3 via Docker
-	@bash deploy/scripts/test-phase3-proxy.sh
+questionnaire-proxy-test: ## Testa o proxy do questionário via Docker
+	@bash deploy/scripts/test-questionnaire-proxy.sh
 
-phase4-integration: ## Executa a integração PostgreSQL da Fase 4 via Docker
-	@bash deploy/scripts/test-phase4-integration.sh
+analytics-integration: ## Executa a integração PostgreSQL de analytics via Docker
+	@bash deploy/scripts/test-analytics-integration.sh
 
-phase4-proxy-test: ## Testa o proxy da Fase 4 via Docker
-	@bash deploy/scripts/test-phase4-proxy.sh
+analytics-proxy-test: ## Testa o proxy de analytics via Docker
+	@bash deploy/scripts/test-analytics-proxy.sh
 
-phase4-full-stack: ## Testa a stack completa da Fase 4 via Docker
-	@bash deploy/scripts/test-phase4-full-stack.sh
+analytics-full-stack: ## Testa a stack completa de analytics via Docker
+	@bash deploy/scripts/test-analytics-full-stack.sh
 
-phase4-benchmark: phase4-full-stack ## Executa o benchmark protegido da Fase 4 via Docker
-	@bash deploy/scripts/benchmark-phase4-recompute.sh
+analytics-benchmark: analytics-full-stack ## Executa o benchmark protegido de analytics via Docker
+	@bash deploy/scripts/benchmark-analytics-recompute.sh
 
 local-demo-test: ## Valida seed local em banco novo, repetição e preservação
 	@bash deploy/scripts/test-local-demo.sh
@@ -158,22 +158,22 @@ local-demo-test: ## Valida seed local em banco novo, repetição e preservação
 local-demo-e2e: ## Executa a jornada local completa em Chromium e stack efêmera
 	@bash deploy/scripts/test-local-demo-e2e.sh
 
-phase4-remediation: ## Executa o build reproduzível de remediação do runtime local
+analytics-remediation: ## Executa o build reproduzível de remediação do runtime local
 	@$(MAKE) --no-print-directory generated-check
 	@$(MAKE) --no-print-directory local-demo-test
-	@$(MAKE) --no-print-directory phase4-full-stack
+	@$(MAKE) --no-print-directory analytics-full-stack
 	@$(MAKE) --no-print-directory local-demo-e2e
 
-phase7-integration: ## Executa a integração PostgreSQL da Fase 7 via Docker
-	@bash deploy/scripts/test-phase7-integration.sh
+self-service-integration: ## Executa a integração PostgreSQL de autoatendimento via Docker
+	@bash deploy/scripts/test-self-service-integration.sh
 
-phase7-full-stack: ## Testa a stack completa da Fase 7 via Docker
-	@bash deploy/scripts/test-phase7-full-stack.sh
+self-service-full-stack: ## Testa a stack completa de autoatendimento via Docker
+	@bash deploy/scripts/test-self-service-full-stack.sh
 
-phase7-build: ## Executa o build reproduzível da Fase 7 de autoatendimento
+self-service-build: ## Executa o build reproduzível de autoatendimento de autoatendimento
 	@$(MAKE) --no-print-directory generated-check
-	@$(MAKE) --no-print-directory phase7-integration
-	@$(MAKE) --no-print-directory phase7-full-stack
+	@$(MAKE) --no-print-directory self-service-integration
+	@$(MAKE) --no-print-directory self-service-full-stack
 	@$(MAKE) --no-print-directory local-demo-e2e
 
 build: ## Compila API, worker e web
@@ -235,6 +235,7 @@ post-task-quality: ## Gate obrigatório pós-tarefa: complexity, lint e marcador
 # pertence a outra sessão ou a uma dependência, e varrê-lo transformava lixo
 # alheio em falha do gate. `--others --exclude-standard` mantém no escopo o
 # script novo que ainda não foi adicionado ao índice.
+lint-shell: SHELL := /usr/bin/env bash
 lint-shell: ## Valida a sintaxe dos scripts shell versionados; ignora caminhos gitignored
 	@set -eu; \
 	files="$$(mktemp "$${TMPDIR:-/tmp}/cumuru-shell-lint.XXXXXX")"; \
@@ -470,8 +471,9 @@ compose-config: ## Valida o Compose base e o overlay local com metadata reprodut
 	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) config --quiet
 	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
 		-f deploy/compose.local-test.yaml config --quiet
-	@LOCAL_E2E_PORT=4174 "$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
-		-f deploy/compose.phase4-full-stack.yaml \
+	@LOCAL_E2E_PORT=4174 \
+		"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) \
+		-f deploy/compose.analytics-full-stack.yaml \
 		-f deploy/compose.local-e2e.yaml config --quiet
 
 up: ## Sobe a demo local, aplica fixtures idempotentes e espera a publicação
@@ -630,13 +632,13 @@ ci: ## Executa o gate completo sequencial; pesado, usa Docker e rede
 	@$(MAKE) --no-print-directory migration-test
 	@$(MAKE) --no-print-directory local-restore-drill
 	@$(MAKE) --no-print-directory local-demo-test
-	@$(MAKE) --no-print-directory phase2-integration
-	@$(MAKE) --no-print-directory phase2-proxy-test
-	@$(MAKE) --no-print-directory phase3-integration
-	@$(MAKE) --no-print-directory phase3-proxy-test
-	@$(MAKE) --no-print-directory phase4-integration
-	@$(MAKE) --no-print-directory phase4-proxy-test
-	@$(MAKE) --no-print-directory phase7-integration
+	@$(MAKE) --no-print-directory core-integration
+	@$(MAKE) --no-print-directory core-proxy-test
+	@$(MAKE) --no-print-directory questionnaire-integration
+	@$(MAKE) --no-print-directory questionnaire-proxy-test
+	@$(MAKE) --no-print-directory analytics-integration
+	@$(MAKE) --no-print-directory analytics-proxy-test
+	@$(MAKE) --no-print-directory self-service-integration
 	@$(MAKE) --no-print-directory test
 	@$(MAKE) --no-print-directory test-backend-race
 	@$(MAKE) --no-print-directory typecheck
@@ -644,9 +646,9 @@ ci: ## Executa o gate completo sequencial; pesado, usa Docker e rede
 	@$(MAKE) --no-print-directory infra-validation
 	@$(MAKE) --no-print-directory build
 	@$(MAKE) --no-print-directory images
-	@$(MAKE) --no-print-directory phase2-full-stack
-	@$(MAKE) --no-print-directory phase4-benchmark
-	@$(MAKE) --no-print-directory phase7-full-stack
+	@$(MAKE) --no-print-directory core-full-stack
+	@$(MAKE) --no-print-directory analytics-benchmark
+	@$(MAKE) --no-print-directory self-service-full-stack
 	@$(MAKE) --no-print-directory local-demo-e2e
 	@$(MAKE) --no-print-directory smoke-local
 	@$(MAKE) --no-print-directory sbom

@@ -32,7 +32,7 @@ const activationPresentation: QrPresentation = {
 };
 
 /**
- * ADR-041: no e-mail is sent by this phase, and none will be. The capability is
+ * ADR-041: no e-mail is sent by this feature, and none will be. The capability is
  * shown here, as a link and as a locally drawn QR, and delivering it to whoever
  * runs the property is a human act outside the system. That is a declared
  * limitation, not a security control.

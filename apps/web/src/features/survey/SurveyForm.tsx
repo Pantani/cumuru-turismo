@@ -10,10 +10,8 @@ import {
   useState,
 } from "react";
 
-import {
-  createPhase3Client,
-  Phase3ApiError,
-} from "../../shared/api/phase3-client";
+import { ApiError } from "../../shared/api/http-client";
+import { createQuestionnaireClient } from "../../shared/api/questionnaire-client";
 import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import {
   deleteDraft,
@@ -35,7 +33,7 @@ import {
   visibleQuestions,
 } from "./survey-logic";
 
-const surveyClient = createPhase3Client({ getAccessToken: () => null });
+const surveyClient = createQuestionnaireClient({ getAccessToken: () => null });
 
 /**
  * Mesma regra da tela de convite: a pesquisa é respondida pelo hóspede, e o
@@ -49,7 +47,7 @@ const guestMessages: Readonly<Record<number, string>> = {
 };
 
 function errorMessage(error: unknown) {
-  if (!(error instanceof Phase3ApiError)) {
+  if (!(error instanceof ApiError)) {
     return "Sem conexão. Você pode preservar um rascunho cifrado neste dispositivo.";
   }
   return guestCopyFor(error, guestMessages);

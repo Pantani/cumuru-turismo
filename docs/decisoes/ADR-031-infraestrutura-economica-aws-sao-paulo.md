@@ -83,7 +83,7 @@ traces sem tornar essa pilha um requisito da VM econômica.
 - A automação não executa `terraform apply` nem deploy sem ação explícita.
 - `staging` e `production` exigem OIDC real, issuer HTTPS e endpoint OTLP
   HTTPS; a automação não inventa o provedor institucional.
-- A aplicação atual rejeita `PHASE3_ENABLED=true` e `PHASE4_ENABLED=true` fora
+- A aplicação atual rejeita `QUESTIONNAIRE_ENABLED=true` e `ANALYTICS_ENABLED=true` fora
   de `local|test`. O deploy externo mantém ambas desabilitadas.
 - KMS institucional, rotação, OIDC, restore real, observabilidade externa,
   WAF/CDN e operação Multi-AZ permanecem `UNVERIFIED`.

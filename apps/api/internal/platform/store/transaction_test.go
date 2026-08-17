@@ -110,7 +110,7 @@ func TestRunIdempotentNeverExecutesWorkerCleanup(t *testing.T) {
 		State:       "processing",
 		ExpiresAt:   pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 	}}
-	subject := &Store{phase2: config.Phase2Config{
+	subject := &Store{core: config.CoreConfig{
 		ActorKeys: keyring, IdempotencyKeys: keyring,
 	}}
 	_, err = subject.runIdempotent(

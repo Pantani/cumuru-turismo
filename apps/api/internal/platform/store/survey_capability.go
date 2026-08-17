@@ -29,7 +29,7 @@ func (s *Store) issueSurveyCapability(
 	stayID uuid.UUID,
 	now time.Time,
 ) (surveyGrant, error) {
-	if !s.phase3.Enabled || s.surveyCodec == nil {
+	if !s.questionnaire.Enabled || s.surveyCodec == nil {
 		return surveyGrant{}, nil
 	}
 	version, found, err := publishedSurveyVersion(ctx, q)
@@ -50,7 +50,7 @@ func (s *Store) grantSurveyCapability(
 	if err != nil {
 		return surveyGrant{}, err
 	}
-	expiresAt := now.Add(s.phase3.SurveyTTL)
+	expiresAt := now.Add(s.questionnaire.SurveyTTL)
 	if err := storeSurveyCapability(ctx, q, capability, version, stayID, expiresAt, now); err != nil {
 		return surveyGrant{}, err
 	}

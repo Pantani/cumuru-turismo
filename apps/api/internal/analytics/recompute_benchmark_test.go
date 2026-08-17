@@ -33,7 +33,7 @@ type recomputePass struct {
 	factCount  int
 }
 
-func TestPhase4ThreeYearRecomputeBudget(t *testing.T) {
+func TestAnalyticsThreeYearRecomputeBudget(t *testing.T) {
 	sources := buildBenchmarkSources()
 	if len(sources) != benchmarkSourceCount {
 		t.Fatalf("sources = %d, want %d", len(sources), benchmarkSourceCount)
@@ -49,7 +49,7 @@ func TestPhase4ThreeYearRecomputeBudget(t *testing.T) {
 	requireSuccessfulRecompute(t, firstErr, secondErr)
 	requireWithinRecomputeBudget(t, first, second)
 	t.Logf(
-		"PHASE4_RECOMPUTE_BENCHMARK=PASS horizon_days=%d sources=%d facts=%d "+
+		"ANALYTICS_RECOMPUTE_BENCHMARK=PASS horizon_days=%d sources=%d facts=%d "+
 			"digest_sha256=%x duration_ms_first=%d duration_ms_second=%d heap_growth_peak_bytes=%d "+
 			"goos=%s goarch=%s gomaxprocs=%d go_version=%s",
 		benchmarkHorizonDays,

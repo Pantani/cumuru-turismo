@@ -1,4 +1,4 @@
-import type { ValidationIssue } from "../validation/phase2-validation";
+import type { ValidationIssue } from "../validation/core-validation";
 
 /**
  * These primitives exist so a form component's branching lives in one place

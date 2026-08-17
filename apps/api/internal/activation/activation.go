@@ -3,7 +3,7 @@
 // sending e-mail.
 //
 // The ADR-035 already implemented self-provisioning: the principal creates the
-// accommodation and becomes its manager. This phase does not contradict that.
+// accommodation and becomes its manager. This feature does not contradict that.
 // It adds a single-use capability, shown on the screen as a link and a QR code
 // generated in the browser, so the manager can hand the access over. Delivering
 // that link is a human responsibility outside the system, which is a declared
@@ -83,7 +83,7 @@ type CompleteCommand struct {
 	RequestID   string
 }
 
-// scopes mirrors the accommodation operator, plus the phase's own approval
+// scopes mirrors the accommodation operator, plus the feature's own approval
 // scope. There are two independent layers behind an approval: the scope, which
 // the transport checks, and accommodation.allowedOperations plus the manager
 // role, which the domain checks. Granting the scope does not grant the

@@ -10,9 +10,9 @@ import { PrivacySection } from "../features/landing/PrivacySection";
 import { SectionNav } from "../features/landing/SectionNav";
 import { TickerBar } from "../features/landing/TickerBar";
 import {
-  phase4PublicClient,
-  type Phase4Client,
-} from "../shared/api/phase4-client";
+  publicAnalyticsClient,
+  type AnalyticsClient,
+} from "../shared/api/analytics-client";
 
 /**
  * Capa pública do Observatório.
@@ -23,9 +23,9 @@ import {
  * já agregado e arredondado — a capa não tem caminho para microdado.
  */
 export default function PublicFoundationPage({
-  client = phase4PublicClient,
+  client = publicAnalyticsClient,
 }: {
-  client?: Phase4Client;
+  client?: AnalyticsClient;
 }) {
   return (
     <article className="landing">

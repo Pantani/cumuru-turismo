@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { components } from "../../generated/schema";
 import { LocaleProvider } from "../../shared/i18n/LocaleProvider";
 import type {
-  Phase4Client,
-  Phase4Result,
-} from "../../shared/api/phase4-client";
+  AnalyticsClient,
+  AnalyticsResult,
+} from "../../shared/api/analytics-client";
 import { AnalyticsDashboard } from "./AnalyticsDashboard";
 
 type Schemas = components["schemas"];
@@ -131,7 +131,7 @@ const methodology: Schemas["PublicMethodology"] = {
   allowed_preference_periods: ["last_complete_month"],
 };
 
-function result<T>(data: T): Promise<Phase4Result<T>> {
+function result<T>(data: T): Promise<AnalyticsResult<T>> {
   return Promise.resolve({
     data,
     etag: `"sha256-${"a".repeat(64)}"`,
@@ -140,8 +140,8 @@ function result<T>(data: T): Promise<Phase4Result<T>> {
 }
 
 function client(
-  overrides: Partial<Phase4Client> = {},
-): Phase4Client {
+  overrides: Partial<AnalyticsClient> = {},
+): AnalyticsClient {
   return {
     getSummary: vi.fn(() => result(summary)),
     getPresence: vi.fn((window) =>
@@ -154,20 +154,20 @@ function client(
   };
 }
 
-function renderDashboard(phase4Client = client()) {
+function renderDashboard(analyticsClient = client()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
       <LocaleProvider initial="pt">
-        <AnalyticsDashboard client={phase4Client} />
+        <AnalyticsDashboard client={analyticsClient} />
       </LocaleProvider>
     </QueryClientProvider>,
   );
 }
 
-describe("dashboard público da Fase 4", () => {
+describe("dashboard público de analytics", () => {
   afterEach(cleanup);
 
   it("explica protótipo, cobertura, atualização e limites sem depender de cor", async () => {
@@ -206,8 +206,8 @@ describe("dashboard público da Fase 4", () => {
 
   it("troca somente entre as janelas catalogadas e descreve forecast", async () => {
     const user = userEvent.setup();
-    const phase4Client = client();
-    renderDashboard(phase4Client);
+    const analyticsClient = client();
+    renderDashboard(analyticsClient);
     await screen.findAllByText("110 pessoas-dia");
 
     await user.selectOptions(
@@ -221,7 +221,7 @@ describe("dashboard público da Fase 4", () => {
     ).toBeGreaterThan(0);
     expect(screen.getAllByText("◇ Previsto").length).toBeGreaterThan(0);
     expect(screen.getByText("Dado indisponível")).toBeInTheDocument();
-    expect(phase4Client.getPresence).toHaveBeenCalledWith("next_30_days");
+    expect(analyticsClient.getPresence).toHaveBeenCalledWith("next_30_days");
   });
 
   it("deriva estatísticas da janela e explica cada indicador", async () => {
@@ -301,20 +301,20 @@ describe("dashboard público da Fase 4", () => {
 
   it("anuncia carregamento e oferece retry seguro após erro", async () => {
     let resolveSummary:
-      | ((value: Phase4Result<Schemas["PublicSummary"]>) => void)
+      | ((value: AnalyticsResult<Schemas["PublicSummary"]>) => void)
       | undefined;
     const pendingSummary = new Promise<
-      Phase4Result<Schemas["PublicSummary"]>
+      AnalyticsResult<Schemas["PublicSummary"]>
     >((resolve) => {
       resolveSummary = resolve;
     });
     const getSummary = vi
-      .fn<Phase4Client["getSummary"]>()
+      .fn<AnalyticsClient["getSummary"]>()
       .mockRejectedValueOnce(new Error("upstream"))
       .mockImplementationOnce(() => pendingSummary);
-    const phase4Client = client({ getSummary });
+    const analyticsClient = client({ getSummary });
     const user = userEvent.setup();
-    renderDashboard(phase4Client);
+    renderDashboard(analyticsClient);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Não foi possível carregar os indicadores públicos.",

@@ -2,7 +2,7 @@
 // self-registration channel.
 //
 // It is a toll, not a bot defence, and the difference matters for how much
-// weight the rest of the phase may put on it. A low-cost Android phone running
+// weight the rest of the feature may put on it. A low-cost Android phone running
 // JavaScript is three to eight orders of magnitude slower than a GPU, so the
 // asymmetry runs against the defender. What it does remove is the cost-free
 // abuse: the ten-line script and the bare curl loop. What actually protects

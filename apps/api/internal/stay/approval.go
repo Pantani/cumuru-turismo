@@ -2,14 +2,14 @@ package stay
 
 import "time"
 
-// PendingApprovalTTL is the same 72 hours the Fase 2 invite already uses. A
+// PendingApprovalTTL is the same 72 hours the core invite already uses. A
 // second notion of validity would be a second thing to explain to an operator
 // and a second thing to get wrong.
 const PendingApprovalTTL = 72 * time.Hour
 
 // Provenance separates the stay an identified operator created from the one the
 // open channel produced. It is not a stay status: the wait for approval is
-// provenance plus a stamp, and core.stay_status gains no value in this phase.
+// provenance plus a stamp, and core.stay_status gains no value in this feature.
 type Provenance string
 
 const (

@@ -104,7 +104,7 @@ type PageRequest struct {
 	Status          Status
 	// The approval queue is GET /stays?accommodation_id=…&approval_state=pending.
 	// No new listing endpoint: cursor, limit, ordering and membership isolation
-	// stay the ones the Fase 2 already proved.
+	// stay the ones the core already proved.
 	ApprovalState ApprovalState
 	Provenance    Provenance
 	ArrivalFrom   string
