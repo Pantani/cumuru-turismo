@@ -56,7 +56,7 @@ func TestSelfServiceRejectionErasesTheSelfRegistrationFromTheWholeDatabase(t *te
 	if _, _, err := repository.Reject(ctx, stay.RejectionCommand{
 		Actor: principal(fixture.subject), StayID: submission.stayID,
 		ExpectedVersion: submission.version, ReasonCode: stay.RejectionNotAGuest,
-		IdempotencyKey: "selfService-reject-" + submission.stayID.String(),
+		IdempotencyKey: "self-service-reject-" + submission.stayID.String(),
 		RequestID:      "request-" + submission.stayID.String(),
 	}); err != nil {
 		t.Fatalf("Reject() error = %v", err)
@@ -137,7 +137,7 @@ func seedSelfServiceFixture(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	t.Helper()
 	fixture := selfServiceFixture{
 		organizationID: mustV7(t), accommodationID: mustV7(t),
-		membershipID: mustV7(t), subject: "selfService-manager-" + mustV7(t).String(),
+		membershipID: mustV7(t), subject: "self-service-manager-" + mustV7(t).String(),
 	}
 	fixture.name = "Hospedagem canário " + mustV7(t).String()
 	if _, err := pool.Exec(ctx,
@@ -236,7 +236,7 @@ func issueSelfServicePoster(
 	created, _, err := repository.CreateAccommodationInvite(ctx, stay.AccommodationInviteCommand{
 		Actor: principal(fixture.subject), AccommodationID: fixture.accommodationID,
 		PrivacyNoticeVersion: "2026-08", ExpectedVersion: 1,
-		IdempotencyKey: "selfService-poster-" + fixture.accommodationID.String(),
+		IdempotencyKey: "self-service-poster-" + fixture.accommodationID.String(),
 		RequestID:      "request-poster-" + fixture.accommodationID.String(),
 	})
 	if err != nil {
@@ -284,7 +284,7 @@ func selfServiceSelfRegistrationCommand(
 				t, poster.ProofOfWork.Challenge, poster.ProofOfWork.DifficultyBits,
 			),
 		},
-		IdempotencyKey: "selfService-submit-" + correlation,
+		IdempotencyKey: "self-service-submit-" + correlation,
 		RequestID:      "request-submit-" + correlation,
 	}
 }
@@ -627,7 +627,7 @@ func assertSpentChallengeIsRefused(
 	t.Helper()
 	replay := first
 	replay.ClientSubmissionID = mustV7(t)
-	replay.IdempotencyKey = "selfService-replay-" + mustV7(t).String()
+	replay.IdempotencyKey = "self-service-replay-" + mustV7(t).String()
 	replay.RequestID = "request-replay-" + mustV7(t).String()
 	if _, _, err := repository.SubmitSelfRegistration(ctx, replay); err == nil {
 		t.Fatal("the same solved challenge was spent twice")
@@ -647,7 +647,7 @@ func assertDecidedStayRefusesASecondDecision(
 	approved, _, err := repository.Approve(ctx, stay.ApprovalCommand{
 		Actor: principal(fixture.subject), StayID: accepted.StayID,
 		ExpectedVersion: accepted.Version,
-		IdempotencyKey:  "selfService-approve-" + accepted.StayID.String(),
+		IdempotencyKey:  "self-service-approve-" + accepted.StayID.String(),
 		RequestID:       "request-approve-" + accepted.StayID.String(),
 	})
 	if err != nil {
@@ -656,7 +656,7 @@ func assertDecidedStayRefusesASecondDecision(
 	_, _, err = repository.Reject(ctx, stay.RejectionCommand{
 		Actor: principal(fixture.subject), StayID: accepted.StayID,
 		ExpectedVersion: approved.Version, ReasonCode: stay.RejectionNotAGuest,
-		IdempotencyKey: "selfService-reject-after-" + accepted.StayID.String(),
+		IdempotencyKey: "self-service-reject-after-" + accepted.StayID.String(),
 		RequestID:      "request-reject-after-" + accepted.StayID.String(),
 	})
 	if err == nil {
@@ -715,7 +715,7 @@ func issueSelfServicePosterWithKey(
 	created, _, err := repository.CreateAccommodationInvite(ctx, stay.AccommodationInviteCommand{
 		Actor: principal(fixture.subject), AccommodationID: fixture.accommodationID,
 		PrivacyNoticeVersion: "2026-08", ExpectedVersion: 1,
-		IdempotencyKey: "selfService-" + key + "-" + fixture.accommodationID.String(),
+		IdempotencyKey: "self-service-" + key + "-" + fixture.accommodationID.String(),
 		RequestID:      "request-" + key + "-" + fixture.accommodationID.String(),
 	})
 	if err != nil {
@@ -843,7 +843,7 @@ func issueActivationWithKey(
 	created, _, err := repository.Create(ctx, activation.CreateCommand{
 		Actor: principal(fixture.subject), AccommodationID: fixture.accommodationID,
 		Email: email, DisplayName: "Operadora fictícia", ExpectedVersion: 1,
-		IdempotencyKey: "selfService-" + key + "-" + fixture.accommodationID.String(),
+		IdempotencyKey: "self-service-" + key + "-" + fixture.accommodationID.String(),
 		RequestID:      "request-" + key + "-" + fixture.accommodationID.String(),
 	})
 	if err != nil {
@@ -925,7 +925,7 @@ func TestSelfServiceActivationRefusesToDowngradeAnActivatedAccount(t *testing.T)
 	_, _, err := repository.Create(ctx, activation.CreateCommand{
 		Actor: principal(fixture.subject), AccommodationID: fixture.accommodationID,
 		Email: email, DisplayName: "Operadora fictícia", ExpectedVersion: 1,
-		IdempotencyKey: "selfService-after-activation-" + fixture.accommodationID.String(),
+		IdempotencyKey: "self-service-after-activation-" + fixture.accommodationID.String(),
 		RequestID:      "request-after-activation-" + fixture.accommodationID.String(),
 	})
 	if !errors.Is(err, activation.ErrConflict) {
@@ -981,7 +981,7 @@ func TestSelfServiceActivationReuseNeverCrossesAccommodations(t *testing.T) {
 	_, _, err := repository.Create(ctx, activation.CreateCommand{
 		Actor: principal(second.subject), AccommodationID: second.accommodationID,
 		Email: email, DisplayName: "Operadora fictícia", ExpectedVersion: 1,
-		IdempotencyKey: "selfService-cross-second-" + second.accommodationID.String(),
+		IdempotencyKey: "self-service-cross-second-" + second.accommodationID.String(),
 		RequestID:      "request-cross-second-" + second.accommodationID.String(),
 	})
 	if !errors.Is(err, activation.ErrConflict) {
@@ -1033,7 +1033,7 @@ func createActivationError(
 	_, _, err := repository.Create(ctx, activation.CreateCommand{
 		Actor: principal(fixture.subject), AccommodationID: fixture.accommodationID,
 		Email: email, DisplayName: "Operadora fictícia", ExpectedVersion: 1,
-		IdempotencyKey: "selfService-" + key + "-" + fixture.accommodationID.String(),
+		IdempotencyKey: "self-service-" + key + "-" + fixture.accommodationID.String(),
 		RequestID:      "request-" + key + "-" + fixture.accommodationID.String(),
 	})
 	return err
