@@ -1577,9 +1577,12 @@ h4 {
    Botões
    -------------------------------------------------------------------------- */
 
-.primary-action,
-.ghost-action,
-.quiet-action {
+/* `button.` eleva a especificidade a 0,1,1: sem isso, `.form-card button` e
+   companhia (mesma especificidade, mas escritos antes) venceriam a cor de
+   marca sempre que um destes botões estiver dentro de um card. */
+button.primary-action,
+button.ghost-action,
+button.quiet-action {
   min-height: 3rem;
   padding: 1rem 1.625rem;
   border-radius: var(--radius-pill);
@@ -1595,39 +1598,39 @@ h4 {
 
 /* Sobre fundo escuro o primário é sempre coral com tinta oceano — turquesa é
    dado observado/confirmação, não ação (brandkit, seção Botões). */
-.primary-action {
+button.primary-action {
   color: var(--on-accent);
   background: var(--coral);
   border: 1px solid var(--coral);
 }
 
-.primary-action:hover:not(:disabled) {
+button.primary-action:hover:not(:disabled) {
   color: var(--on-accent);
   background: var(--ink);
   border-color: var(--ink);
 }
 
-.primary-action:active:not(:disabled) {
+button.primary-action:active:not(:disabled) {
   transform: translateY(1px);
 }
 
-.ghost-action {
+button.ghost-action {
   color: var(--ink);
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--ink) 34%, transparent);
 }
 
-.ghost-action:hover:not(:disabled) {
+button.ghost-action:hover:not(:disabled) {
   color: var(--brand);
   background: transparent;
   border-color: var(--brand);
 }
 
-.ghost-action:active:not(:disabled) {
+button.ghost-action:active:not(:disabled) {
   transform: translateY(1px);
 }
 
-.quiet-action {
+button.quiet-action {
   color: var(--coral-strong);
   background: transparent;
   border: 1px solid transparent;
@@ -1635,13 +1638,13 @@ h4 {
   text-underline-offset: 0.22em;
 }
 
-.quiet-action:hover:not(:disabled) {
+button.quiet-action:hover:not(:disabled) {
   background: var(--coral-wash);
 }
 
-.primary-action:disabled,
-.ghost-action:disabled,
-.quiet-action:disabled {
+button.primary-action:disabled,
+button.ghost-action:disabled,
+button.quiet-action:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
