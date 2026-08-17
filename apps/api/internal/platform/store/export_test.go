@@ -31,3 +31,11 @@ func TestRollbackLocalDemoUsesFreshContext(t *testing.T) {
 		t.Fatalf("rollback context error = %v, want fresh context", tx.contextErr)
 	}
 }
+
+// RateLimitDigestForTest exposes the bucket key so an integration test can
+// identify the exact rows a poster produced. Counting a whole scope instead
+// passes on rows nobody in the test created — which is precisely how the first
+// version of the N-23 assertion came to be unable to fail.
+func RateLimitDigestForTest(key []byte, scope, token, subject string) []byte {
+	return rateLimitDigest(key, scope, token, subject)
+}

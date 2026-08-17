@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_NAME="cumuru-phase4-integration-${PPID}-$$"
+. "${ROOT_DIR}/deploy/scripts/lib/compose-subnet.sh"
+cumuru_acquire_subnet phase4-integration
 COMPOSE=(
   "${ROOT_DIR}/deploy/scripts/with-build-metadata.sh"
   docker compose
@@ -12,6 +14,7 @@ COMPOSE=(
 )
 
 cleanup() {
+  cumuru_release_subnet
   local primary_status=$?
   local cleanup_status=0
   local inspect_status=0

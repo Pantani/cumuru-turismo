@@ -29,14 +29,26 @@ fail() {
 
 # Jobs declarados no workflow: chaves de dois espaços sob `jobs:`, parando na
 # próxima chave de coluna zero.
+# O parser precisa reconhecer as três formas que YAML permite para a mesma
+# chave, senão um job que ele não sabe ler sai da expectativa e a porta passa a
+# ignorá-lo — falha ABERTA dentro da guarda escrita para fechar falha aberta:
+#
+#   alfa:
+#   beta:   # comentário na mesma linha
+#   "gama":
+#
+# Aspas simples e duplas são aceitas; comentário à direita é descartado.
 declared_jobs() {
   awk '
     /^jobs:[[:space:]]*$/ { inside = 1; next }
     inside && /^[^[:space:]#]/ { inside = 0 }
-    inside && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {
-      gsub(/^  /, ""); gsub(/:.*$/, ""); print
+    inside && /^  ["'"'"']?[A-Za-z0-9_.-]+["'"'"']?:([[:space:]]*(#.*)?)?$/ {
+      sub(/^  /, "")
+      sub(/:.*$/, "")
+      gsub(/^["'"'"']|["'"'"']$/, "")
+      print
     }
-  ' "${GATE_WORKFLOW}" | grep -vx "${GATE_JOB_ID}" | sort
+  ' "${GATE_WORKFLOW}" | { grep -vx "${GATE_JOB_ID}" || true; } | sort
 }
 
 if ! test -f "${GATE_WORKFLOW}"; then

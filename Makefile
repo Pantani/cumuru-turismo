@@ -112,6 +112,9 @@ generate-sqlc: ## Regenera código Go via sqlc
 generated-check: ## Verifica reprodutibilidade dos arquivos gerados
 	@bash deploy/scripts/check-generated.sh
 
+ci-gate-test: ## Exercita a porta única da CI contra workflows sintéticos; sem Docker
+	@bash deploy/scripts/test-ci-gate.sh
+
 migration-test: ## Testa migrations e grants em PostgreSQL real via Docker
 	@bash deploy/scripts/test-migrations.sh
 
@@ -252,6 +255,7 @@ lint-fix: ## Aplica correções automáticas seguras de lint e formatação no m
 	@$(MAKE) --no-print-directory lint
 
 check: ## Executa o gate local sequencial, sem Docker ou scanners
+	@$(MAKE) --no-print-directory ci-gate-test
 	@$(MAKE) --no-print-directory openapi-lint
 	@$(MAKE) --no-print-directory generated-check
 	@$(MAKE) --no-print-directory test-all

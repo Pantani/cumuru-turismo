@@ -7,15 +7,15 @@ services:
       - "127.0.0.1::5432"
   api:
     environment:
-      TRUSTED_PROXY_CIDRS: 172.30.3.10/32
+      TRUSTED_PROXY_CIDRS: 172.30.${CUMURU_SUBNET_OCTET:-3}.10/32
       PHASE3_ENABLED: "true"
   web:
     networks:
       private:
-        ipv4_address: 172.30.3.10
+        ipv4_address: 172.30.${CUMURU_SUBNET_OCTET:-3}.10
 
 networks:
   private:
     ipam:
       config: !override
-        - subnet: 172.30.3.0/24
+        - subnet: 172.30.${CUMURU_SUBNET_OCTET:-3}.0/24

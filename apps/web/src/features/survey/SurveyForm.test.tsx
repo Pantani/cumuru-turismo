@@ -98,16 +98,20 @@ describe("pesquisa pública", () => {
   });
 
   it.each([
-    [429, "Muitas tentativas", 60],
-    [409, "Requisição em processamento", 3],
+    [429, "Muitas tentativas", 60, "Já houve envios demais desta rede", "rate-limited"],
+    [409, "Requisição em processamento", 3, "Já recebemos este envio", "idempotency-in-progress"],
   ])(
-    "status %s com Retry-After não vaza o título do servidor e mantém o prazo",
-    async (status, serverTitle, seconds) => {
+    "status %s com Retry-After usa a cópia própria e mantém o prazo",
+    async (status, serverTitle, seconds, expectedCopy, problemCode) => {
       vi.stubGlobal(
         "fetch",
         vi.fn<typeof fetch>().mockResolvedValue(
           Response.json(
-            { type: "about:blank", title: serverTitle, status },
+            {
+            type: `https://turismo.prado.ba.gov.br/problems/${problemCode}`,
+            title: serverTitle,
+            status,
+          },
             {
               status,
               headers: {
@@ -124,8 +128,10 @@ describe("pesquisa pública", () => {
       renderSurvey();
 
       expect(
-        await screen.findByText(new RegExp(`${seconds} segundos`, "u")),
+        await screen.findByText(new RegExp(expectedCopy, "u")),
       ).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(`${seconds} segundos`, "u")))
+        .toBeInTheDocument();
       expect(document.documentElement.innerHTML).not.toContain(serverTitle);
     },
   );

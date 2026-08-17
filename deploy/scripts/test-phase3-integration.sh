@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_NAME="cumuru-phase3-integration-${PPID}-$$"
+. "${ROOT_DIR}/deploy/scripts/lib/compose-subnet.sh"
+cumuru_acquire_subnet phase3-integration
 CAPABILITY_CANARY="PHASE3_CAPABILITY_CANARY_DO_NOT_LOG_7F4C"
 FREE_TEXT_CANARY="PHASE3_FREE_TEXT_CANARY_DO_NOT_LOG_91E2"
 PROMPT_CANARY="PHASE3_PROMPT_CANARY_DO_NOT_LOG_B63A"
@@ -15,6 +17,7 @@ COMPOSE=(
 )
 
 cleanup() {
+  cumuru_release_subnet
   local primary_status=$?
   local cleanup_status=0
   trap - EXIT

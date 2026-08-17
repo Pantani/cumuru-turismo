@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_NAME="cumuru-local-demo-test-${PPID}-$$"
+. "${ROOT_DIR}/deploy/scripts/lib/compose-subnet.sh"
+cumuru_acquire_subnet local-demo-test
 CONCURRENT_FIRST="$(mktemp "${TMPDIR:-/tmp}/cumuru-local-demo-first.XXXXXX")"
 CONCURRENT_SECOND="$(mktemp "${TMPDIR:-/tmp}/cumuru-local-demo-second.XXXXXX")"
 
@@ -38,6 +40,7 @@ COMPOSE=(
 )
 
 cleanup() {
+  cumuru_release_subnet
   local status=$?
   trap - EXIT
   "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true

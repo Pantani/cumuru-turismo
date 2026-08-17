@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_NAME="cumuru-restore-drill-${PPID}-$$"
+. "${ROOT_DIR}/deploy/scripts/lib/compose-subnet.sh"
+cumuru_acquire_subnet local-restore
 SOURCE_DATABASE="cumuru"
 RESTORE_DATABASE="cumuru_restore_drill"
 DUMP_PATH="/tmp/cumuru-restore-drill.dump"
@@ -42,6 +44,7 @@ latest_migration_version() {
 }
 
 cleanup() {
+  cumuru_release_subnet
   local primary_status=$?
   local cleanup_status=0
   trap - EXIT

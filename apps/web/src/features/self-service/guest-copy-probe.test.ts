@@ -46,16 +46,20 @@ describe("QA probe — cópia de hóspede nos status com Retry-After", () => {
  * `Retry-After` é exigida em vez de tolerada.
  */
 describe("cópia de hóspede nos dois ramos", () => {
+  // D-13: afirmar só a ausência do título deixa passar o mutante do D-08, que
+  // devolve a frase genérica — ela também não contém o título. O nome do teste
+  // promete a cópia do cliente, então ele precisa exigi-la.
   it.each([
-    [429, "Muitas tentativas", 60],
-    [409, "Requisição em processamento", 3],
+    [429, "Muitas tentativas", 60, "Já houve envios demais desta rede"],
+    [409, "Requisição em processamento", 3, "O aviso de privacidade mudou"],
   ])(
     "status %s com Retry-After: usa a cópia do cliente e mantém o prazo",
-    (status, serverTitle, seconds) => {
+    (status, serverTitle, seconds, expectedCopy) => {
       const message = describeSelfServiceFailure(
         retryable(status, serverTitle, seconds),
       );
 
+      expect(message).toContain(expectedCopy);
       expect(message).not.toContain(serverTitle);
       expect(message).toContain(`${seconds} segundos`);
     },
@@ -73,4 +77,51 @@ describe("cópia de hóspede nos dois ramos", () => {
       expect(message).not.toContain("segundos");
     },
   );
+});
+
+/**
+ * D-16. `httpapi.go:558-577` produz dois `409` semanticamente distintos:
+ * aviso de privacidade desatualizado e submissão idempotente **em andamento**.
+ * O canal aberto alcança o segundo de verdade — duplo envio em rede instável —
+ * e mandá-lo pedir cartaz novo é instrução errada com aparência de frase limpa.
+ */
+const IN_PROGRESS = "https://turismo.prado.ba.gov.br/problems/idempotency-in-progress";
+
+function inProgress(seconds: number) {
+  return new Phase7ApiError(
+    409,
+    { type: IN_PROGRESS, title: "Requisição em processamento", status: 409 },
+    seconds,
+  );
+}
+
+describe("os dois 409 do canal aberto", () => {
+  it("não manda pedir cartaz novo quando a submissão está em andamento", () => {
+    const message = describeSelfServiceFailure(inProgress(3));
+
+    expect(message).toContain("Já recebemos este envio");
+    expect(message).not.toContain("cartaz atualizado");
+    expect(message).not.toContain("aviso de privacidade mudou");
+    expect(message).toContain("3 segundos");
+  });
+
+  it("mantém a cópia do aviso desatualizado para o outro 409", () => {
+    const message = describeSelfServiceFailure(
+      new Phase7ApiError(
+        409,
+        {
+          type: "https://turismo.prado.ba.gov.br/problems/privacy-notice-version",
+          title: "Versão do aviso divergente",
+          status: 409,
+        },
+        null,
+      ),
+    );
+
+    expect(message).toContain("cartaz atualizado");
+  });
+
+  it("concorda com o singular quando o prazo é de um segundo", () => {
+    expect(describeSelfServiceFailure(inProgress(1))).toContain("1 segundo.");
+  });
 });

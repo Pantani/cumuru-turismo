@@ -368,16 +368,23 @@ describe("registro por convite", () => {
 
   // D-08 nesta tela: `409` e `429` chegam do servidor **com** `Retry-After`, e
   // o ramo do prazo não pode virar atalho para o título de engenharia.
+  // D-13: afirmar só "o título sumiu" deixa o mutante do D-08 passar, porque a
+  // frase genérica também não contém o título. A asserção precisa fixar a cópia
+  // que a tabela desta tela produz.
   it.each([
-    [429, "Muitas tentativas", 60],
-    [409, "Requisição em processamento", 3],
+    [429, "Muitas tentativas", 60, "Já houve envios demais desta rede", "rate-limited"],
+    [409, "Requisição em processamento", 3, "Já recebemos este envio", "idempotency-in-progress"],
   ])(
-    "status %s com Retry-After não vaza o título do servidor e mantém o prazo",
-    async (status, serverTitle, seconds) => {
+    "status %s com Retry-After usa a cópia própria e mantém o prazo",
+    async (status, serverTitle, seconds, expectedCopy, problemCode) => {
       captureCapability();
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
         phase2Response(
-          { type: "about:blank", title: serverTitle, status },
+          {
+            type: `https://turismo.prado.ba.gov.br/problems/${problemCode}`,
+            title: serverTitle,
+            status,
+          },
           {
             status,
             headers: {
@@ -391,8 +398,10 @@ describe("registro por convite", () => {
       render(<RegistrationPage />);
 
       expect(
-        await screen.findByText(new RegExp(`${seconds} segundos`, "u")),
+        await screen.findByText(new RegExp(expectedCopy, "u")),
       ).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(`${seconds} segundos`, "u")))
+        .toBeInTheDocument();
       expect(document.documentElement.innerHTML).not.toContain(serverTitle);
     },
   );
