@@ -52,6 +52,24 @@ function openDatabase() {
   });
 }
 
+/**
+ * Runs `work` against an open connection and always closes it afterwards.
+ *
+ * Every operation here used to close the database on its last line, which is
+ * only reached when nothing throws. A failed decrypt or an aborted transaction
+ * therefore leaked the connection, and a leaked connection blocks the next
+ * version upgrade indefinitely — the tab simply stops being able to open its
+ * own drafts.
+ */
+async function withDatabase<T>(work: (database: IDBDatabase) => Promise<T>) {
+  const database = await openDatabase();
+  try {
+    return await work(database);
+  } finally {
+    database.close();
+  }
+}
+
 async function generateKey() {
   return crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
@@ -130,31 +148,31 @@ export async function saveDraft<T>(
   value: T,
   options: SaveDraftOptions = {},
 ) {
-  const database = await openDatabase();
-  const id = resolveDraftId(options.id);
-  const previous = await getStored<DraftRecord>(database, DRAFT_STORE, id);
-  const storedKey = await getStored<KeyRecord>(database, KEY_STORE, id);
-  const key = await resolveDraftKey(storedKey);
-  const iv = randomIv(previous?.iv);
-  const plaintext = new TextEncoder().encode(JSON.stringify(value));
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
-  const now = options.now ?? Date.now();
-  const record = draftRecord(id, previous, now, iv, ciphertext);
-  await storeEncrypted(database, record, key);
-  database.close();
-  return { id, expiresAt: record.expiresAt };
+  return withDatabase(async (database) => {
+    const id = resolveDraftId(options.id);
+    const previous = await getStored<DraftRecord>(database, DRAFT_STORE, id);
+    const storedKey = await getStored<KeyRecord>(database, KEY_STORE, id);
+    const key = await resolveDraftKey(storedKey);
+    const iv = randomIv(previous?.iv);
+    const plaintext = new TextEncoder().encode(JSON.stringify(value));
+    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
+    const now = options.now ?? Date.now();
+    const record = draftRecord(id, previous, now, iv, ciphertext);
+    await storeEncrypted(database, record, key);
+    return { id, expiresAt: record.expiresAt };
+  });
 }
 
 export async function deleteDraft(id: string) {
-  const database = await openDatabase();
-  const transaction = database.transaction(
-    [DRAFT_STORE, KEY_STORE],
-    "readwrite",
-  );
-  transaction.objectStore(DRAFT_STORE).delete(id);
-  transaction.objectStore(KEY_STORE).delete(id);
-  await transactionDone(transaction);
-  database.close();
+  await withDatabase(async (database) => {
+    const transaction = database.transaction(
+      [DRAFT_STORE, KEY_STORE],
+      "readwrite",
+    );
+    transaction.objectStore(DRAFT_STORE).delete(id);
+    transaction.objectStore(KEY_STORE).delete(id);
+    await transactionDone(transaction);
+  });
 }
 
 async function decryptDraft<T>(
@@ -172,70 +190,83 @@ async function decryptDraft<T>(
   return JSON.parse(new TextDecoder().decode(plaintext)) as T;
 }
 
+/**
+ * A draft is retained only while it was written by the current schema and is
+ * still inside its window. The read path and the purge path share this rule, so
+ * a draft can never be readable but unpurgeable, or the reverse.
+ */
+function retainedDraft(record: DraftRecord, now: number) {
+  return record.schemaVersion === SCHEMA_VERSION && record.expiresAt > now;
+}
+
+function usableDraft(
+  record: DraftRecord | undefined,
+  now: number,
+): record is DraftRecord {
+  return record !== undefined && retainedDraft(record, now);
+}
+
 export async function loadDraft<T>(id: string): Promise<T | null> {
-  const database = await openDatabase();
-  const record = await getStored<DraftRecord>(database, DRAFT_STORE, id);
-  const key = await getStored<KeyRecord>(database, KEY_STORE, id);
-  database.close();
-  if (
-    record === undefined ||
-    record.schemaVersion !== SCHEMA_VERSION ||
-    record.expiresAt <= Date.now()
-  ) {
+  const stored = await withDatabase(async (database) => ({
+    record: await getStored<DraftRecord>(database, DRAFT_STORE, id),
+    key: await getStored<KeyRecord>(database, KEY_STORE, id),
+  }));
+  if (!usableDraft(stored.record, Date.now())) {
     await deleteDraft(id);
     return null;
   }
   try {
-    return await decryptDraft<T>(record, key);
+    return await decryptDraft<T>(stored.record, stored.key);
   } catch {
+    // A draft that no longer decrypts is unrecoverable, so it is discarded
+    // rather than left behind to fail again on every load.
     await deleteDraft(id);
     return null;
   }
 }
 
 export async function inspectDraftRecord(id: string) {
-  const database = await openDatabase();
-  const record = await getStored<DraftRecord>(database, DRAFT_STORE, id);
-  database.close();
-  return record;
+  return withDatabase((database) =>
+    getStored<DraftRecord>(database, DRAFT_STORE, id),
+  );
 }
 
 export async function inspectDraftPresence(id: string) {
-  const database = await openDatabase();
-  const draft = await getStored<DraftRecord>(database, DRAFT_STORE, id);
-  const key = await getStored<KeyRecord>(database, KEY_STORE, id);
-  database.close();
-  return { draft: draft !== undefined, key: key !== undefined };
+  return withDatabase(async (database) => {
+    const draft = await getStored<DraftRecord>(database, DRAFT_STORE, id);
+    const key = await getStored<KeyRecord>(database, KEY_STORE, id);
+    return { draft: draft !== undefined, key: key !== undefined };
+  });
 }
 
 export async function purgeExpiredDrafts(now = Date.now()) {
-  const database = await openDatabase();
-  const transaction = database.transaction(
-    [DRAFT_STORE, KEY_STORE],
-    "readwrite",
-  );
-  const drafts = transaction.objectStore(DRAFT_STORE);
-  const records = await requestResult(
-    drafts.getAll() as IDBRequest<DraftRecord[]>,
-  );
-  for (const record of records) {
-    if (record.expiresAt <= now || record.schemaVersion !== SCHEMA_VERSION) {
-      drafts.delete(record.id);
-      transaction.objectStore(KEY_STORE).delete(record.id);
+  await withDatabase(async (database) => {
+    const transaction = database.transaction(
+      [DRAFT_STORE, KEY_STORE],
+      "readwrite",
+    );
+    const drafts = transaction.objectStore(DRAFT_STORE);
+    const records = await requestResult(
+      drafts.getAll() as IDBRequest<DraftRecord[]>,
+    );
+    for (const record of records) {
+      if (!retainedDraft(record, now)) {
+        drafts.delete(record.id);
+        transaction.objectStore(KEY_STORE).delete(record.id);
+      }
     }
-  }
-  await transactionDone(transaction);
-  database.close();
+    await transactionDone(transaction);
+  });
 }
 
 export async function clearAllDrafts() {
-  const database = await openDatabase();
-  const transaction = database.transaction(
-    [DRAFT_STORE, KEY_STORE],
-    "readwrite",
-  );
-  transaction.objectStore(DRAFT_STORE).clear();
-  transaction.objectStore(KEY_STORE).clear();
-  await transactionDone(transaction);
-  database.close();
+  await withDatabase(async (database) => {
+    const transaction = database.transaction(
+      [DRAFT_STORE, KEY_STORE],
+      "readwrite",
+    );
+    transaction.objectStore(DRAFT_STORE).clear();
+    transaction.objectStore(KEY_STORE).clear();
+    await transactionDone(transaction);
+  });
 }
