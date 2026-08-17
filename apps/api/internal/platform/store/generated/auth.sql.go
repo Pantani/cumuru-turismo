@@ -99,7 +99,7 @@ VALUES (
   $4,
   'pending_activation'
 )
-RETURNING id, email, display_name, scopes, status, created_at
+RETURNING id, email, display_name, scopes, status
 `
 
 type CreateActivationAccountParams struct {
@@ -110,17 +110,23 @@ type CreateActivationAccountParams struct {
 }
 
 type CreateActivationAccountRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	Email       string             `json:"email"`
-	DisplayName string             `json:"display_name"`
-	Scopes      []string           `json:"scopes"`
-	Status      string             `json:"status"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID          pgtype.UUID `json:"id"`
+	Email       string      `json:"email"`
+	DisplayName string      `json:"display_name"`
+	Scopes      []string    `json:"scopes"`
+	Status      string      `json:"status"`
 }
 
 // Conta pendente: nasce sem hash, com password_must_change false, sem
 // tentativas e sem bloqueio, exatamente o que accounts_credential_state_valid
 // exige do estado pending_activation (ADR-041).
+// O RETURNING não pode projetar created_at: app_runtime tem SELECT por coluna em
+// auth.accounts e created_at não está na lista. RETURNING exige SELECT sobre a
+// coluna projetada, então a cláusula derrubava a transação inteira com
+// "permission denied for table accounts" — no INSERT, que é o primeiro passo da
+// emissão. Conceder SELECT (created_at) resolveria o sintoma ampliando
+// privilégio para um valor que ninguém lê, contra a minimização por coluna da
+// baseline. O Go consome apenas row.ID.
 func (q *Queries) CreateActivationAccount(ctx context.Context, arg CreateActivationAccountParams) (CreateActivationAccountRow, error) {
 	row := q.db.QueryRow(ctx, createActivationAccount,
 		arg.AccountID,
@@ -135,7 +141,6 @@ func (q *Queries) CreateActivationAccount(ctx context.Context, arg CreateActivat
 		&i.DisplayName,
 		&i.Scopes,
 		&i.Status,
-		&i.CreatedAt,
 	)
 	return i, err
 }

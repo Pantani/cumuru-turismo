@@ -7,12 +7,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Pantani/cumuru/apps/api/internal/activation"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store"
 	"github.com/Pantani/cumuru/apps/api/internal/stay"
@@ -565,6 +567,10 @@ func cleanupPhase7Fixture(t *testing.T, fixture phase7Fixture, pool *pgxpool.Poo
 		   (SELECT id FROM core.stays WHERE accommodation_id = $1)`,
 		`DELETE FROM core.invites WHERE accommodation_id = $1`,
 		`DELETE FROM core.stays WHERE accommodation_id = $1`,
+		`DELETE FROM auth.activation_capabilities WHERE accommodation_id = $1`,
+		`DELETE FROM auth.accounts WHERE id IN (
+		   SELECT m.oidc_subject::uuid FROM core.memberships m
+		   WHERE m.accommodation_id = $1 AND m.oidc_issuer = 'https://auth.cumuru.local')`,
 		`DELETE FROM core.memberships WHERE accommodation_id = $1`,
 		`DELETE FROM core.accommodations WHERE id = $1`,
 	}
@@ -760,5 +766,195 @@ func assertPosterResolves(
 	}
 	if !want && err == nil {
 		t.Fatal("the rotated-out poster still resolves")
+	}
+}
+
+// N-43. The activation capability was corrected by analogy with the poster in
+// R4 — same outbox aggregate defect — but nothing ever executed Create twice.
+// This is that execution, in the shape of the poster rotation test.
+//
+// The five parts are asserted separately because "no error" would hide three of
+// them: the count in particular, without which "the old one stopped working"
+// would also pass if the re-issue had destroyed both.
+func TestPhase7ActivationReissueReplacesThePreviousCapability(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	admin, runtime, fixture := openPhase7Integration(t, ctx)
+	repository := newPhase7ActivationRepository(t, runtime)
+	email := "operadora-" + mustV7(t).String() + "@exemplo.invalid"
+
+	first := issueActivationWithKey(t, ctx, repository, fixture, email, "reissue-first")
+	second := issueActivationWithKey(t, ctx, repository, fixture, email, "reissue-second")
+	if first == second {
+		t.Fatal("the re-issue reused the token; the previous link was never replaced")
+	}
+
+	assertSingleOpenCapability(t, ctx, admin, fixture)
+	assertCapabilityResolves(t, ctx, repository, second, true)
+	assertCapabilityResolves(t, ctx, repository, first, false)
+}
+
+// The idempotent replay has to win over the re-issue: one operator intent must
+// not mint two activation links.
+func TestPhase7ActivationReissueHonoursTheIdempotencyKey(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	admin, runtime, fixture := openPhase7Integration(t, ctx)
+	repository := newPhase7ActivationRepository(t, runtime)
+	email := "operadora-" + mustV7(t).String() + "@exemplo.invalid"
+
+	first := issueActivationWithKey(t, ctx, repository, fixture, email, "same-key")
+	replay := issueActivationWithKey(t, ctx, repository, fixture, email, "same-key")
+	if first != replay {
+		t.Fatal("the same idempotency key minted a second activation capability")
+	}
+	assertSingleOpenCapability(t, ctx, admin, fixture)
+	assertCapabilityResolves(t, ctx, repository, first, true)
+}
+
+func newPhase7ActivationRepository(
+	t *testing.T,
+	pool *pgxpool.Pool,
+) *store.ActivationRepository {
+	t.Helper()
+	built, err := store.NewPhase3(
+		pool, 10*time.Second, integrationPhase2Config(t), config.Phase3Config{},
+		store.WithPhase7Config(integrationPhase7Config(t)),
+	)
+	if err != nil {
+		t.Fatalf("NewPhase3() error = %v", err)
+	}
+	repository, err := store.NewActivationRepository(built)
+	if err != nil {
+		t.Fatalf("NewActivationRepository() error = %v", err)
+	}
+	return repository
+}
+
+func issueActivationWithKey(
+	t *testing.T,
+	ctx context.Context,
+	repository *store.ActivationRepository,
+	fixture phase7Fixture,
+	email string,
+	key string,
+) string {
+	t.Helper()
+	created, _, err := repository.Create(ctx, activation.CreateCommand{
+		Actor: principal(fixture.subject), AccommodationID: fixture.accommodationID,
+		Email: email, DisplayName: "Operadora fictícia", ExpectedVersion: 1,
+		IdempotencyKey: "phase7-" + key + "-" + fixture.accommodationID.String(),
+		RequestID:      "request-" + key + "-" + fixture.accommodationID.String(),
+	})
+	if err != nil {
+		t.Fatalf("Create(%s) error = %v", key, err)
+	}
+	parsed, err := url.Parse(created.URL)
+	if err != nil || parsed.Fragment == "" {
+		t.Fatalf("activation URL = %q; the token must live in the fragment", created.URL)
+	}
+	return parsed.Fragment
+}
+
+// The count is what separates "the previous one was replaced" from "both were
+// destroyed" and from "both are still open".
+func assertSingleOpenCapability(
+	t *testing.T,
+	ctx context.Context,
+	admin *pgxpool.Pool,
+	fixture phase7Fixture,
+) {
+	t.Helper()
+	var open, total int
+	err := admin.QueryRow(ctx,
+		`SELECT count(*) FILTER (WHERE consumed_at IS NULL AND revoked_at IS NULL),
+		        count(*)
+		 FROM auth.activation_capabilities WHERE accommodation_id = $1`,
+		fixture.accommodationID,
+	).Scan(&open, &total)
+	if err != nil {
+		t.Fatalf("count activation capabilities: %v", err)
+	}
+	if open != 1 {
+		t.Fatalf("open capabilities = %d of %d, want exactly one", open, total)
+	}
+}
+
+func assertCapabilityResolves(
+	t *testing.T,
+	ctx context.Context,
+	repository *store.ActivationRepository,
+	token string,
+	want bool,
+) {
+	t.Helper()
+	_, err := repository.Context(ctx, activation.Request{
+		Token: token, RateSubject: "203.0.113.0/24",
+	})
+	if want && err != nil {
+		t.Fatalf("the current activation capability does not resolve: %v", err)
+	}
+	if !want && err == nil {
+		t.Fatal("the replaced activation capability still resolves")
+	}
+}
+
+// An account that already activated keeps its credential. Re-issuing must
+// refuse rather than downgrade it to pending or erase the password:
+// accounts_credential_state_valid ties a missing hash to pending_activation, so
+// a downgrade would either violate the CHECK or destroy a live credential.
+//
+// The assertions on status and hash are the point. "It returned an error" would
+// also pass if the refusal happened after the damage.
+func TestPhase7ActivationRefusesToDowngradeAnActivatedAccount(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	admin, runtime, fixture := openPhase7Integration(t, ctx)
+	repository := newPhase7ActivationRepository(t, runtime)
+	email := "ativada-" + mustV7(t).String() + "@exemplo.invalid"
+
+	token := issueActivationWithKey(t, ctx, repository, fixture, email, "before-activation")
+	if err := repository.Complete(ctx, activation.CompleteCommand{
+		Token: token, RateSubject: "203.0.113.0/24",
+		Password: "uma-senha-bem-longa", RequestID: "request-complete-" + mustV7(t).String(),
+	}); err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+	assertAccountCredential(t, ctx, admin, email, "active", true)
+
+	_, _, err := repository.Create(ctx, activation.CreateCommand{
+		Actor: principal(fixture.subject), AccommodationID: fixture.accommodationID,
+		Email: email, DisplayName: "Operadora fictícia", ExpectedVersion: 1,
+		IdempotencyKey: "phase7-after-activation-" + fixture.accommodationID.String(),
+		RequestID:      "request-after-activation-" + fixture.accommodationID.String(),
+	})
+	if !errors.Is(err, activation.ErrConflict) {
+		t.Fatalf("Create() after activation error = %v, want ErrConflict", err)
+	}
+	// The refusal has to leave the credential exactly as it was.
+	assertAccountCredential(t, ctx, admin, email, "active", true)
+}
+
+func assertAccountCredential(
+	t *testing.T,
+	ctx context.Context,
+	admin *pgxpool.Pool,
+	email string,
+	wantStatus string,
+	wantHash bool,
+) {
+	t.Helper()
+	var status string
+	var hasHash bool
+	err := admin.QueryRow(ctx,
+		`SELECT status, password_hash IS NOT NULL FROM auth.accounts WHERE email = $1`,
+		email,
+	).Scan(&status, &hasHash)
+	if err != nil {
+		t.Fatalf("read account: %v", err)
+	}
+	if status != wantStatus || hasHash != wantHash {
+		t.Fatalf("account = %s/hash:%t, want %s/hash:%t",
+			status, hasHash, wantStatus, wantHash)
 	}
 }

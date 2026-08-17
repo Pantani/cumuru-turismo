@@ -20,7 +20,13 @@ var ErrAuthRejected = errors.New("authentication rejected")
 // because the caller answers 429 with Retry-After instead of 401.
 var ErrAuthLocked = errors.New("authentication temporarily locked")
 
-const accountStatusActive = "active"
+const (
+	accountStatusActive = "active"
+	// accountStatusPendingActivation is the account that exists without a
+	// credential. accounts_credential_state_valid ties the missing hash to this
+	// status and to no other.
+	accountStatusPendingActivation = "pending_activation"
+)
 
 // ErrPasswordRotationRequired reports a session that may only reach the
 // rotation endpoint. It is distinct from ErrAuthRejected because the credential

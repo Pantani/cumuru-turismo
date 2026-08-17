@@ -47,10 +47,17 @@
   --coral-strong: #ff8a6d;
   --coral-wash: rgba(255, 90, 54, 0.16);
 
-  --positive: #35c48c;
-  --positive-wash: rgba(53, 196, 140, 0.14);
-  --danger: #ff7a63;
-  --danger-wash: rgba(255, 122, 99, 0.16);
+  /* O brandkit fixa cinco cores e proíbe "verde/vermelho de status genéricos".
+     #35c48c e #ff7a63 eram uma sexta e uma sétima cor, próximas o bastante de
+     turquesa e coral para parecerem intencionais e distantes o bastante para
+     violarem a paleta. Os nomes seguem semânticos e os 18 pontos de uso não
+     mudam: confirmação passa a ser turquesa, que o brandkit define como "dado
+     observado, rótulos, confirmação", e alerta passa a ser coral, a única cor
+     de ênfase da marca. */
+  --positive: #2fc2af;
+  --positive-wash: rgba(47, 194, 175, 0.14);
+  --danger: #ff5a36;
+  --danger-wash: rgba(255, 90, 54, 0.16);
 
   /* Neutro de "sem dado": nunca compete com observado nem com previsto */
   --muted-mark: #3c565a;
@@ -505,17 +512,23 @@ h4 {
   text-wrap: pretty;
 }
 
+/* Chip do brandkit: cápsula, Geist Mono 600, caixa alta, 10.5–12.5px e
+   letter-spacing entre .1 e .18em. Antes era raio pequeno, fonte de interface
+   e espaçamento de corpo — lia como etiqueta genérica, não como o chip da
+   marca. */
 .prototype-badge,
 .internal-badge {
   flex: 0 0 auto;
-  padding: 0.4rem 0.75rem;
+  padding: 0.4rem 0.8rem;
   color: var(--brand-strong);
   background: var(--brand-wash);
   border: 1px solid color-mix(in srgb, var(--brand) 32%, transparent);
-  border-radius: var(--radius-sm);
-  font-size: 0.74rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .internal-badge {
@@ -2508,7 +2521,7 @@ h4 {
   background: var(--brand-wash);
   border: 1px solid var(--line);
   border-left: 3px solid var(--brand);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
 }
 
 .privacy-notice h2 {
@@ -2542,15 +2555,16 @@ h4 {
   padding: 1rem 1.1rem;
   margin: 0 0 1rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
 }
 
 .planned-window legend {
   padding: 0 0.35rem;
   color: var(--ink-3);
+  font-family: var(--font-num);
   font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -2587,9 +2601,17 @@ h4 {
 }
 
 .approval-deadline {
+  justify-self: start;
+  padding: 0.25rem 0.7rem;
   color: var(--coral-strong);
-  font-size: 0.82rem;
+  background: var(--coral-wash);
+  border: 1px solid color-mix(in srgb, var(--coral) 32%, transparent);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-num);
+  font-size: 0.68rem;
   font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .approval-followup,
@@ -2599,7 +2621,7 @@ h4 {
   padding: 1rem 1.1rem;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
 }
 
 .approval-followup h3,
@@ -2614,4 +2636,15 @@ h4 {
   color: var(--ink-2);
   font-size: 0.88rem;
   line-height: 1.55;
+}
+
+/* Linha do eyebrow: rótulo da seção à esquerda, chip de protótipo à direita.
+   O brandkit pede o rótulo de dado fictício visível na peça, e o cabeçalho é
+   onde ele não compete com o conteúdo nem se esconde no rodapé. */
+.page-eyebrow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
 }

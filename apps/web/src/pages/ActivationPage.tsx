@@ -6,7 +6,10 @@ export default function ActivationPage() {
 
   return (
     <article className="page page-narrow">
-      <div className="eyebrow">Acesso da hospedagem</div>
+      <div className="page-eyebrow-row">
+        <div className="eyebrow">Acesso da hospedagem</div>
+        <span className="prototype-badge">Dados fictícios de protótipo</span>
+      </div>
       <h1 data-route-heading tabIndex={-1}>
         Ativação da conta
       </h1>

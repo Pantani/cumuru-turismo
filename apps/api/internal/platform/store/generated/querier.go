@@ -43,6 +43,13 @@ type Querier interface {
 	// Conta pendente: nasce sem hash, com password_must_change false, sem
 	// tentativas e sem bloqueio, exatamente o que accounts_credential_state_valid
 	// exige do estado pending_activation (ADR-041).
+	// O RETURNING não pode projetar created_at: app_runtime tem SELECT por coluna em
+	// auth.accounts e created_at não está na lista. RETURNING exige SELECT sobre a
+	// coluna projetada, então a cláusula derrubava a transação inteira com
+	// "permission denied for table accounts" — no INSERT, que é o primeiro passo da
+	// emissão. Conceder SELECT (created_at) resolveria o sintoma ampliando
+	// privilégio para um valor que ninguém lê, contra a minimização por coluna da
+	// baseline. O Go consome apenas row.ID.
 	CreateActivationAccount(ctx context.Context, arg CreateActivationAccountParams) (CreateActivationAccountRow, error)
 	CreateActivationCapability(ctx context.Context, arg CreateActivationCapabilityParams) (CreateActivationCapabilityRow, error)
 	// Vínculo da conta pendente com a acomodação (ADR-041). Gated em

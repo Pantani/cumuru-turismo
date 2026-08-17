@@ -9,6 +9,17 @@ import {
  * one are indistinguishable by design, so the message must not speculate about
  * which one happened.
  */
+/**
+ * O canal aberto não repassa `problem.title` para status que não sabe explicar.
+ * A voz do brandkit pede frase curta e concreta, e o título do problema é
+ * escrito para quem opera o serviço: um hóspede que via "O serviço respondeu
+ * fora do contrato." recebia jargão de engenharia na superfície mais pública do
+ * produto, e nada acionável. Os status que a pessoa pode resolver continuam com
+ * mensagem própria na tabela abaixo.
+ */
+const UNEXPECTED_FAILURE =
+  "Não conseguimos falar com o serviço agora. Tente de novo em alguns instantes.";
+
 const statusMessages: Readonly<Record<number, string>> = {
   403: "Este cartaz não está aceitando cadastros agora.",
   404: "Este cartaz não é mais válido. Peça um novo à hospedagem.",
@@ -33,7 +44,7 @@ export function describeSelfServiceFailure(error: unknown) {
   if (error.retryAfterSeconds !== null) {
     return `${error.problem.title} Tente novamente em ${error.retryAfterSeconds} segundos.`;
   }
-  return statusMessages[error.status] ?? error.problem.title;
+  return statusMessages[error.status] ?? UNEXPECTED_FAILURE;
 }
 
 /** A refusal that will never succeed on retry must not keep a local copy. */
