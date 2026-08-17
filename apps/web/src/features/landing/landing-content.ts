@@ -1,8 +1,25 @@
+import type { SlotPhoto } from "./ImageSlot";
 import type { MessageKey } from "../../shared/i18n/translate";
 
 /** Endereço público de contato do Observatório, reutilizado nos dois botões. */
 export const CONTACT_EMAIL = "observatorio@cumuruxatiba.tur.br";
 export const DPO_EMAIL = "dpo@cumuruxatiba.tur.br";
+
+/**
+ * Única vaga de foto hoje preenchida com uma imagem real do lugar — as
+ * outras cinco descrevem cenas que ainda não existem em banco livre (recepção,
+ * retrato de anfitrião, mapa) e continuam como vaga anunciada em vez de foto
+ * fora do enquadramento. Fonte: Wikimedia Commons, licença livre com
+ * atribuição obrigatória.
+ */
+export const HERO_PHOTO: SlotPhoto = {
+  src: "/images/hero-falesia-cumuruxatiba.jpg",
+  srcWebp: "/images/hero-falesia-cumuruxatiba.webp",
+  author: "Tristão José Macedo",
+  license: "CC BY-SA 4.0",
+  sourceUrl:
+    "https://commons.wikimedia.org/wiki/File:Vista_do_mar_de_cima_de_uma_fal%C3%A9sia_em_Cumuruxatiba,_Bahia,_Brasil.jpg",
+};
 
 export interface LandingEntry {
   body: MessageKey;

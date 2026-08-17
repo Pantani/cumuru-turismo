@@ -238,6 +238,7 @@ export const messagesPt = {
   "landing.contact.mark": "OBSERVATÓRIO TURÍSTICO · CUMURUXATIBA",
 
   "landing.imagePending": "Espaço reservado para foto",
+  "landing.photoCredit": "Foto: {author} · {license} · Wikimedia Commons",
 
   // -------------------------------------------------------- Painel: envelope
   "analytics.index": "01",
