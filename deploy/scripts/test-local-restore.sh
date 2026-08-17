@@ -44,7 +44,6 @@ latest_migration_version() {
 }
 
 cleanup() {
-  cumuru_release_subnet
   local primary_status=$?
   local cleanup_status=0
   trap - EXIT
@@ -57,6 +56,9 @@ cleanup() {
   "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1
   cleanup_status=$?
   set -e
+  # O lock só cai depois do teardown: é isso que impede a execução seguinte de
+  # pedir um endereço que ainda está sendo liberado.
+  cumuru_release_subnet
   if test "${primary_status}" -ne 0; then
     exit "${primary_status}"
   fi

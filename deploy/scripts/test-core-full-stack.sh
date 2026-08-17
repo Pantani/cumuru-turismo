@@ -14,7 +14,6 @@ COMPOSE=(
 )
 
 cleanup() {
-  cumuru_release_subnet
   local primary_status=$?
   local cleanup_status=0
   trap - EXIT
@@ -56,6 +55,9 @@ cleanup() {
     cleanup_status=1
   fi
   set -e
+  # O lock só cai depois do teardown: é isso que impede a execução seguinte de
+  # pedir um endereço que ainda está sendo liberado.
+  cumuru_release_subnet
   if test "${primary_status}" -ne 0; then
     exit "${primary_status}"
   fi

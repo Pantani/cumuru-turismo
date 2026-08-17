@@ -43,6 +43,7 @@ export DOCKER_SERVICES DOCKER_LOG_TAIL
 	harness-validate harness-test harness-status harness-phase harness-prompt \
 	harness-dry-run harness-snapshot install tools openapi-lint generate \
 	generate-web generate-sqlc generated-check migration-test build test \
+	subnet-release-order-test \
 	local-restore-drill \
 	core-integration core-proxy-test core-full-stack typecheck complexity \
 	questionnaire-integration questionnaire-proxy-test \
@@ -114,6 +115,9 @@ generated-check: ## Verifica reprodutibilidade dos arquivos gerados
 
 ci-gate-test: ## Exercita a porta única da CI contra workflows sintéticos; sem Docker
 	@bash deploy/scripts/test-ci-gate.sh
+
+subnet-release-order-test: ## Prova que nenhum gate libera o lock antes de capturar $$?; sem Docker
+	@bash deploy/scripts/test-subnet-release-order.sh
 
 migration-test: ## Testa migrations e grants em PostgreSQL real via Docker
 	@bash deploy/scripts/test-migrations.sh
@@ -226,23 +230,27 @@ post-task-quality: ## Gate obrigatório pós-tarefa: complexity, lint e marcador
 	@$(MAKE) --no-print-directory lint
 	@echo "POST_TASK_QUALITY=PASS"
 
-lint-shell: ## Valida a sintaxe de todos os scripts shell próprios
+# A lista sai do índice do Git, não de `find`: qualquer caminho gitignored —
+# node_modules, artifacts, _workspace e os worktrees de agente sob .claude/ —
+# pertence a outra sessão ou a uma dependência, e varrê-lo transformava lixo
+# alheio em falha do gate. `--others --exclude-standard` mantém no escopo o
+# script novo que ainda não foi adicionado ao índice.
+lint-shell: ## Valida a sintaxe dos scripts shell versionados; ignora caminhos gitignored
 	@set -eu; \
 	files="$$(mktemp "$${TMPDIR:-/tmp}/cumuru-shell-lint.XXXXXX")"; \
 	trap 'rm -f -- "$$files"' 0 1 2 3 15; \
-	find . -type f -name '*.sh' \
-		-not -path './.git/*' \
-		-not -path './node_modules/*' \
-		-not -path './_workspace/*' \
-		-not -path './artifacts/*' \
-		-not -path './apps/web/dist/*' \
-		-print >"$$files"; \
-	count="$$(wc -l <"$$files" | tr -d '[:space:]')"; \
-	test "$$count" -gt 0; \
-	while IFS= read -r file; do \
+	git ls-files -z --cached --others --exclude-standard -- '*.sh' >"$$files"; \
+	count=0; \
+	while IFS= read -r -d '' file; do \
+		test -f "$$file" || { \
+			echo "lint-shell: arquivo indexado ausente do worktree: $$file" >&2; \
+			exit 1; \
+		}; \
 		bash -n "$$file"; \
+		count=$$((count + 1)); \
 	done <"$$files"; \
-		echo "SHELL_SYNTAX=PASS files=$$count"
+	test "$$count" -gt 0; \
+	echo "SHELL_SYNTAX=PASS files=$$count"
 
 lint: lint-shell ## Executa shell, go vet, Staticcheck e lint do web
 	go -C apps/api vet ./...
@@ -256,6 +264,7 @@ lint-fix: ## Aplica correções automáticas seguras de lint e formatação no m
 
 check: ## Executa o gate local sequencial, sem Docker ou scanners
 	@$(MAKE) --no-print-directory ci-gate-test
+	@$(MAKE) --no-print-directory subnet-release-order-test
 	@$(MAKE) --no-print-directory openapi-lint
 	@$(MAKE) --no-print-directory generated-check
 	@$(MAKE) --no-print-directory test-all
