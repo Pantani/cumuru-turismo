@@ -35,7 +35,13 @@ arquivo.
   publicados —, cada um com a dica que explica o que entra na conta; dias
   protegidos são pulados, nunca contados como zero;
 - coluna "ante a média" na série dia a dia e dica de interpretação nos cartões
-  de presença de hoje e de pico previsto.
+  de presença de hoje e de pico previsto;
+- janela combinada de 60 dias no painel público, unindo observado e previsto em
+  uma leitura só, com a divisa "previsão a partir daqui"; os indicadores e todas
+  as comparações continuam medidos contra o nível observado;
+- média móvel de 7 dias sobre a série, que só aparece com a janela completa e
+  com metade dos dias publicados, e interrompe onde faltam valores;
+- bloco "ritmo da semana" com a média por dia da semana da janela observada.
 
 ### Alterado
 

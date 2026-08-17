@@ -46,11 +46,15 @@ export function publishedDays(
   });
 }
 
-function mean(days: readonly PublishedDay[]): number | null {
-  if (days.length === 0) {
+function averageOf(values: readonly number[]): number | null {
+  if (values.length === 0) {
     return null;
   }
-  return days.reduce((sum, day) => sum + day.value, 0) / days.length;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function mean(days: readonly PublishedDay[]): number | null {
+  return averageOf(days.map((day) => day.value));
 }
 
 function extreme(
@@ -107,9 +111,63 @@ export function seriesStats(series: readonly PresencePoint[]): SeriesStats {
 }
 
 /** Civil weekday of a YYYY-MM-DD date, independent of the runtime time zone. */
+export function weekdayOf(date: string): number {
+  return new Date(`${date}T00:00:00Z`).getUTCDay();
+}
+
 export function isWeekend(date: string): boolean {
-  const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+  const weekday = weekdayOf(date);
   return weekday === 0 || weekday === 6;
+}
+
+/**
+ * Trailing mean over `size` days. It reports nothing until the window is
+ * complete, and nothing when fewer than half its days carry a value: averaging
+ * one surviving day would dress a suppressed stretch up as a measured level.
+ */
+function windowMean(
+  values: readonly (number | null)[],
+  index: number,
+  size: number,
+): number | null {
+  if (index + 1 < size) {
+    return null;
+  }
+  const slice = values.slice(index + 1 - size, index + 1);
+  const known = slice.filter((value): value is number => value !== null);
+  return known.length * 2 >= size ? averageOf(known) : null;
+}
+
+export function movingAverage(
+  series: readonly PresencePoint[],
+  size: number,
+): (number | null)[] {
+  const values = series.map(centralValue);
+  return values.map((_, index) => windowMean(values, index, size));
+}
+
+export interface WeekdayAverage {
+  average: number | null;
+  days: number;
+  weekday: number;
+}
+
+/** Average per civil weekday, so the weekly rhythm reads as a number. */
+export function weekdayAverages(
+  series: readonly PresencePoint[],
+): WeekdayAverage[] {
+  const buckets: number[][] = Array.from({ length: 7 }, () => []);
+  for (const point of series) {
+    const value = centralValue(point);
+    if (value !== null) {
+      buckets[weekdayOf(point.date)]?.push(value);
+    }
+  }
+  return buckets.map((values, weekday) => ({
+    average: averageOf(values),
+    days: values.length,
+    weekday,
+  }));
 }
 
 export function percentFromAverage(

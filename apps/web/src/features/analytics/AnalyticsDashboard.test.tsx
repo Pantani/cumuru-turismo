@@ -5,6 +5,7 @@ import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../generated/schema";
+import { LocaleProvider } from "../../shared/i18n/LocaleProvider";
 import type {
   Phase4Client,
   Phase4Result,
@@ -159,7 +160,9 @@ function renderDashboard(phase4Client = client()) {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AnalyticsDashboard client={phase4Client} />
+      <LocaleProvider initial="pt">
+        <AnalyticsDashboard client={phase4Client} />
+      </LocaleProvider>
     </QueryClientProvider>,
   );
 }
@@ -242,6 +245,34 @@ describe("dashboard público da Fase 4", () => {
     ).toBeInTheDocument();
   });
 
+  it("junta observado e previsto sem misturar a referência dos indicadores", async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+    await screen.findAllByText("110 pessoas-dia");
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Janela da presença" }),
+      "combined",
+    );
+
+    expect(
+      await screen.findByRole("img", { name: /Série de 4 dias/ }),
+    ).toBeInTheDocument();
+    const tiles = screen.getByRole("list", {
+      name: "Estatísticas dos últimos 30 dias observados",
+    });
+    // A média do observado é 110; se a referência escorregasse para a série
+    // combinada, o previsto de 150 puxaria o valor para 130.
+    const average = within(tiles).getByText("Média diária").closest("li");
+    expect(average).not.toBeNull();
+    expect(
+      within(average as HTMLElement).getByText("110 pessoas-dia"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("list", { name: "Média por dia da semana" }),
+    ).toBeInTheDocument();
+  });
+
   it("permite ler cada dia do gráfico pelo teclado", async () => {
     const user = userEvent.setup();
     renderDashboard(
@@ -254,12 +285,12 @@ describe("dashboard público da Fase 4", () => {
     chart.focus();
     await user.keyboard("{ArrowRight}");
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Observado: 100 pessoas-dia. 17% abaixo da média da janela.",
+      "Observado: 100 pessoas-dia. 17% abaixo da média de referência.",
     );
 
     await user.keyboard("{End}");
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Observado: 160 pessoas-dia. 33% acima da média da janela.",
+      "Observado: 160 pessoas-dia. 33% acima da média de referência.",
     );
 
     await user.keyboard("{Escape}");

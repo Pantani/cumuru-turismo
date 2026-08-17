@@ -2,6 +2,7 @@ package document_test
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -146,6 +147,22 @@ func TestHMACDoesNotContainDigits(t *testing.T) {
 	}
 	if strings.Contains(string(codec.HMAC(parsed)), validCPF) {
 		t.Fatal("HMAC embeds the plaintext document, want opaque output")
+	}
+}
+
+// A document reaching a log line, a trace attribute or a wrapped error must not
+// carry the digits along with it.
+func TestFormattingRedactsDigits(t *testing.T) {
+	t.Parallel()
+	parsed, err := document.Parse(document.KindCPF, validCPF)
+	if err != nil {
+		t.Fatalf("Parse returned %v, want nil", err)
+	}
+	for _, format := range []string{"%v", "%s", "%+v"} {
+		rendered := fmt.Sprintf(format, parsed)
+		if strings.Contains(rendered, validCPF) || strings.Contains(rendered, "529") {
+			t.Fatalf("%s rendered %q, want the digits redacted", format, rendered)
+		}
 	}
 }
 

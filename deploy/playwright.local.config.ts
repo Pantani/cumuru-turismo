@@ -18,6 +18,10 @@ export default defineConfig({
   use: {
     baseURL,
     browserName: "chromium",
+    // A jornada afirma texto em português. O site negocia o idioma pelo
+    // Accept-Language, então sem fixar o locale o Chromium do CI abriria a
+    // página em inglês e as asserções falhariam por tradução, não por defeito.
+    locale: "pt-BR",
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },

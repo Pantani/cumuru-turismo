@@ -1,0 +1,1076 @@
+/* ===========================================================================
+   Cumuru — capa pública do Observatório
+
+   Só o que é exclusivo da capa mora aqui: as faixas editoriais coloridas, a
+   capa, a faixa em movimento e as vagas de foto. Cor, tipografia e superfície
+   vêm dos tokens de `styles.css`, que já são os do design em todo o site.
+   =========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Índice de seções
+   -------------------------------------------------------------------------- */
+
+.lp-section-nav {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 1.75rem;
+  flex-wrap: wrap;
+  padding: 0.75rem max(1.5rem, calc((100% - var(--shell)) / 2));
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+
+.lp-section-nav ul {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lp-section-nav li {
+  flex: 0 0 auto;
+}
+
+.lp-section-nav a {
+  color: var(--ink-2);
+  white-space: nowrap;
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: color var(--dur) var(--ease);
+}
+
+.lp-section-nav a:hover {
+  color: var(--coral);
+}
+
+.lp-section-nav-cta {
+  margin-left: auto;
+  padding: 0.6rem 1.1rem;
+  color: var(--on-accent);
+  background: var(--coral);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.lp-section-nav-cta:hover {
+  color: var(--on-accent);
+  background: var(--ink);
+}
+
+/* --------------------------------------------------------------------------
+   Estrutura das seções
+   -------------------------------------------------------------------------- */
+
+.lp-shell {
+  width: var(--shell);
+  margin-inline: auto;
+}
+
+.lp-section {
+  padding-block: clamp(3.5rem, 7vw, 6rem);
+}
+
+/* Cada variante carrega o próprio par tinta/apoio: as seções claras não podem
+   herdar a tinta creme que a raiz escura define. */
+.lp-section-deep {
+  --lp-ink: var(--ink);
+  --lp-muted: var(--ink-2);
+  --lp-rule: var(--line);
+
+  color: var(--lp-ink);
+  background: var(--bg);
+}
+
+.lp-section-contact {
+  --lp-ink: var(--ink);
+  --lp-muted: var(--ink-2);
+  --lp-rule: var(--line);
+
+  color: var(--lp-ink);
+  background: var(--surface);
+}
+
+.lp-section-sand {
+  --lp-ink: var(--on-accent);
+  --lp-muted: var(--on-accent-2);
+  --lp-rule: color-mix(in srgb, var(--on-accent) 22%, transparent);
+
+  color: var(--lp-ink);
+  background: var(--ink);
+}
+
+.lp-section-clay {
+  --lp-ink: var(--on-accent);
+  --lp-muted: var(--on-accent-2);
+  --lp-rule: color-mix(in srgb, var(--on-accent) 22%, transparent);
+
+  color: var(--lp-ink);
+  background: var(--sand-2);
+}
+
+.lp-section-coral {
+  --lp-ink: var(--on-accent);
+  --lp-muted: color-mix(in srgb, var(--on-accent) 80%, transparent);
+  --lp-rule: color-mix(in srgb, var(--on-accent) 85%, transparent);
+
+  color: var(--lp-ink);
+  background: var(--coral);
+}
+
+/* --------------------------------------------------------------------------
+   Tipografia editorial
+   -------------------------------------------------------------------------- */
+
+.lp-display {
+  max-width: 16ch;
+  margin: 0 0 1.5rem;
+  color: var(--lp-ink);
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 6vw, 5.5rem);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+.lp-display-sm {
+  max-width: 18ch;
+  font-size: clamp(1.9rem, 3.6vw, 3.4rem);
+}
+
+.lp-accent {
+  color: var(--coral);
+}
+
+.lp-section-coral .lp-accent {
+  color: var(--ink);
+}
+
+.lp-lead {
+  max-width: 52ch;
+  margin: 0 0 2.5rem;
+  color: var(--lp-muted);
+  font-size: clamp(1rem, 1.2vw, 1.08rem);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.lp-index,
+.lp-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 1.4rem;
+  color: var(--lp-ink);
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.lp-index-number {
+  color: var(--coral);
+}
+
+.lp-section-coral .lp-index-number {
+  color: var(--ink);
+}
+
+.lp-index-rule {
+  width: 1.5rem;
+  height: 1px;
+  flex: 0 0 auto;
+  background: var(--lp-rule);
+}
+
+.lp-kicker {
+  color: var(--coral);
+}
+
+.lp-kicker-rule {
+  width: 2.1rem;
+  height: 2px;
+  flex: 0 0 auto;
+  background: var(--coral);
+}
+
+/* --------------------------------------------------------------------------
+   Botões da capa
+   -------------------------------------------------------------------------- */
+
+.lp-button-primary,
+.lp-button-ghost,
+.lp-button-dark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.25rem;
+  padding: 0.95rem 1.75rem;
+  border-radius: var(--radius-pill);
+  font-size: 1rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition:
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.lp-button-primary {
+  color: var(--on-accent);
+  background: var(--coral);
+}
+
+.lp-button-primary:hover {
+  color: var(--on-accent);
+  background: var(--ink);
+}
+
+.lp-button-ghost {
+  color: var(--lp-ink);
+  border: 1px solid var(--lp-rule);
+}
+
+.lp-button-ghost:hover {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+
+.lp-button-dark {
+  width: 100%;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.lp-button-dark:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+/* --------------------------------------------------------------------------
+   Capa
+   -------------------------------------------------------------------------- */
+
+.lp-hero {
+  position: relative;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--bg);
+  --lp-ink: var(--ink);
+  --lp-rule: var(--line-strong);
+}
+
+.lp-hero-art {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 54%;
+}
+
+/* Véu da esquerda para a direita: o texto precisa de contraste sobre a foto e
+   a foto precisa continuar legível na borda. */
+.lp-hero-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    var(--bg) 0%,
+    var(--bg) 44%,
+    color-mix(in srgb, var(--bg) 72%, transparent) 58%,
+    color-mix(in srgb, var(--bg) 18%, transparent) 100%
+  );
+}
+
+.lp-hero-body {
+  position: relative;
+  width: var(--shell);
+  margin-inline: auto;
+  padding-block: clamp(3.5rem, 7vw, 6rem);
+}
+
+.lp-hero-title {
+  max-width: 15ch;
+  margin: 0 0 2rem;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(2.75rem, 8vw, 7.5rem);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+.lp-hero-lead {
+  max-width: 46ch;
+  margin: 0 0 2.5rem;
+  color: var(--ink-2);
+  font-size: clamp(1.02rem, 1.4vw, 1.15rem);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.lp-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 4rem;
+}
+
+.lp-hero-metric {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.6rem;
+  flex-wrap: wrap;
+}
+
+.lp-hero-metric-label {
+  margin: 0 0 0.9rem;
+  color: var(--brand);
+  font-family: var(--font-num);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.lp-hero-metric-value {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  /* O piso desce o suficiente para "Dado protegido" caber em tela de telefone:
+     o rótulo entra no lugar do número quando a célula não é publicável. */
+  font-size: clamp(2.5rem, 11vw, 9.5rem);
+  overflow-wrap: anywhere;
+  font-weight: 800;
+  line-height: 0.86;
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums;
+}
+
+.lp-hero-metric-hint {
+  max-width: 17ch;
+  margin: 0 0 1rem;
+  color: var(--ink-2);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.lp-hero-metric-hint strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+/* --------------------------------------------------------------------------
+   Faixa em movimento
+   -------------------------------------------------------------------------- */
+
+.lp-ticker {
+  overflow: hidden;
+  background: var(--coral);
+  border-block: 2px solid var(--bg);
+}
+
+.lp-ticker-rail {
+  display: flex;
+  width: max-content;
+  animation: lp-marquee 34s linear infinite;
+}
+
+.lp-ticker-track {
+  display: flex;
+  align-items: center;
+  gap: 2.1rem;
+  margin: 0;
+  padding: 0.85rem 1.05rem;
+  list-style: none;
+  color: var(--on-accent);
+  font-family: var(--font-num);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lp-ticker-track li {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.1rem;
+}
+
+.lp-ticker-dot {
+  opacity: 0.5;
+}
+
+@keyframes lp-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Vaga de imagem
+   -------------------------------------------------------------------------- */
+
+.lp-image-slot {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 0.6rem;
+  width: 100%;
+  height: 100%;
+  min-height: 11rem;
+  padding: 1.5rem;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--ink) 5%, transparent) 0 8px,
+      transparent 8px 16px
+    ),
+    var(--surface);
+  border: 1px dashed var(--line-strong);
+}
+
+.lp-image-slot-tag {
+  color: var(--brand);
+  font-family: var(--font-num);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.lp-image-slot-caption {
+  max-width: 28ch;
+  color: var(--ink-2);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+/* --------------------------------------------------------------------------
+   Como funciona
+   -------------------------------------------------------------------------- */
+
+.lp-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 2.25rem;
+  margin: 0 0 4rem;
+  padding: 0;
+  list-style: none;
+}
+
+.lp-steps li {
+  padding-top: 1.25rem;
+  border-top: 3px solid var(--lp-ink);
+}
+
+.lp-step-number {
+  margin: 0 0 1rem;
+  color: var(--coral);
+  font-family: var(--font-display);
+  font-size: 3.25rem;
+  font-weight: 800;
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+}
+
+.lp-steps h3 {
+  margin: 0 0 0.6rem;
+  color: var(--lp-ink);
+  font-size: 1.16rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.lp-steps p:not(.lp-step-number) {
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.lp-how-gallery {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 0.9rem;
+  min-height: 19rem;
+}
+
+/* `grid` estica a vaga até o fundo do quadro: com `block`, a altura de 100% da
+   vaga resolveria contra um pai automático e a moldura ficaria pela metade. */
+.lp-how-gallery > *,
+.lp-hero-art,
+.lp-hosts-portrait,
+.lp-place-map {
+  display: grid;
+}
+
+.lp-how-gallery > * {
+  border-radius: 1.1rem;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Anfitriões
+   -------------------------------------------------------------------------- */
+
+.lp-hosts {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 4rem;
+  align-items: start;
+}
+
+.lp-benefits {
+  display: grid;
+  margin: 0 0 3rem;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--lp-rule);
+}
+
+.lp-benefits li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1.25rem;
+  padding-block: 1.35rem;
+  border-bottom: 1px solid var(--lp-rule);
+}
+
+.lp-benefit-arrow {
+  color: var(--coral);
+  font-family: var(--font-num);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.lp-benefits strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--lp-ink);
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.lp-benefits strong + span {
+  display: block;
+  max-width: 52ch;
+  color: var(--lp-muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.lp-quote {
+  margin: 0;
+}
+
+.lp-quote blockquote {
+  max-width: 24ch;
+  margin: 0 0 1.1rem;
+  color: var(--lp-ink);
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+
+.lp-quote figcaption {
+  color: var(--lp-muted);
+  font-family: var(--font-num);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.lp-hosts-aside {
+  display: grid;
+  gap: 1rem;
+  position: sticky;
+  top: calc(var(--header-h) + 3.5rem);
+}
+
+.lp-hosts-portrait {
+  min-height: 22rem;
+  border-radius: 1.1rem;
+  overflow: hidden;
+}
+
+.lp-register {
+  padding: 2rem;
+  color: var(--on-accent);
+  background: var(--coral);
+  border-radius: 1.25rem;
+}
+
+.lp-register h3 {
+  margin: 0 0 0.6rem;
+  color: var(--on-accent);
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.lp-register > p {
+  margin: 0 0 1.4rem;
+  max-width: 40ch;
+  color: color-mix(in srgb, var(--on-accent) 78%, transparent);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.lp-register-footnote {
+  margin: 0.9rem 0 0;
+  color: color-mix(in srgb, var(--on-accent) 70%, transparent);
+  font-family: var(--font-num);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   Grades de regra (comércio e privacidade)
+   -------------------------------------------------------------------------- */
+
+.lp-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0 2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 2px solid var(--lp-rule);
+}
+
+.lp-rule-grid > * {
+  padding-block: 1.75rem;
+  border-bottom: 2px solid var(--lp-rule);
+}
+
+.lp-rule-grid h3,
+.lp-rule-grid strong {
+  display: block;
+  margin: 0 0 0.6rem;
+  color: var(--lp-ink);
+  font-size: 1.16rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.lp-rule-grid p,
+.lp-rule-grid strong + span {
+  display: block;
+  margin: 0;
+  max-width: 38ch;
+  color: var(--lp-muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.lp-prototype-note {
+  margin-top: 3rem;
+  padding: 1.6rem 1.75rem;
+  background: var(--bg);
+  border-radius: 1.1rem;
+}
+
+.lp-prototype-note h3 {
+  margin: 0 0 0.6rem;
+  color: var(--coral);
+  font-family: var(--font-num);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.lp-prototype-note p {
+  margin: 0;
+  max-width: 88ch;
+  color: var(--ink-2);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* --------------------------------------------------------------------------
+   Onde estamos
+   -------------------------------------------------------------------------- */
+
+.lp-place {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 4rem;
+  align-items: center;
+}
+
+.lp-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--lp-rule);
+}
+
+.lp-fact-grid > div {
+  padding-block: 1.1rem;
+  padding-right: 1.1rem;
+  border-bottom: 1px solid var(--lp-rule);
+}
+
+.lp-fact-grid dt {
+  color: var(--ink-3);
+  font-family: var(--font-num);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.lp-fact-grid dd {
+  margin: 0.45rem 0 0;
+  color: var(--lp-ink);
+  font-size: 0.98rem;
+  font-weight: 550;
+}
+
+.lp-place-map {
+  min-height: 26rem;
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Sobre, guias e FAQ
+   -------------------------------------------------------------------------- */
+
+.lp-about {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 4rem;
+  align-items: start;
+}
+
+.lp-about .lp-lead {
+  margin-bottom: 1.25rem;
+}
+
+.lp-guides {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 1.75rem;
+}
+
+.lp-guides a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.35rem 1.5rem;
+  color: var(--ink);
+  background: var(--surface);
+  border-radius: 0.9rem;
+  text-decoration: none;
+  transition: background-color var(--dur) var(--ease);
+}
+
+.lp-guides a:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.lp-guides strong {
+  display: block;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.lp-guides strong + span {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--ink-3);
+  font-size: 0.82rem;
+}
+
+.lp-guide-arrow {
+  color: var(--coral);
+  font-family: var(--font-num);
+  font-weight: 600;
+}
+
+.lp-faq {
+  display: grid;
+  border-top: 1px solid var(--lp-rule);
+}
+
+.lp-faq details {
+  border-bottom: 1px solid var(--lp-rule);
+}
+
+.lp-faq summary {
+  padding-block: 1.35rem;
+  color: var(--lp-ink);
+  cursor: pointer;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  list-style: none;
+}
+
+.lp-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.lp-faq summary::after {
+  content: "+";
+  float: right;
+  color: var(--coral);
+  font-family: var(--font-num);
+}
+
+.lp-faq details[open] summary::after {
+  content: "−";
+}
+
+.lp-faq p {
+  margin: 0;
+  padding-bottom: 1.5rem;
+  max-width: 56ch;
+  color: var(--lp-muted);
+  font-size: 0.95rem;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+/* --------------------------------------------------------------------------
+   Contato
+   -------------------------------------------------------------------------- */
+
+.lp-contact {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 4rem;
+  align-items: start;
+}
+
+.lp-contact-list {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid var(--lp-rule);
+}
+
+.lp-contact-list > div {
+  padding-block: 1.1rem;
+  border-bottom: 1px solid var(--lp-rule);
+}
+
+.lp-contact-list dt {
+  color: var(--brand);
+  font-family: var(--font-num);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.lp-contact-list dd {
+  margin: 0.45rem 0 0;
+  color: var(--ink-2);
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.lp-contact-list a {
+  color: var(--coral);
+  text-decoration: none;
+}
+
+.lp-contact-list a:hover {
+  color: var(--coral-strong);
+}
+
+/* --------------------------------------------------------------------------
+   Seletor de idioma
+   -------------------------------------------------------------------------- */
+
+/* O seletor entrou na linha de ações do cabeçalho; sem `min-width: 0` a
+   navegação de rotas deixa de rolar sozinha e é a página que rola. */
+@media (max-width: 50rem) {
+  .header-actions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .header-actions nav {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
+
+.locale-switcher {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.locale-switcher button {
+  padding: 0.3rem 0.15rem;
+  color: var(--ink-3);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  transition:
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.locale-switcher button:hover {
+  color: var(--ink);
+}
+
+.locale-switcher button[aria-current="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--coral);
+}
+
+.site-footer-mark {
+  margin-top: 0.6rem;
+  color: var(--ink-3);
+  font-family: var(--font-num);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+}
+
+/* --------------------------------------------------------------------------
+   O painel dentro da capa
+   -------------------------------------------------------------------------- */
+
+/* A capa já dá a moldura larga; o painel não repete margem lateral própria. */
+.landing .analytics-dashboard {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.landing .analytics-dashboard > .dashboard-heading h2 {
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 5vw, 4.5rem);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.045em;
+}
+
+/* --------------------------------------------------------------------------
+   Responsivo
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 64rem) {
+  .lp-hosts,
+  .lp-place,
+  .lp-about,
+  .lp-contact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2.5rem;
+  }
+
+  .lp-hosts-aside {
+    position: static;
+  }
+
+  .lp-how-gallery {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 50rem) {
+  .lp-hero-art {
+    inset: 0;
+    width: 100%;
+    opacity: 0.35;
+  }
+
+  .lp-hero-veil {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg) 65%, transparent) 0%,
+      var(--bg) 55%
+    );
+  }
+
+  .lp-fact-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Abaixo de 50rem o cabeçalho de rotas deixa de ser fixo. */
+  .lp-section-nav {
+    top: 0;
+    gap: 0.75rem;
+  }
+
+  /* `min-width: 0` é o que faz a rolagem funcionar: sem ele o item flex cresce
+     até o conteúdo e é a página inteira que passa a rolar na horizontal. */
+  .lp-section-nav ul {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .lp-section-nav-cta {
+    margin-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-ticker-rail {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .lp-image-slot,
+  .lp-register,
+  .lp-prototype-note,
+  .lp-guides a {
+    border: 1px solid CanvasText;
+  }
+
+  .lp-hero-veil {
+    display: none;
+  }
+}

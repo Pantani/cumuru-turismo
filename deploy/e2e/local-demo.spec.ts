@@ -159,7 +159,7 @@ test("percorre a jornada local sem persistir authorities", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Observatório Turístico de Cumuruxatiba",
+      name: "O turismo da nossa praia, finalmente em números.",
     }),
   ).toBeVisible();
   await expect(page.getByText(/Cobertura estimada: \d+%/u).first()).toBeVisible();

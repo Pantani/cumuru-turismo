@@ -1,0 +1,395 @@
+/**
+ * Dicionário canônico do Observatório. Este arquivo é a fonte da verdade: o
+ * tipo `Messages` deriva dele, então `messages-en.ts` e `messages-es.ts` só
+ * compilam com exatamente as mesmas chaves. Chave faltando vira erro de tipo,
+ * nunca texto ausente em produção.
+ *
+ * Interpolação usa `{nome}`; ver `interpolate` em `translate.ts`.
+ */
+export const messagesPt = {
+  // ---------------------------------------------------------------- Navegação
+  "app.nav.public": "Painel público",
+  "app.nav.registration": "Registro",
+  "app.nav.survey": "Pesquisa",
+  "app.nav.workspace": "Área da hospedagem",
+  "app.nav.questionnaires": "Questionários",
+  "app.nav.quality": "Qualidade",
+  "app.nav.aria": "Navegação principal",
+  "app.skipLink": "Ir para o conteúdo",
+  "app.brand.name": "Observatório Turístico",
+  "app.brand.place": "Cumuruxatiba · Prado, Bahia",
+  "app.signOut": "Sair",
+  "app.documentTitle": "{page} · Observatório Turístico de Cumuruxatiba",
+  "app.routeAnnounce": "Página atual: {title}",
+  "app.routeLoading": "Carregando página…",
+  "app.footer.note":
+    "Protótipo técnico com dados fictícios. Uso real depende dos gates de governança do Município de Prado.",
+  "app.locale.aria": "Idioma do site",
+  "app.locale.pt": "PT",
+  "app.locale.en": "EN",
+  "app.locale.es": "ES",
+  "app.locale.ptName": "Português",
+  "app.locale.enName": "Inglês",
+  "app.locale.esName": "Espanhol",
+
+  "app.title.public": "Painel público do turismo",
+  "app.title.registration": "Registro de visitantes",
+  "app.title.survey": "Pesquisa com o visitante",
+  "app.title.workspace": "Área da hospedagem",
+  "app.title.questionnaires": "Questionários",
+  "app.title.quality": "Qualidade dos dados",
+  "app.title.notFound": "Página não encontrada",
+
+  // ------------------------------------------------------- Landing: seções
+  "landing.sections.aria": "Seções desta página",
+  "landing.nav.numbers": "Números",
+  "landing.nav.how": "Como funciona",
+  "landing.nav.hosts": "Anfitriões",
+  "landing.nav.commerce": "Comércio",
+  "landing.nav.privacy": "Privacidade",
+  "landing.nav.about": "Sobre",
+  "landing.nav.register": "Cadastrar hospedagem",
+
+  // ------------------------------------------------------------ Landing: hero
+  "landing.hero.kicker": "Turismo em números",
+  "landing.hero.titleLead": "O turismo da nossa praia,",
+  "landing.hero.titleAccent": "finalmente em números.",
+  "landing.hero.lead":
+    "Pousadas e casas de aluguel registram as estadias em um só lugar. O Observatório devolve à comunidade indicadores públicos de presença e previsão — sem expor nenhum hóspede.",
+  "landing.hero.primary": "Cadastrar minha hospedagem",
+  "landing.hero.secondary": "Ver os números de hoje",
+  "landing.hero.todayLabel": "Hoje na vila",
+  "landing.hero.todayUnit": "pessoas-dia",
+  "landing.hero.todayHint": "Gente que dorme aqui, semana a semana.",
+  "landing.hero.todayPending": "Carregando",
+  "landing.hero.image":
+    "Foto da falésia e da praia de Cumuruxatiba (vertical)",
+
+  // --------------------------------------------------------- Landing: ticker
+  "landing.ticker.aria": "Resumo em movimento dos indicadores de hoje",
+  "landing.ticker.today": "Presença hoje {value}",
+  "landing.ticker.peak": "Pico previsto {value}",
+  "landing.ticker.coverage": "{coverage}",
+  "landing.ticker.prototype": "Dados fictícios de protótipo",
+  "landing.ticker.pending": "Carregando indicadores públicos",
+
+  // ---------------------------------------------------- Landing: como funciona
+  "landing.how.index": "02",
+  "landing.how.kicker": "Do check-in ao indicador",
+  "landing.how.title": "Quatro passos, dois minutos por estadia.",
+  "landing.how.lead":
+    "Funciona no celular, aguenta internet fraca e não pede nada que você já não pergunte na recepção.",
+  "landing.how.step1.title": "Cadastre a hospedagem",
+  "landing.how.step1.body":
+    "Nome do local, CPF ou CNPJ, tipo e capacidade aproximada. Pousada formal ou casa de família — os dois entram.",
+  "landing.how.step2.title": "Abra a estadia",
+  "landing.how.step2.body":
+    "Chegada, saída e número de pessoas. Só isso já alimenta o indicador de presença da vila.",
+  "landing.how.step3.title": "O hóspede completa ou você aprova",
+  "landing.how.step3.body":
+    "Um QR code no balcão leva o visitante ao próprio registro. Se ele não quiser, a recepção preenche e aprova.",
+  "landing.how.step4.title": "A vila recebe o número",
+  "landing.how.step4.body":
+    "Tudo entra agregado, arredondado e protegido no painel público. Ninguém vê a sua ocupação separada.",
+  "landing.how.image.desk": "Recepção de pousada com o QR code no balcão",
+  "landing.how.image.phone": "Hóspede preenchendo o registro no celular",
+  "landing.how.image.street": "Rua da vila em dia de movimento",
+
+  // -------------------------------------------------------- Landing: anfitriões
+  "landing.hosts.index": "03",
+  "landing.hosts.kicker": "Para quem hospeda",
+  "landing.hosts.title": "Sua casa também é turismo — e agora aparece na conta.",
+  "landing.hosts.lead":
+    "Não é fiscalização. É a primeira vez que Cumuruxatiba consegue dizer, com número, quanta gente dorme aqui em cada semana do ano.",
+  "landing.hosts.benefit1.title": "Saiba quando encher a casa",
+  "landing.hosts.benefit1.body":
+    "Previsão de 30 dias com faixa provável para definir diária, equipe e compras.",
+  "landing.hosts.benefit2.title": "Com CPF ou CNPJ, tanto faz",
+  "landing.hosts.benefit2.body":
+    "Quem aluga uma casa participa igual a quem tem pousada registrada. Sem Cadastur obrigatório.",
+  "landing.hosts.benefit3.title": "Sua ocupação nunca é exposta",
+  "landing.hosts.benefit3.body":
+    "Nenhum indicador público é aberto por estabelecimento. Só existe o total da vila.",
+  "landing.hosts.benefit4.title": "Funciona com internet ruim",
+  "landing.hosts.benefit4.body":
+    "O registro fica salvo no aparelho e sobe sozinho quando o sinal volta.",
+  "landing.hosts.quote":
+    "Antes eu chutava a alta temporada pelo movimento da rua. Hoje eu olho a previsão de trinta dias e sei quando chamar mais gente para a cozinha.",
+  "landing.hosts.quoteCaption":
+    "Depoimento de exemplo — substitua por um anfitrião real da vila.",
+  "landing.hosts.image": "Retrato de um anfitrião ou pousada da vila",
+
+  // ---------------------------------------------------------- Landing: cadastro
+  "landing.register.title": "Cadastre sua hospedagem",
+  "landing.register.body":
+    "Leva cinco minutos. Você recebe o acesso da área da hospedagem e o QR code do balcão no mesmo dia.",
+  "landing.register.action": "Ir para a área da hospedagem",
+  "landing.register.footnote": "Sem custo. Você pode sair quando quiser.",
+
+  // ---------------------------------------------------------- Landing: comércio
+  "landing.commerce.index": "04",
+  "landing.commerce.kicker": "Para o comércio e as associações",
+  "landing.commerce.title":
+    "Planeje a temporada com o número, não com o boato.",
+  "landing.commerce.lead":
+    "Restaurantes, mercados, passeios de barco e transporte usam a mesma previsão pública que as hospedagens. Todo mundo enxerga a mesma curva.",
+  "landing.commerce.item1.title": "Compras e estoque",
+  "landing.commerce.item1.body":
+    "Saber que vêm mil pessoas-dia no feriado muda o pedido do fornecedor da semana anterior.",
+  "landing.commerce.item2.title": "Equipe temporária",
+  "landing.commerce.item2.body":
+    "A faixa provável indica quando contratar reforço e quando segurar o caixa.",
+  "landing.commerce.item3.title": "Serviços da vila",
+  "landing.commerce.item3.body":
+    "Água, coleta de lixo e transporte passam a ser dimensionados por presença estimada, não por chute.",
+  "landing.commerce.item4.title": "Argumento junto ao poder público",
+  "landing.commerce.item4.body":
+    "Uma série histórica sustenta pedido de investimento melhor do que qualquer impressão pessoal.",
+
+  // -------------------------------------------------------------- Landing: mapa
+  "landing.place.index": "05",
+  "landing.place.kicker": "Onde estamos",
+  "landing.place.title":
+    "Cumuruxatiba, distrito de Prado, litoral sul da Bahia.",
+  "landing.place.lead":
+    "Entre o Monte Pascoal e a foz do Rio Jucuruçu, uma faixa de praia protegida por falésias que ainda recebe o visitante pelo boca a boca.",
+  "landing.place.municipality": "Município",
+  "landing.place.municipalityValue": "Prado, Bahia",
+  "landing.place.timezone": "Fuso",
+  "landing.place.beach": "Faixa de praia",
+  "landing.place.beachValue": "Cerca de 17 km",
+  "landing.place.season": "Alta temporada",
+  "landing.place.seasonValue": "Dezembro a fevereiro",
+  "landing.place.image": "Mapa da vila de Cumuruxatiba com as hospedagens",
+
+  // ------------------------------------------------------- Landing: privacidade
+  "landing.privacy.index": "06",
+  "landing.privacy.kicker": "Privacidade por construção",
+  "landing.privacy.titleLead": "O comércio recebe a curva.",
+  "landing.privacy.titleAccent": "Ninguém recebe o hóspede.",
+  "landing.privacy.lead":
+    "A separação entre o dado da estadia e o indicador público é estrutural, não uma promessa de uso.",
+  "landing.privacy.item1.title": "O painel nunca lê resposta bruta",
+  "landing.privacy.item1.body":
+    "O site público consulta apenas células já agregadas e arredondadas. Não existe caminho do gráfico até uma pessoa.",
+  "landing.privacy.item2.title": "Supressão automática de célula pequena",
+  "landing.privacy.item2.body":
+    "Abaixo do limiar de contribuições ou de hospedagens, o valor não é publicado e nenhum substituto aparece no lugar.",
+  "landing.privacy.item3.title": "Pesquisa é sempre opcional",
+  "landing.privacy.item3.body":
+    "Recusar a pesquisa de perfil não impede o check-in nem muda o atendimento. O consentimento é registrado e revogável.",
+  "landing.privacy.item4.title": "Direitos do titular pela LGPD",
+  "landing.privacy.item4.body":
+    "Acesso, correção e exclusão do próprio registro, com retenção configurada e trilha de auditoria de cada operação.",
+  "landing.privacy.prototypeTitle": "Ambiente de protótipo",
+  "landing.privacy.prototypeBody":
+    "Esta demonstração usa somente dados fictícios. Não substitui estatística oficial nem censo, não autoriza operação real e nenhum cadastro municipal se torna obrigatório sem fundamento jurídico formal da Prefeitura de Prado.",
+
+  // -------------------------------------------------------- Landing: sobre e FAQ
+  "landing.about.index": "07",
+  "landing.about.kicker": "Sobre e governança",
+  "landing.about.title":
+    "Um observatório da vila, com regra escrita antes do dado.",
+  "landing.about.body1":
+    "Cumuruxatiba é distrito do Município de Prado. Qualquer obrigatoriedade de cadastro depende de patrocínio formal da Prefeitura ou de entidade com competência delegada — até lá, a participação é voluntária.",
+  "landing.about.body2":
+    "Perguntas publicadas são imutáveis: mudança gera nova versão. Toda escrita é idempotente e nenhuma integração externa que falhe faz o registro local se perder.",
+  "landing.about.guideCityHall": "Guia do Observatório para a Prefeitura",
+  "landing.about.guideCityHallMeta": "PDF · apresentação e treinamento",
+  "landing.about.guideFnrh": "Guia para gerar a chave FNRH",
+  "landing.about.guideFnrhMeta": "PDF · para hospedagens elegíveis",
+
+  "landing.faq.title": "Perguntas frequentes",
+  "landing.faq.q1.question": "Preciso ter CNPJ para participar?",
+  "landing.faq.q1.answer":
+    "Não. Você pode cadastrar com CPF, como pessoa física que aluga uma casa, ou com CNPJ, se tiver pousada. O cadastro no Observatório não comprova regularidade nem licenciamento.",
+  "landing.faq.q2.question":
+    "Meus concorrentes vão ver quantos hóspedes eu tenho?",
+  "landing.faq.q2.answer":
+    "Não. Nenhum indicador é aberto por estabelecimento. O painel publica apenas o total da vila, arredondado e com supressão quando poucas hospedagens contribuem.",
+  "landing.faq.q3.question": "Isso substitui a FNRH?",
+  "landing.faq.q3.answer":
+    "Não. A integração com a FNRH Digital é uma trilha separada e opcional, com a chave oficial de cada estabelecimento. O Observatório não emite nem compartilha essa credencial.",
+  "landing.faq.q4.question": "O hóspede é obrigado a responder a pesquisa?",
+  "landing.faq.q4.answer":
+    "Nunca. A pesquisa de perfil é voluntária e separada do registro da estadia. Recusar não afeta o check-in.",
+  "landing.faq.q5.question": "E se a internet cair no meio do registro?",
+  "landing.faq.q5.answer":
+    "O registro fica guardado no aparelho e é enviado quando a conexão volta. Reenvio do mesmo registro não gera estadia duplicada.",
+  "landing.faq.q6.question": "Quanto custa?",
+  "landing.faq.q6.answer":
+    "Nada para a hospedagem. O Observatório é uma iniciativa de interesse público da vila e você pode encerrar a participação quando quiser.",
+
+  // ----------------------------------------------------------- Landing: contato
+  "landing.contact.title": "Quer entender melhor antes de entrar?",
+  "landing.contact.lead":
+    "A equipe passa nas hospedagens para explicar pessoalmente e ajudar no primeiro cadastro. Escreva para a equipe ou peça uma visita.",
+  "landing.contact.write": "Escrever para a equipe",
+  "landing.contact.visit": "Pedir uma visita",
+  "landing.contact.email": "E-mail",
+  "landing.contact.inPerson": "Atendimento presencial",
+  "landing.contact.inPersonValue":
+    "Terças e quintas, 9h às 12h, na sede da associação de moradores",
+  "landing.contact.dpo": "Encarregado de dados",
+  "landing.contact.mark": "OBSERVATÓRIO TURÍSTICO · CUMURUXATIBA",
+
+  "landing.imagePending": "Espaço reservado para foto",
+
+  // -------------------------------------------------------- Painel: envelope
+  "analytics.index": "01",
+  "analytics.kicker": "Publicação protegida",
+  "analytics.title": "Indicadores públicos",
+  "analytics.lead":
+    "Tendências agregadas para planejar temporada, equipe e estoque. Sem microdados, sem identificação de hóspedes e sem recorte por estabelecimento.",
+  "analytics.prototypeBadge": "Dados fictícios de protótipo",
+  "analytics.loading": "Atualizando indicadores públicos…",
+  "analytics.error": "Não foi possível carregar os indicadores públicos.",
+  "analytics.retry": "Tentar novamente",
+
+  "analytics.metadata.aria": "Contexto dos indicadores",
+  "analytics.metadata.updated": "Atualização",
+  "analytics.metadata.coverage": "Cobertura",
+  "analytics.metadata.unit": "Unidade",
+  "analytics.metadata.mode": "Modo dos dados",
+  "analytics.coverage.published": "Cobertura estimada: {ratio}%",
+  "analytics.coverage.protected":
+    "Cobertura protegida pela política de publicação",
+  "analytics.coverage.unavailable": "Cobertura indisponível",
+  "analytics.unit.personDay": "Pessoas-dia",
+  "analytics.unit.surveyAnswer": "Respostas de pesquisa",
+  "analytics.unit.inline": "pessoas-dia",
+
+  // ------------------------------------------------------- Painel: cartões
+  "analytics.summary.aria": "Resumo da presença",
+  "analytics.summary.today": "Presença de hoje",
+  "analytics.summary.todayHint":
+    "Pessoas presentes hoje, contadas no intervalo entre chegada e saída, no fuso America/Bahia. Uma pessoa conta uma vez por dia.",
+  "analytics.summary.peak": "Pico previsto nos próximos 30 dias",
+  "analytics.summary.peakHint":
+    "Maior estimativa central do baseline explicável. Planeje pela faixa provável, nunca pelo número central isolado.",
+  "analytics.kind.observed": "● Observado",
+  "analytics.kind.forecast": "◇ Previsto",
+  "analytics.state.protected": "Dado protegido",
+  "analytics.state.unavailable": "Dado indisponível",
+  "analytics.value.observed": "{value} pessoas-dia",
+  "analytics.value.central": "Estimativa central: {value} pessoas-dia",
+  "analytics.value.band": "Faixa provável: {lower} a {upper}",
+
+  // -------------------------------------------------------- Painel: série
+  "analytics.presence.kicker": "Série em pessoas-dia",
+  "analytics.presence.title": "Presença ao longo do tempo",
+  "analytics.window.label": "Janela da presença",
+  "analytics.window.recent": "Últimos 30 dias",
+  "analytics.window.next": "Próximos 30 dias",
+  "analytics.window.combined": "Últimos 30 e próximos 30 dias",
+  "analytics.window.scope.recent": "últimos 30 dias",
+  "analytics.window.scope.next": "próximos 30 dias",
+  "analytics.window.scope.combined": "últimos 30 dias observados",
+
+  "analytics.legend.aria": "Legenda da série",
+  "analytics.legend.observed": "Observado",
+  "analytics.legend.forecast": "Previsto, com faixa provável",
+  "analytics.legend.gap": "Protegido ou indisponível, sem valor substituto",
+  "analytics.legend.average": "Média de referência",
+  "analytics.legend.trend": "Média móvel de {days} dias",
+  "analytics.legend.weekend": "Fim de semana",
+
+  "analytics.stats.aria": "Estatísticas dos {scope}",
+  "analytics.tile.average": "Média diária",
+  "analytics.tile.averageHint":
+    "Média dos {count} dias com valor publicado. A linha tracejada do gráfico marca esse nível.",
+  "analytics.tile.peak": "Dia mais cheio",
+  "analytics.tile.peakHint":
+    "Maior valor publicado da janela e o dia em que ocorreu.",
+  "analytics.tile.trough": "Dia mais vazio",
+  "analytics.tile.troughHint":
+    "Menor valor publicado da janela. Compare com o dia mais cheio para dimensionar a variação.",
+  "analytics.tile.trend": "Tendência",
+  "analytics.tile.trendHint":
+    "Média dos {count} últimos dias publicados ante os {count} anteriores. Dias protegidos são pulados, nunca contados como zero.",
+  "analytics.tile.trendNone":
+    "São necessários pelo menos dois dias publicados para comparar períodos.",
+  "analytics.tile.total": "Total acumulado",
+  "analytics.tile.totalHint":
+    "Soma dos dias publicados. Dias protegidos ficam de fora, então o total é um piso, não um censo.",
+  "analytics.tile.published": "Dias publicados",
+  "analytics.tile.publishedValue": "{published} de {days}",
+  "analytics.withheld.none": "Todos os dias da janela têm valor publicado.",
+  "analytics.withheld.one":
+    "1 dia ficou sem valor por proteção estatística ou ausência de dado. Nenhum valor substituto é exibido.",
+  "analytics.withheld.other":
+    "{count} dias ficaram sem valor por proteção estatística ou ausência de dado. Nenhum valor substituto é exibido.",
+
+  "analytics.empty": "—",
+
+  // ------------------------------------------------------ Painel: dia da semana
+  "analytics.weekday.title": "Ritmo da semana",
+  "analytics.weekday.hint":
+    "Média por dia da semana sobre os dias publicados da janela observada. Mostra o padrão semanal que a série dia a dia esconde; com poucos dias publicados, uma única data pode responder por todo o dia da semana.",
+  "analytics.weekday.aria": "Média por dia da semana",
+  "analytics.weekday.none": "sem dia publicado",
+  "analytics.weekday.days.one": " · 1 dia",
+  "analytics.weekday.days.other": " · {count} dias",
+
+  // ---------------------------------------------------------- Painel: tabela
+  "analytics.table.aria": "Presença observada e prevista",
+  "analytics.table.date": "Data",
+  "analytics.table.kind": "Tipo",
+  "analytics.table.result": "Resultado",
+  "analytics.table.delta": "Ante a média",
+  "analytics.details": "Ver a série dia a dia",
+
+  // ------------------------------------------------------ Painel: preferências
+  "analytics.preferences.kicker": "Pesquisa voluntária",
+  "analytics.preferences.title": "Perfil de visita agregado",
+  "analytics.preferences.periodLabel": "Período das preferências",
+  "analytics.preferences.lastCompleteMonth": "Último mês completo",
+  "analytics.preferences.lead":
+    "Unidade: respostas de pesquisa estruturadas e consentidas. Uma resposta de grupo não é multiplicada pela quantidade de visitantes.",
+  "analytics.preferences.firstVisit": "Primeira visita",
+  "analytics.preferences.returning": "Visitante recorrente",
+  "analytics.preferences.share": "{percent}% das respostas elegíveis",
+
+  // ------------------------------------------------------- Painel: metodologia
+  "analytics.methodology.kicker": "Como interpretar",
+  "analytics.methodology.title": "Metodologia e limitações",
+  "analytics.methodology.observed": "Presença observada",
+  "analytics.methodology.observedBody":
+    "Cada pessoa contribui no intervalo civil entre chegada e saída, em America/Bahia. A saída não conta como novo dia de presença.",
+  "analytics.methodology.forecast": "Presença prevista",
+  "analytics.methodology.forecastBody":
+    "O baseline explicável combina reservas já conhecidas e histórico sazonal. A faixa normal usa limites de {low}% a {high}%. Sem histórico elegível suficiente, o baseline usa fallback mais amplo, de {fallbackLow}% a {fallbackHigh}%. O contrato público não identifica qual faixa foi aplicada a cada ponto; por isso a interface não atribui esse estado a valores individuais.",
+  "analytics.methodology.protection": "Proteção estatística",
+  "analytics.methodology.protectionBody":
+    "Células abaixo de {threshold} contribuições ou de {accommodations} acomodações são protegidas. Há supressão complementar e arredondamento em base {rounding}.",
+  "analytics.methodology.limits": "Limitações",
+  "analytics.methodology.limitsBody":
+    "A cobertura é parcial e não representa um censo. Os dados são fictícios de protótipo; acurácia operacional, política municipal e uso com dados reais permanecem não verificados.",
+
+  // ---------------------------------------------------------- Painel: gráfico
+  "analytics.chart.empty":
+    "Nenhum dia da janela tem valor publicável; toda a série está protegida ou indisponível.",
+  "analytics.chart.summary":
+    "Série de {days} dias em pessoas-dia. {published} dias com valor publicado e {withheld} protegidos ou indisponíveis, exibidos como falha na base do gráfico.",
+  "analytics.chart.average": "média {value}",
+  "analytics.chart.forecastFrom": "previsão a partir daqui",
+  "analytics.chart.readoutIdle":
+    "Aponte um dia no gráfico ou use as setas ← → do teclado para ler cada dia. Home e End vão ao primeiro e ao último dia.",
+  "analytics.chart.readoutDay": "{day}. {lines}.",
+  "analytics.chart.caption":
+    "Escala até {bound} pessoas-dia. Fim de semana aparece com fundo sombreado, a linha tracejada marca a média da janela, a linha cheia é a média móvel de {days} dias e dias protegidos aparecem como falha, sem valor substituto. A média móvel interrompe onde faltam valores.",
+
+  "analytics.slot.observed": "Observado: {value} pessoas-dia",
+  "analytics.slot.forecast": "Previsto: {value} pessoas-dia",
+  "analytics.slot.band": "Faixa provável: {lower} a {upper} pessoas-dia",
+  "analytics.slot.protected":
+    "Protegido pela política de publicação, sem valor substituto",
+  "analytics.slot.unavailable": "Sem dado disponível para este dia",
+  "analytics.delta.same": "no mesmo nível da média de referência",
+  "analytics.delta.above": "{percent}% acima da média de referência",
+  "analytics.delta.below": "{percent}% abaixo da média de referência",
+  "analytics.trend.value": "{sign}{percent}% ante os {size} dias anteriores",
+} as const;
+
+export type MessageKey = keyof typeof messagesPt;
+export type Messages = Record<MessageKey, string>;

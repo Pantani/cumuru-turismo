@@ -44,6 +44,7 @@ type Phase2Config struct {
 	IdempotencyKeys                KeyringConfig
 	RateLimitKeys                  KeyringConfig
 	CursorKeys                     KeyringConfig
+	DocumentKeys                   KeyringConfig
 }
 
 func loadPhase2(lookup LookupEnv) (Phase2Config, error) {
@@ -77,11 +78,15 @@ func loadPhase2(lookup LookupEnv) (Phase2Config, error) {
 		IdempotencyKeys:                keyrings[2],
 		RateLimitKeys:                  keyrings[3],
 		CursorKeys:                     keyrings[4],
+		DocumentKeys:                   keyrings[5],
 	}, nil
 }
 
-func loadKeyrings(lookup LookupEnv) ([5]KeyringConfig, error) {
-	specs := [5]struct {
+// The document keyring is deliberately separate from every other one: ADR-038
+// stores a CPF blind, and sharing a key with invites or cursors would let a
+// leak in one of them reverse the other by comparison.
+func loadKeyrings(lookup LookupEnv) ([6]KeyringConfig, error) {
+	specs := [6]struct {
 		versionField string
 		keysField    string
 	}{
@@ -90,8 +95,9 @@ func loadKeyrings(lookup LookupEnv) ([5]KeyringConfig, error) {
 		{"IDEMPOTENCY_HMAC_CURRENT_VERSION", "IDEMPOTENCY_HMAC_KEYS"},
 		{"RATE_LIMIT_HMAC_CURRENT_VERSION", "RATE_LIMIT_HMAC_KEYS"},
 		{"CURSOR_HMAC_CURRENT_VERSION", "CURSOR_HMAC_KEYS"},
+		{"DOCUMENT_HMAC_CURRENT_VERSION", "DOCUMENT_HMAC_KEYS"},
 	}
-	var result [5]KeyringConfig
+	var result [6]KeyringConfig
 	for index, spec := range specs {
 		keyring, err := parseKeyring(
 			spec.versionField,
@@ -100,12 +106,12 @@ func loadKeyrings(lookup LookupEnv) ([5]KeyringConfig, error) {
 			required(lookup, spec.keysField),
 		)
 		if err != nil {
-			return [5]KeyringConfig{}, err
+			return [6]KeyringConfig{}, err
 		}
 		result[index] = keyring
 	}
 	if keyringsOverlap(result[:]) {
-		return [5]KeyringConfig{}, invalid("HMAC_KEYRINGS")
+		return [6]KeyringConfig{}, invalid("HMAC_KEYRINGS")
 	}
 	return result, nil
 }

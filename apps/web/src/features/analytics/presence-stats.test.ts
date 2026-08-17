@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   centralValue,
   isWeekend,
+  movingAverage,
   percentFromAverage,
   seriesStats,
+  weekdayAverages,
   type PresencePoint,
 } from "./presence-stats";
 
@@ -76,6 +78,39 @@ describe("estatísticas da série de presença", () => {
     expect(isWeekend("2026-07-25")).toBe(true);
     expect(isWeekend("2026-07-26")).toBe(true);
     expect(isWeekend("2026-07-27")).toBe(false);
+  });
+
+  it("só suaviza com a janela completa e com metade dos dias publicados", () => {
+    const smoothed = movingAverage(
+      [
+        observed("2026-07-20", 100),
+        observed("2026-07-21", 200),
+        protectedDay("2026-07-22"),
+        protectedDay("2026-07-23"),
+        observed("2026-07-24", 60),
+        protectedDay("2026-07-25"),
+      ],
+      4,
+    );
+
+    expect(smoothed.slice(0, 3)).toEqual([null, null, null]);
+    expect(smoothed[3]).toBe(150);
+    expect(smoothed[4]).toBe(130);
+    expect(smoothed[5]).toBeNull();
+  });
+
+  it("média por dia da semana conta só os dias publicados", () => {
+    const weekdays = weekdayAverages([
+      observed("2026-07-25", 100),
+      observed("2026-08-01", 200),
+      protectedDay("2026-08-08"),
+      observed("2026-07-27", 50),
+    ]);
+
+    expect(weekdays).toHaveLength(7);
+    expect(weekdays[6]).toEqual({ average: 150, days: 2, weekday: 6 });
+    expect(weekdays[1]).toEqual({ average: 50, days: 1, weekday: 1 });
+    expect(weekdays[0]).toEqual({ average: null, days: 0, weekday: 0 });
   });
 
   it("mede a distância da média e recusa divisão por zero", () => {

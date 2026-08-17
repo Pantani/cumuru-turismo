@@ -51,8 +51,8 @@ credencial. Consulte a decisão completa em
 
 Materiais simples para apresentação e treinamento:
 
-- [`Guia do Observatório para a Prefeitura (PDF)`](guia-simples-observatorio-fnrh-prefeitura.pdf);
-- [`Guia para gerar a chave FNRH (PDF)`](guia-gerar-chave-fnrh-hospedagens.pdf).
+- [`Guia do Observatório para a Prefeitura (PDF)`](apps/web/public/guias/observatorio-prefeitura.pdf);
+- [`Guia para gerar a chave FNRH (PDF)`](apps/web/public/guias/chave-fnrh-hospedagens.pdf).
 
 ## Stack de referência
 
@@ -102,8 +102,8 @@ controlada. Não use Create React App.
 13. [`contracts/openapi.yaml`](contracts/openapi.yaml)
 14. [`database/schema.sql`](database/schema.sql)
 15. [`prompts/BOOTSTRAP-CODEX.md`](prompts/BOOTSTRAP-CODEX.md)
-16. [`Guia do Observatório para a Prefeitura`](guia-simples-observatorio-fnrh-prefeitura.pdf)
-17. [`Guia para gerar a chave FNRH`](guia-gerar-chave-fnrh-hospedagens.pdf)
+16. [`Guia do Observatório para a Prefeitura`](apps/web/public/guias/observatorio-prefeitura.pdf)
+17. [`Guia para gerar a chave FNRH`](apps/web/public/guias/chave-fnrh-hospedagens.pdf)
 
 ## Como começar com o Codex
 
@@ -157,7 +157,7 @@ entregues pela fundação.
 
 Versões principais fixadas:
 
-- Go 1.26.5;
+- Go 1.26.6;
 - PostgreSQL 17.10;
 - React e React DOM 19.2.8;
 - TypeScript 7.0.2;

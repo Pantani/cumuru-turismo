@@ -254,6 +254,8 @@ func validPhase2() map[string]string {
 		"RATE_LIMIT_HMAC_KEYS":             "rate-v1=cmF0ZS1saW1pdC1rZXktaXMtYXQtbGVhc3QtMzItYnl0ZXM=",
 		"CURSOR_HMAC_CURRENT_VERSION":      "cursor-v1",
 		"CURSOR_HMAC_KEYS":                 "cursor-v1=Y3Vyc29yLWtleS1pcy1hdC1sZWFzdC0zMi1ieXRlcy1sb25n",
+		"DOCUMENT_HMAC_CURRENT_VERSION":    "document-v1",
+		"DOCUMENT_HMAC_KEYS":               "document-v1=ZG9jdW1lbnQta2V5LWlzLWF0LWxlYXN0LTMyLWJ5dGVzLW9r",
 	}
 }
 

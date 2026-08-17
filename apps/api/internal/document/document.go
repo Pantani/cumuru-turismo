@@ -46,6 +46,11 @@ type Document struct {
 // Kind reports which registry validated this document.
 func (d Document) Kind() Kind { return d.kind }
 
+// String redacts the digits. Without it, any %v or %+v reaching a log line, a
+// trace attribute or an error wrapper would print the plaintext that ADR-038
+// promises is never recorded.
+func (d Document) String() string { return string(d.kind) + ":[redacted]" }
+
 // Parse accepts a raw document as typed by a human — with dots, slashes or
 // dashes — and returns it validated. Formatting is discarded before validation
 // so the same number always produces the same HMAC.
