@@ -3,6 +3,11 @@
 //
 // The plaintext never leaves this package: ADR-038 stores only the HMAC, so the
 // application can answer "this document is already registered" and nothing else.
+//
+// No caller has been wired yet — the keyring that feeds Codec is already loaded
+// as Phase2Config.DocumentKeys, but the onboarding surface that will collect the
+// document is still pending. Reachability tooling will report this package as
+// unreachable until then; that is expected, not leftover code.
 package document
 
 import (

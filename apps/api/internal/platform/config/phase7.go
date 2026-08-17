@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"net/url"
 	"time"
 )
@@ -53,7 +54,11 @@ func loadPhase7(
 	if !localOrTest(environment) {
 		return Phase7Config{}, invalid("PHASE7_ENABLED")
 	}
-	return applyPhase7Settings(phase7Defaults(lookup), phase2, lookup)
+	defaults, err := phase7Defaults(lookup)
+	if err != nil {
+		return Phase7Config{}, err
+	}
+	return applyPhase7Settings(defaults, phase2, lookup)
 }
 
 func applyPhase7Settings(
@@ -70,35 +75,46 @@ func applyPhase7Settings(
 	return config, nil
 }
 
-func phase7Defaults(lookup LookupEnv) Phase7Config {
-	return Phase7Config{
+// A malformed value stops the load naming its own field, instead of becoming a
+// zero that a later range check has to catch — the difficulty and rate limits
+// below are exactly the kind of field where a silent zero would be read as
+// "no proof of work required".
+func phase7Defaults(lookup LookupEnv) (Phase7Config, error) {
+	reader := newEnvReader(lookup)
+	config := Phase7Config{
 		Enabled:      true,
-		ChallengeTTL: duration(lookup, "PROOF_OF_WORK_TTL", 10*time.Minute),
-		DifficultyBase: uint8(positiveInteger(
-			lookup, "PROOF_OF_WORK_DIFFICULTY_BASE", 12,
+		ChallengeTTL: reader.duration("PROOF_OF_WORK_TTL", 10*time.Minute),
+		DifficultyBase: uint8(reader.integerInRange(
+			"PROOF_OF_WORK_DIFFICULTY_BASE", 12,
+			minDifficultyBits, maxDifficultyBits,
 		)),
-		DifficultyCeiling: uint8(positiveInteger(
-			lookup, "PROOF_OF_WORK_DIFFICULTY_CEILING", 18,
+		DifficultyCeiling: uint8(reader.integerInRange(
+			"PROOF_OF_WORK_DIFFICULTY_CEILING", 18,
+			minDifficultyBits, maxDifficultyBits,
 		)),
-		DifficultyRequestsPerBit: int32(positiveInteger(
-			lookup, "PROOF_OF_WORK_REQUESTS_PER_BIT", 2,
+		DifficultyRequestsPerBit: int32(reader.integerInRange(
+			"PROOF_OF_WORK_REQUESTS_PER_BIT", 2, 1, math.MaxInt32,
 		)),
-		SelfServiceContextRateLimit: positiveInteger(
-			lookup, "SELF_SERVICE_CONTEXT_RATE_LIMIT", 60,
+		SelfServiceContextRateLimit: reader.integer(
+			"SELF_SERVICE_CONTEXT_RATE_LIMIT", 60,
 		),
-		SelfServiceSubmitRateLimit: positiveInteger(
-			lookup, "SELF_SERVICE_SUBMIT_RATE_LIMIT", 20,
+		SelfServiceSubmitRateLimit: reader.integer(
+			"SELF_SERVICE_SUBMIT_RATE_LIMIT", 20,
 		),
-		ActivationContextRateLimit: positiveInteger(
-			lookup, "ACTIVATION_CONTEXT_RATE_LIMIT", 30,
+		ActivationContextRateLimit: reader.integer(
+			"ACTIVATION_CONTEXT_RATE_LIMIT", 30,
 		),
-		ActivationSubmitRateLimit: positiveInteger(
-			lookup, "ACTIVATION_SUBMIT_RATE_LIMIT", 10,
+		ActivationSubmitRateLimit: reader.integer(
+			"ACTIVATION_SUBMIT_RATE_LIMIT", 10,
 		),
-		ExpirySweepBatchSize: int32(positiveInteger(
-			lookup, "APPROVAL_EXPIRY_BATCH_SIZE", 200,
+		ExpirySweepBatchSize: int32(reader.integerInRange(
+			"APPROVAL_EXPIRY_BATCH_SIZE", 200, 1, math.MaxInt32,
 		)),
 	}
+	if err := reader.Err(); err != nil {
+		return Phase7Config{}, err
+	}
+	return config, nil
 }
 
 // The proof-of-work keyring must not share a key with any other ring. A leaked

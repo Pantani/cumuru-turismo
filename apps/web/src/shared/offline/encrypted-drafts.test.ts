@@ -44,8 +44,34 @@ async function replaceDraftRecord(
   database.close();
 }
 
+/**
+ * Um delete só completa quando nenhuma conexão anterior continua aberta; com uma
+ * conexão vazada ele dispara "blocked". Serve de detector de vazamento sem
+ * deixar o banco numa versão diferente da que o restante da suíte espera.
+ */
+function deleteBlocked() {
+  return new Promise<boolean>((resolve) => {
+    const request = indexedDB.deleteDatabase("cumuru-encrypted-drafts");
+    request.addEventListener("blocked", () => resolve(true));
+    request.addEventListener("success", () => resolve(false));
+    request.addEventListener("error", () => resolve(true));
+  });
+}
+
 describe("rascunhos cifrados", () => {
   afterEach(() => clearAllDrafts());
+
+  it("fecha a conexão mesmo quando a operação falha", async () => {
+    const saved = await saveDraft(payload);
+    await replaceDraftRecord(saved.id, (record) => ({
+      ...record,
+      ciphertext: new ArrayBuffer(8),
+    }));
+
+    await expect(loadDraft(saved.id)).resolves.toBeNull();
+
+    await expect(deleteBlocked()).resolves.toBe(false);
+  });
 
   it("persiste somente ciphertext, IV e metadados mínimos", async () => {
     const first = await saveDraft(payload);

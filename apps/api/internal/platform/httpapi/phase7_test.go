@@ -150,7 +150,7 @@ func phase7Handler(
 	if activations != nil {
 		activationService = activation.NewService(activations)
 	}
-	handler, _ := httpapi.New(httpapi.Dependencies{
+	handler, _, err := httpapi.New(httpapi.Dependencies{
 		Readiness:          readinessFunc(func(context.Context) error { return nil }),
 		Verifier:           verifier,
 		Accommodations:     accommodation.NewService(accommodationRepositoryStub{}),
@@ -165,6 +165,9 @@ func phase7Handler(
 			},
 		},
 	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
 	return handler
 }
 
@@ -449,7 +452,7 @@ func TestActivationCompletionReturnsNoContentAndNoSession(t *testing.T) {
 func TestDisabledPhaseDoesNotRegisterTheOpenChannel(t *testing.T) {
 	t.Parallel()
 
-	handler, _ := httpapi.New(httpapi.Dependencies{
+	handler, _, err := httpapi.New(httpapi.Dependencies{
 		Readiness: readinessFunc(func(context.Context) error { return nil }),
 		Verifier: verifierFunc(func(context.Context, string) (access.Principal, error) {
 			return access.NewPrincipal("https://issuer.invalid", "s", []string{"stays:approve"}), nil
@@ -464,6 +467,9 @@ func TestDisabledPhaseDoesNotRegisterTheOpenChannel(t *testing.T) {
 			},
 		},
 	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
 	for _, target := range []string{
 		"/api/v1/accommodation-invite", "/api/v1/activation",
 	} {

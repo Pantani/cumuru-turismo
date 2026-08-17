@@ -64,7 +64,7 @@ func (f qualityReaderStub) Quality(context.Context, string) (analytics.QualitySn
 func TestPublicAnalyticsUsesStrongVariantETagAndCache(t *testing.T) {
 	t.Parallel()
 
-	handler, _ := New(Dependencies{PublicAnalytics: analyticsReaderStub{}})
+	handler, _ := mustNew(t, Dependencies{PublicAnalytics: analyticsReaderStub{}})
 	first := httptest.NewRecorder()
 	handler.ServeHTTP(
 		first,
@@ -101,7 +101,7 @@ func TestPublicAnalyticsUsesStrongVariantETagAndCache(t *testing.T) {
 func TestPublicMethodologyEmitsFallbackForecastBounds(t *testing.T) {
 	t.Parallel()
 
-	handler, _ := New(Dependencies{PublicAnalytics: analyticsReaderStub{
+	handler, _ := mustNew(t, Dependencies{PublicAnalytics: analyticsReaderStub{
 		methodology: analytics.PublicMethodology{
 			ForecastBoundsPercent:         []int32{85, 115},
 			ForecastFallbackBoundsPercent: []int32{70, 130},
@@ -125,7 +125,7 @@ func TestPublicMethodologyEmitsFallbackForecastBounds(t *testing.T) {
 func TestPublicAnalyticsRejectsOpenEndedSelectorsAndInvalidETag(t *testing.T) {
 	t.Parallel()
 
-	handler, _ := New(Dependencies{PublicAnalytics: analyticsReaderStub{}})
+	handler, _ := mustNew(t, Dependencies{PublicAnalytics: analyticsReaderStub{}})
 	cases := []string{
 		"/api/v1/public/presence?window=custom",
 		"/api/v1/public/presence?window=recent_30_days&dimension=hotel",
@@ -153,7 +153,7 @@ func TestPublicAnalyticsRejectsOpenEndedSelectorsAndInvalidETag(t *testing.T) {
 func TestPublicAnalyticsUnavailableIsSanitizedAndNotCached(t *testing.T) {
 	t.Parallel()
 
-	handler, _ := New(Dependencies{
+	handler, _ := mustNew(t, Dependencies{
 		PublicAnalytics: analyticsReaderStub{err: errors.New("sql: secret detail")},
 	})
 	recorder := httptest.NewRecorder()
@@ -179,7 +179,7 @@ func TestAnalyticsQualityRequiresInternalScopeAndNoStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, _ := New(Dependencies{
+	handler, _ := mustNew(t, Dependencies{
 		Verifier:         verifier,
 		AnalyticsQuality: qualityReaderStub{},
 	})
@@ -211,7 +211,7 @@ func TestAnalyticsQualityRequiresInternalScopeAndNoStore(t *testing.T) {
 		t.Fatalf("Cache-Control = %q", authorized.Header().Get("Cache-Control"))
 	}
 
-	forbiddenHandler, _ := New(Dependencies{
+	forbiddenHandler, _ := mustNew(t, Dependencies{
 		Verifier:         verifier,
 		AnalyticsQuality: qualityReaderStub{},
 	})
@@ -234,7 +234,7 @@ func TestAnalyticsAuthenticationNeverLogsBearerToken(t *testing.T) {
 	t.Parallel()
 
 	var output bytes.Buffer
-	handler, _ := New(Dependencies{
+	handler, _ := mustNew(t, Dependencies{
 		Verifier:         analyticsVerifierStub{err: access.ErrInvalidToken},
 		AnalyticsQuality: qualityReaderStub{},
 		Logger:           slog.New(slog.NewJSONHandler(&output, nil)),

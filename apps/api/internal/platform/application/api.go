@@ -62,15 +62,14 @@ func runAPIWithTelemetry(
 	if err != nil {
 		return err
 	}
-	activations, err := activationService(platformStore, cfg)
-	if err != nil {
-		return errors.New("activation repository initialization failed")
-	}
-	publicHandler, operationsHandler := httpapi.New(apiDependencies(
+	publicHandler, operationsHandler, err := apiHandlers(
 		cfg, build, logger, tracing, verifier,
 		platformStore, accommodationService, stayService, questionnaireService,
-		publicAnalytics, analyticsQuality, activations,
-	))
+		publicAnalytics, analyticsQuality,
+	)
+	if err != nil {
+		return err
+	}
 	publicListener, operationsListener, err := apiListeners(cfg)
 	if err != nil {
 		return err
@@ -80,6 +79,34 @@ func runAPIWithTelemetry(
 		listenerHandler{publicListener, publicHandler},
 		listenerHandler{operationsListener, operationsHandler},
 	)
+}
+
+// The handlers are assembled before any listener is opened, so a dependency the
+// API cannot serve correctly — an activation repository that fails to build, or
+// a cursor keyring a paginated surface cannot use — stops the process before it
+// starts accepting connections.
+func apiHandlers(
+	cfg config.Config,
+	build Build,
+	logger *slog.Logger,
+	tracing *telemetry.Provider,
+	verifier access.Verifier,
+	platformStore *store.Store,
+	accommodationService *accommodation.Service,
+	stayService *stay.Service,
+	questionnaireService *questionnaire.Service,
+	publicAnalytics analytics.PublicReader,
+	analyticsQuality analytics.QualityReader,
+) (http.Handler, http.Handler, error) {
+	activations, err := activationService(platformStore, cfg)
+	if err != nil {
+		return nil, nil, errors.New("activation repository initialization failed")
+	}
+	return httpapi.New(apiDependencies(
+		cfg, build, logger, tracing, verifier,
+		platformStore, accommodationService, stayService, questionnaireService,
+		publicAnalytics, analyticsQuality, activations,
+	))
 }
 
 type listenerHandler struct {

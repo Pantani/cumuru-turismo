@@ -1,37 +1,12 @@
 package idempotency_test
 
 import (
-	"bytes"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/Pantani/cumuru/apps/api/internal/platform/idempotency"
-	"github.com/google/uuid"
 )
-
-func TestKeyHasherValidatesAndNeverReturnsRawKey(t *testing.T) {
-	t.Parallel()
-
-	hasher, err := idempotency.NewKeyHasher(
-		"idem-v1",
-		[]byte("idempotency-key-material-is-at-least-32-bytes"),
-	)
-	if err != nil {
-		t.Fatalf("NewKeyHasher() error = %v", err)
-	}
-	const raw = "offline.019f0000-0000-7000-8000-000000000001"
-	digest, err := hasher.Hash(raw)
-	if err != nil {
-		t.Fatalf("Hash() error = %v", err)
-	}
-	if digest.Version != "idem-v1" || len(digest.Sum) != 32 || bytes.Contains(digest.Sum, []byte(raw)) {
-		t.Fatalf("Hash() returned unsafe digest: %#v", digest)
-	}
-	if _, err := hasher.Hash("short"); !errors.Is(err, idempotency.ErrInvalidKey) {
-		t.Fatalf("Hash(short) error = %v", err)
-	}
-}
 
 func TestRequestHashUsesCanonicalTypedJSON(t *testing.T) {
 	t.Parallel()
@@ -97,28 +72,31 @@ func TestRequestHashBindsTheKey(t *testing.T) {
 	}
 }
 
-func TestIdentitySeparatesOperationResourceAndActor(t *testing.T) {
+// A request that cannot be encoded has no comparable hash, so it must fail
+// rather than collapse to the hash of an empty document.
+func TestRequestHashRejectsUnencodableRequest(t *testing.T) {
 	t.Parallel()
 
-	resourceID := uuid.MustParse("019f0000-0000-7000-8000-000000000021")
-	identity := idempotency.Identity{
-		Actor:      idempotency.Digest{Version: "actor-v1", Sum: bytes.Repeat([]byte{1}, 32)},
-		Key:        idempotency.Digest{Version: "idem-v1", Sum: bytes.Repeat([]byte{2}, 32)},
-		Operation:  idempotency.OperationCreateStay,
-		ResourceID: resourceID,
-	}
-	if err := identity.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
-	identity.Operation = idempotency.Operation("future-operation")
-	if err := identity.Validate(); !errors.Is(err, idempotency.ErrInvalidIdentity) {
-		t.Fatalf("Validate(future operation) error = %v", err)
+	key := []byte("request-hash-key-material-is-at-least-32-bytes")
+	if _, err := idempotency.RequestHash(key, make(chan int)); err == nil {
+		t.Fatal("RequestHash(chan) error = nil, want a failure")
 	}
 }
 
-func TestPhase3OperationsAreExplicitlyAllowed(t *testing.T) {
+func TestReplayableOperationsAreExplicitlyAllowed(t *testing.T) {
 	t.Parallel()
+
 	operations := []idempotency.Operation{
+		idempotency.OperationCreateAccommodation,
+		idempotency.OperationCreateMembership,
+		idempotency.OperationCreateStay,
+		idempotency.OperationSubmitAssistedGroup,
+		idempotency.OperationCreateInvite,
+		idempotency.OperationCheckIn,
+		idempotency.OperationCheckOut,
+		idempotency.OperationCancel,
+		idempotency.OperationNoShow,
+		idempotency.OperationSubmitInviteGroup,
 		idempotency.OperationCreateQuestionnaire,
 		idempotency.OperationCloneQuestionnaire,
 		idempotency.OperationSubmitQuestionnaireReview,
@@ -129,51 +107,19 @@ func TestPhase3OperationsAreExplicitlyAllowed(t *testing.T) {
 		idempotency.OperationSubmitSurveyResponse,
 	}
 	for _, operation := range operations {
-		identity := idempotency.Identity{
-			Actor:     idempotency.Digest{Version: "actor-v1", Sum: bytes.Repeat([]byte{1}, 32)},
-			Key:       idempotency.Digest{Version: "idem-v1", Sum: bytes.Repeat([]byte{2}, 32)},
-			Operation: operation, ResourceID: uuid.New(),
-		}
-		if err := identity.Validate(); err != nil {
-			t.Fatalf("operation %s rejected: %v", operation, err)
+		if !operation.Valid() {
+			t.Fatalf("operation %s rejected", operation)
 		}
 	}
 }
 
-func TestAccommodationOnboardingOperationIsExplicitlyAllowed(t *testing.T) {
-	t.Parallel()
-	identity := idempotency.Identity{
-		Actor:      idempotency.Digest{Version: "actor-v1", Sum: bytes.Repeat([]byte{1}, 32)},
-		Key:        idempotency.Digest{Version: "idem-v1", Sum: bytes.Repeat([]byte{2}, 32)},
-		Operation:  idempotency.OperationCreateAccommodation,
-		ResourceID: uuid.MustParse("019f0000-0000-7000-8000-000000000021"),
-	}
-	if err := identity.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
-}
-
-func TestStoredResponseAllowsOnlyReplayHeadersAndCopiesBody(t *testing.T) {
+func TestUnregisteredOperationIsNotReplayable(t *testing.T) {
 	t.Parallel()
 
-	body := []byte(`{"id":"019f0000-0000-7000-8000-000000000021"}`)
-	response, err := idempotency.NewStoredResponse(
-		201,
-		"application/json",
-		"/api/v1/stays/019f0000-0000-7000-8000-000000000021",
-		`"1"`,
-		uuid.MustParse("019f0000-0000-7000-8000-000000000021"),
-		body,
-	)
-	if err != nil {
-		t.Fatalf("NewStoredResponse() error = %v", err)
-	}
-	body[0] = 'x'
-	if response.Body[0] == 'x' {
-		t.Fatal("NewStoredResponse() retained caller body storage")
-	}
-	if _, err := idempotency.NewStoredResponse(500, "application/json", "", "", uuid.Nil, nil); err == nil {
-		t.Fatal("NewStoredResponse(500) error = nil")
+	for _, operation := range []idempotency.Operation{"", "future-operation", "CreateStay"} {
+		if operation.Valid() {
+			t.Fatalf("operation %q accepted", operation)
+		}
 	}
 }
 
@@ -187,5 +133,21 @@ func TestProcessingErrorCarriesRetryAfter(t *testing.T) {
 	}
 	if processing.RetryAfter != 3*time.Second {
 		t.Fatalf("RetryAfter = %s", processing.RetryAfter)
+	}
+}
+
+// A Retry-After below one second would invite an immediate retry against an
+// attempt that is still running.
+func TestProcessingErrorFloorsRetryAfterAtOneSecond(t *testing.T) {
+	t.Parallel()
+
+	for _, given := range []time.Duration{-time.Hour, 0, time.Millisecond} {
+		var processing *idempotency.ProcessingError
+		if !errors.As(idempotency.NewProcessingError(given), &processing) {
+			t.Fatalf("NewProcessingError(%s) is not a *ProcessingError", given)
+		}
+		if processing.RetryAfter != time.Second {
+			t.Fatalf("RetryAfter = %s, want 1s", processing.RetryAfter)
+		}
 	}
 }

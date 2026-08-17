@@ -94,20 +94,42 @@ const (
 	principalKey
 )
 
-func New(dependencies Dependencies) (http.Handler, http.Handler) {
+// New refuses to build a handler it cannot serve correctly. A missing cursor
+// keyring used to be swallowed, which left every paginated listing quietly
+// unable to issue a next-page cursor instead of failing where an operator would
+// notice.
+func New(dependencies Dependencies) (http.Handler, http.Handler, error) {
 	if dependencies.Logger == nil {
 		dependencies.Logger = slog.New(slog.DiscardHandler)
 	}
 	if dependencies.Registry == nil {
 		dependencies.Registry = prometheus.NewRegistry()
 	}
-	dependencies.cursor, _ = newCursorCodec(dependencies.CursorKeys)
+	cursor, err := dependencies.resolveCursorCodec()
+	if err != nil {
+		return nil, nil, err
+	}
+	dependencies.cursor = cursor
 	metrics := newHTTPMetrics(dependencies.Registry)
 	mux := http.NewServeMux()
 	dependencies.registerPlatformRoutes(mux, metrics)
 	dependencies.registerFeatureRoutes(mux, metrics)
 	return dependencies.withRequestID(dependencies.recoverPanic(mux)),
-		promhttp.HandlerFor(dependencies.Registry, promhttp.HandlerOpts{})
+		promhttp.HandlerFor(dependencies.Registry, promhttp.HandlerOpts{}),
+		nil
+}
+
+// The codec is required exactly when a surface that paginates is registered, so
+// a handler exposing only health and readiness still builds without a keyring.
+func (d Dependencies) resolveCursorCodec() (cursorCodec, error) {
+	if !d.paginates() {
+		return cursorCodec{}, nil
+	}
+	return newCursorCodec(d.CursorKeys)
+}
+
+func (d Dependencies) paginates() bool {
+	return d.Accommodations != nil || d.Stays != nil || d.Questionnaires != nil
 }
 
 func (d Dependencies) registerPlatformRoutes(mux *http.ServeMux, metrics *httpMetrics) {
@@ -180,36 +202,15 @@ func (d Dependencies) buildInfo(writer http.ResponseWriter, _ *http.Request) {
 }
 
 func (d Dependencies) requireScope(scope string, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		token, ok := bearerToken(request.Header.Get("Authorization"))
-		if !ok || d.Verifier == nil {
-			writeProblem(writer, request, http.StatusUnauthorized, "unauthorized", "Credencial inválida ou ausente")
-			return
-		}
-		principal, err := d.verifyCredential(request, token)
-		if err != nil {
-			writeProblem(writer, request, http.StatusUnauthorized, "unauthorized", "Credencial inválida ou ausente")
-			return
-		}
-		if !principal.HasScope(scope) {
-			writeProblem(writer, request, http.StatusForbidden, "forbidden", "Escopo insuficiente")
-			return
-		}
-		ctx := context.WithValue(request.Context(), principalKey, principal)
-		next.ServeHTTP(writer, request.WithContext(ctx))
-	})
+	return d.requireAnyScope([]string{scope}, next)
 }
 
+// Authentication and authorization share one path so the two cannot drift: a
+// change to how a credential is rejected applies to every guarded route at once.
 func (d Dependencies) requireAnyScope(scopes []string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		token, ok := bearerToken(request.Header.Get("Authorization"))
-		if !ok || d.Verifier == nil {
-			writeProblem(writer, request, http.StatusUnauthorized, "unauthorized", "Credencial inválida ou ausente")
-			return
-		}
-		principal, err := d.verifyCredential(request, token)
-		if err != nil {
-			writeProblem(writer, request, http.StatusUnauthorized, "unauthorized", "Credencial inválida ou ausente")
+		principal, ok := d.authenticate(writer, request)
+		if !ok {
 			return
 		}
 		if !hasAnyScope(principal, scopes) {
@@ -219,6 +220,26 @@ func (d Dependencies) requireAnyScope(scopes []string, next http.Handler) http.H
 		ctx := context.WithValue(request.Context(), principalKey, principal)
 		next.ServeHTTP(writer, request.WithContext(ctx))
 	})
+}
+
+// authenticate answers the caller itself on failure, so a missing, malformed or
+// rejected credential is always reported as the same 401 and never as a hint
+// about which of the three it was.
+func (d Dependencies) authenticate(
+	writer http.ResponseWriter,
+	request *http.Request,
+) (access.Principal, bool) {
+	token, ok := bearerToken(request.Header.Get("Authorization"))
+	if !ok || d.Verifier == nil {
+		writeProblem(writer, request, http.StatusUnauthorized, "unauthorized", "Credencial inválida ou ausente")
+		return access.Principal{}, false
+	}
+	principal, err := d.verifyCredential(request, token)
+	if err != nil {
+		writeProblem(writer, request, http.StatusUnauthorized, "unauthorized", "Credencial inválida ou ausente")
+		return access.Principal{}, false
+	}
+	return principal, true
 }
 
 func (d Dependencies) verifyCredential(

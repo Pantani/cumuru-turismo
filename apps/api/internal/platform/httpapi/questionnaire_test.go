@@ -56,7 +56,7 @@ func (s questionnaireRepositoryStub) Submit(
 func TestSurveyRateLimitIgnoresForgedForwardedAddress(t *testing.T) {
 	t.Parallel()
 	var captured questionnaire.SubmissionCommand
-	handler := questionnaireHandler(questionnaireRepositoryStub{
+	handler := questionnaireHandler(t, questionnaireRepositoryStub{
 		submitErr: questionnaire.ErrRateLimited, submitCommand: &captured,
 	})
 	body := `{"questionnaire_version_id":"` + versionID.String() +
@@ -90,7 +90,7 @@ func TestSurveyRateLimitIgnoresForgedForwardedAddress(t *testing.T) {
 func TestQuestionnaireAdministrativeScopesAreSeparated(t *testing.T) {
 	t.Parallel()
 
-	handler := questionnaireHandler(questionnaireRepositoryStub{})
+	handler := questionnaireHandler(t, questionnaireRepositoryStub{})
 	tests := []struct {
 		name   string
 		token  string
@@ -132,7 +132,7 @@ func TestQuestionnaireAdministrativeScopesAreSeparated(t *testing.T) {
 func TestPublishedQuestionnaireExposesOnlyPublicProjection(t *testing.T) {
 	t.Parallel()
 
-	handler := questionnaireHandler(questionnaireRepositoryStub{
+	handler := questionnaireHandler(t, questionnaireRepositoryStub{
 		published: questionnaire.Published{
 			ID: versionID, QuestionnaireID: questionnaireID,
 			StableKey: "tourism_profile", VersionNumber: 1, Revision: 3,
@@ -174,13 +174,13 @@ func TestSurveyCapabilityFailuresDoNotReachRepositoryOrRevealAuthority(t *testin
 	t.Parallel()
 
 	var calls atomic.Int32
-	handler := questionnaireHandler(questionnaireRepositoryStub{submitCalls: &calls})
+	handler := questionnaireHandler(t, questionnaireRepositoryStub{submitCalls: &calls})
 	assertSurveyFailure(t, handler, "", http.StatusNotFound)
 	if calls.Load() != 0 {
 		t.Fatalf("repository calls for malformed authority = %d", calls.Load())
 	}
 
-	handler = questionnaireHandler(questionnaireRepositoryStub{
+	handler = questionnaireHandler(t, questionnaireRepositoryStub{
 		submitErr: questionnaire.ErrCapabilityInvalid, submitCalls: &calls,
 	})
 	assertSurveyFailure(t, handler, "payload.signature", http.StatusNotFound)
@@ -217,7 +217,7 @@ func assertSurveyFailure(
 	}
 }
 
-func questionnaireHandler(repository questionnaire.Repository) http.Handler {
+func questionnaireHandler(t *testing.T, repository questionnaire.Repository) http.Handler {
 	verifier := verifierFunc(func(_ context.Context, token string) (access.Principal, error) {
 		scopes := map[string][]string{
 			"editor":   {"questionnaires:manage"},
@@ -225,7 +225,7 @@ func questionnaireHandler(repository questionnaire.Repository) http.Handler {
 		}
 		return access.NewPrincipal("https://issuer.invalid", token, scopes[token]), nil
 	})
-	handler, _ := httpapi.New(httpapi.Dependencies{
+	handler, _, err := httpapi.New(httpapi.Dependencies{
 		Verifier:       verifier,
 		Questionnaires: questionnaire.NewService(repository),
 		CursorKeys: config.KeyringConfig{
@@ -235,5 +235,8 @@ func questionnaireHandler(repository questionnaire.Repository) http.Handler {
 			},
 		},
 	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
 	return handler
 }

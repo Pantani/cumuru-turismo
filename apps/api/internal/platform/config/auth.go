@@ -27,12 +27,16 @@ func loadAuth(lookup LookupEnv) (AuthConfig, error) {
 	if err != nil {
 		return AuthConfig{}, err
 	}
+	reader := newEnvReader(lookup)
 	auth := AuthConfig{
 		Enabled:            enabled,
-		SessionIdleTTL:     duration(lookup, "SESSION_IDLE_TTL", 30*time.Minute),
-		SessionAbsoluteTTL: duration(lookup, "SESSION_ABSOLUTE_TTL", 12*time.Hour),
-		MaxFailedAttempts:  positiveInteger(lookup, "LOGIN_MAX_FAILED_ATTEMPTS", 5),
-		LockoutDuration:    duration(lookup, "LOGIN_LOCKOUT_DURATION", 15*time.Minute),
+		SessionIdleTTL:     reader.duration("SESSION_IDLE_TTL", 30*time.Minute),
+		SessionAbsoluteTTL: reader.duration("SESSION_ABSOLUTE_TTL", 12*time.Hour),
+		MaxFailedAttempts:  reader.integer("LOGIN_MAX_FAILED_ATTEMPTS", 5),
+		LockoutDuration:    reader.duration("LOGIN_LOCKOUT_DURATION", 15*time.Minute),
+	}
+	if err := reader.Err(); err != nil {
+		return AuthConfig{}, err
 	}
 	if !enabled {
 		return auth, nil

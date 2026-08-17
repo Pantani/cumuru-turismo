@@ -24,6 +24,9 @@ func ParseCivilDate(value string) (CivilDate, error) {
 	return CivilDate{value: parsed}, nil
 }
 
+// MustCivilDate is a fixture constructor: it panics on a malformed date, which
+// is only ever acceptable for a literal written in a test. Runtime input goes
+// through ParseCivilDate.
 func MustCivilDate(value string) CivilDate {
 	parsed, err := ParseCivilDate(value)
 	if err != nil {

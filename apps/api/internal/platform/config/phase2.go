@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -64,13 +63,14 @@ func loadPhase2(lookup LookupEnv) (Phase2Config, error) {
 	if err != nil {
 		return Phase2Config{}, err
 	}
-	return Phase2Config{
+	reader := newEnvReader(lookup)
+	config := Phase2Config{
 		InviteBaseURL:                  baseURL,
-		InviteTTL:                      duration(lookup, "INVITE_TTL", 72*time.Hour),
-		IdempotencyTTL:                 duration(lookup, "IDEMPOTENCY_TTL", minimumReplayTTL),
-		RateLimitWindow:                duration(lookup, "RATE_LIMIT_WINDOW", time.Minute),
-		InviteContextRateLimit:         positiveInteger(lookup, "INVITE_CONTEXT_RATE_LIMIT", 30),
-		InviteSubmitRateLimit:          positiveInteger(lookup, "INVITE_SUBMIT_RATE_LIMIT", 10),
+		InviteTTL:                      reader.duration("INVITE_TTL", 72*time.Hour),
+		IdempotencyTTL:                 reader.duration("IDEMPOTENCY_TTL", minimumReplayTTL),
+		RateLimitWindow:                reader.duration("RATE_LIMIT_WINDOW", time.Minute),
+		InviteContextRateLimit:         reader.integer("INVITE_CONTEXT_RATE_LIMIT", 30),
+		InviteSubmitRateLimit:          reader.integer("INVITE_SUBMIT_RATE_LIMIT", 10),
 		AccommodationOnboardingEnabled: onboardingEnabled,
 		CORSAllowedOrigins:             splitList(required(lookup, "CORS_ALLOWED_ORIGINS")),
 		InviteKeys:                     keyrings[0],
@@ -79,7 +79,11 @@ func loadPhase2(lookup LookupEnv) (Phase2Config, error) {
 		RateLimitKeys:                  keyrings[3],
 		CursorKeys:                     keyrings[4],
 		DocumentKeys:                   keyrings[5],
-	}, nil
+	}
+	if err := reader.Err(); err != nil {
+		return Phase2Config{}, err
+	}
+	return config, nil
 }
 
 // The document keyring is deliberately separate from every other one: ADR-038
@@ -306,18 +310,6 @@ func parseAbsoluteURL(field, value string) (*url.URL, error) {
 		return nil, invalid(field)
 	}
 	return parsed, nil
-}
-
-func positiveInteger(lookup LookupEnv, field string, fallback int) int {
-	value, ok := lookup(field)
-	if !ok || strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return 0
-	}
-	return parsed
 }
 
 func splitList(value string) []string {

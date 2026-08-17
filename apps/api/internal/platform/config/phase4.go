@@ -2,7 +2,6 @@ package config
 
 import (
 	"math"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -44,45 +43,46 @@ func loadPhase4(
 	if !localOrTest(environment) {
 		return Phase4Config{}, invalid("PHASE4_ENABLED")
 	}
+	if err := applyPhase4Settings(&config, process, lookup); err != nil {
+		return Phase4Config{}, err
+	}
+	return config, nil
+}
+
+// The thresholds and intervals are read together so a single malformed field
+// stops the load, naming itself, before any of them reaches a range check. Only
+// the API talks to the public database, so only it reads that DSN.
+func applyPhase4Settings(config *Phase4Config, process Process, lookup LookupEnv) error {
 	if process == ProcessAPI {
 		config.PublicDatabaseURL = required(lookup, "PUBLIC_DATABASE_URL")
 	}
-	config.PublicDatabaseTimeout = duration(
-		lookup,
+	reader := newEnvReader(lookup)
+	config.PublicDatabaseTimeout = reader.duration(
 		"PUBLIC_DATABASE_TIMEOUT",
 		3*time.Second,
 	)
-	config.PrimaryCellThreshold = positiveInteger(
-		lookup,
+	config.PrimaryCellThreshold = reader.integer(
 		"PHASE4_PRIMARY_CELL_THRESHOLD",
 		10,
 	)
-	config.MinimumReportingAccommodations = positiveInteger(
-		lookup,
+	config.MinimumReportingAccommodations = reader.integer(
 		"PHASE4_MINIMUM_REPORTING_ACCOMMODATIONS",
 		3,
 	)
-	config.RoundingBase = positiveInteger(
-		lookup,
-		"PHASE4_ROUNDING_BASE",
-		10,
-	)
-	config.PreRegisteredWeight = decimal(
-		lookup,
+	config.RoundingBase = reader.integer("PHASE4_ROUNDING_BASE", 10)
+	config.PreRegisteredWeight = reader.decimal(
 		"PHASE4_PRE_REGISTERED_WEIGHT",
 		0.80,
 	)
-	config.IncrementalInterval = duration(
-		lookup,
+	config.IncrementalInterval = reader.duration(
 		"PHASE4_INCREMENTAL_INTERVAL",
 		15*time.Minute,
 	)
-	config.FullReconciliationInterval = duration(
-		lookup,
+	config.FullReconciliationInterval = reader.duration(
 		"PHASE4_FULL_RECONCILIATION_INTERVAL",
 		24*time.Hour,
 	)
-	return config, nil
+	return reader.Err()
 }
 
 func phase4Defaults(enabled bool) Phase4Config {
@@ -190,16 +190,4 @@ func (c Phase4Config) validatePublicDatabase(
 		return invalid("PUBLIC_DATABASE_URL")
 	}
 	return nil
-}
-
-func decimal(lookup LookupEnv, field string, fallback float64) float64 {
-	value, ok := lookup(field)
-	if !ok || strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-	if err != nil {
-		return math.NaN()
-	}
-	return parsed
 }

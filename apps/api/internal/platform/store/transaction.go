@@ -96,6 +96,11 @@ func (s *Store) runIdempotent(
 	spec idempotencySpec,
 	work mutationWork,
 ) (idempotencyResult, error) {
+	// An unregistered operation would be persisted as an operation_key nothing
+	// can replay, so the mutation is refused before a claim is written.
+	if !spec.operation.Valid() {
+		return idempotencyResult{}, errIdempotencyConflict
+	}
 	requestHash, err := s.hashRequest(spec.request)
 	if err != nil {
 		return idempotencyResult{}, errIdempotencyConflict

@@ -76,7 +76,7 @@ func demoGrant() store.SessionGrant {
 
 func newAuthHandler(t *testing.T, authenticator httpapi.Authenticator) http.Handler {
 	t.Helper()
-	handler, _ := httpapi.New(httpapi.Dependencies{
+	handler, _, err := httpapi.New(httpapi.Dependencies{
 		Readiness:       readinessFunc(func(context.Context) error { return nil }),
 		Verifier:        validVerifier(),
 		Auth:            authenticator,
@@ -90,6 +90,9 @@ func newAuthHandler(t *testing.T, authenticator httpapi.Authenticator) http.Hand
 			BuiltAt:  time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC),
 		},
 	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
 	return handler
 }
 

@@ -12,7 +12,7 @@ import (
 func TestAnalyticsRoutesAreAbsentWithoutPhaseFourDependencies(t *testing.T) {
 	t.Parallel()
 
-	handler, _ := New(Dependencies{})
+	handler, _ := mustNew(t, Dependencies{})
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(
 		recorder,
@@ -26,9 +26,10 @@ func TestAnalyticsRoutesAreAbsentWithoutPhaseFourDependencies(t *testing.T) {
 func TestOptionsRoutesUseNormalizedRecoveryAndMetricsChain(t *testing.T) {
 	t.Parallel()
 
-	handler, operations := New(Dependencies{
+	handler, operations := mustNew(t, Dependencies{
 		Stays:              stay.NewService(nil),
 		CORSAllowedOrigins: []string{"https://example.invalid"},
+		CursorKeys:         testCursorKeys(),
 	})
 	request := httptest.NewRequest(
 		http.MethodOptions,

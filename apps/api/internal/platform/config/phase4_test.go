@@ -41,6 +41,12 @@ func TestLoadPhase4RejectsUnsafeConfiguration(t *testing.T) {
 		{"fewer accommodations", "PHASE4_MINIMUM_REPORTING_ACCOMMODATIONS", "2", "PHASE4_MINIMUM_REPORTING_ACCOMMODATIONS"},
 		{"changed rounding", "PHASE4_ROUNDING_BASE", "5", "PHASE4_ROUNDING_BASE"},
 		{"changed weight", "PHASE4_PRE_REGISTERED_WEIGHT", "0.9", "PHASE4_PRE_REGISTERED_WEIGHT"},
+		// A malformed weight used to become NaN, and every comparison against
+		// NaN is false, so the frozen-policy check passed it straight through to
+		// the forecast arithmetic.
+		{"malformed weight", "PHASE4_PRE_REGISTERED_WEIGHT", "zero-eight", "PHASE4_PRE_REGISTERED_WEIGHT"},
+		{"not-a-number weight", "PHASE4_PRE_REGISTERED_WEIGHT", "NaN", "PHASE4_PRE_REGISTERED_WEIGHT"},
+		{"malformed interval", "PHASE4_INCREMENTAL_INTERVAL", "15", "PHASE4_INCREMENTAL_INTERVAL"},
 	}
 
 	for _, test := range tests {

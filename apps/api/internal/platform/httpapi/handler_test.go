@@ -77,7 +77,7 @@ func TestDevelopmentFixtureCredentialRequiresResolvedLoopback(t *testing.T) {
 		t.Fatal(err)
 	}
 	trusted := netip.MustParsePrefix("172.30.0.10/32")
-	handler, _ := httpapi.New(httpapi.Dependencies{
+	handler, _, err := httpapi.New(httpapi.Dependencies{
 		Verifier:          verifier,
 		TrustedProxyCIDRs: []netip.Prefix{trusted},
 		Logger:            slog.New(slog.DiscardHandler),
@@ -88,6 +88,9 @@ func TestDevelopmentFixtureCredentialRequiresResolvedLoopback(t *testing.T) {
 			BuiltAt: time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC),
 		},
 	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
 	tests := []fixtureCredentialExpectation{
 		{name: "direct IPv4 loopback", remote: "127.0.0.1:4312", want: http.StatusOK},
 		{name: "direct IPv6 loopback", remote: "[::1]:4312", want: http.StatusOK},
@@ -260,7 +263,7 @@ func TestTraceUsesOnlyNormalizedAllowlistedAttributes(t *testing.T) {
 	t.Cleanup(func() {
 		_ = provider.Shutdown(context.Background())
 	})
-	handler, _ := httpapi.New(httpapi.Dependencies{
+	handler, _, err := httpapi.New(httpapi.Dependencies{
 		Readiness: readinessFunc(func(context.Context) error { return nil }),
 		Verifier:  validVerifier(),
 		Logger:    slog.New(slog.DiscardHandler),
@@ -272,6 +275,9 @@ func TestTraceUsesOnlyNormalizedAllowlistedAttributes(t *testing.T) {
 			BuiltAt:  time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC),
 		},
 	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
 	const queryCanary = "trace-query-canary"
 	const tokenCanary = "trace-token-canary"
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/platform/build?value="+queryCanary, nil)
@@ -325,7 +331,7 @@ func newHandlers(t *testing.T, readiness httpapi.ReadinessChecker, verifier acce
 	if logger == nil {
 		logger = slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
 	}
-	return httpapi.New(httpapi.Dependencies{
+	public, operations, err := httpapi.New(httpapi.Dependencies{
 		Readiness: readiness,
 		Verifier:  verifier,
 		Logger:    logger,
@@ -337,6 +343,10 @@ func newHandlers(t *testing.T, readiness httpapi.ReadinessChecker, verifier acce
 			BuiltAt:  time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC),
 		},
 	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
+	return public, operations
 }
 
 func validVerifier() access.Verifier {
