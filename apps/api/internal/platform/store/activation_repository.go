@@ -150,11 +150,35 @@ func (r *ActivationRepository) resolveActivationAccount(
 	return r.reusePendingAccount(ctx, q, command, row)
 }
 
-// An account that already activated keeps its credential. Re-issuing must never
-// downgrade it to pending nor erase the password — accounts_credential_state_valid
-// ties a missing hash to pending_activation, so a downgrade would either violate
-// the CHECK or destroy a live credential. Refusing is the only answer that
-// touches neither.
+// reusePendingAccount is the security boundary of this endpoint.
+//
+// accounts_email_idx is unique **globally**, not per accommodation, so a lookup
+// by e-mail can land on an account that belongs to somebody else. The earlier
+// version then added a membership for the issuing accommodation and preserved
+// the existing ones, which handed whoever received the new link access to every
+// accommodation that account already reached — including other organizations.
+//
+// Two rules close it, and the second is the one that matters:
+//
+//  1. the account must still be pending. An activated account keeps its
+//     credential: accounts_credential_state_valid ties a missing hash to
+//     pending_activation, so a downgrade would either violate the CHECK or
+//     destroy a live credential;
+//  2. the account must **already** be a member of the accommodation issuing the
+//     capability, and reuse never adds a membership. That makes the reachable
+//     set of an account monotonically non-increasing: provisioning creates
+//     exactly one membership and reuse creates none, so a capability can only
+//     ever grant the accommodation that provisioned the account — which
+//     accommodationGuard already proved the issuer controls.
+//
+// Enumerating the account's memberships would be the obvious check and is the
+// wrong one: ListActiveTenantMemberships filters a.status = 'active', so a
+// membership in a suspended accommodation is invisible to it, and absence of
+// evidence would read as evidence of absence.
+//
+// Both refusals answer the same ErrConflict on purpose. A caller that could tell
+// "belongs to another accommodation" from "already activated" would learn the
+// state of somebody else's account.
 func (r *ActivationRepository) reusePendingAccount(
 	ctx context.Context,
 	q generated.Querier,
@@ -165,15 +189,13 @@ func (r *ActivationRepository) reusePendingAccount(
 		return uuid.Nil, activation.ErrConflict
 	}
 	accountID := idFromPG(row.ID)
-	return accountID, r.ensureManagerMembership(ctx, q, command, accountID)
+	if err := r.requireExistingMembership(ctx, q, command, accountID); err != nil {
+		return uuid.Nil, err
+	}
+	return accountID, nil
 }
 
-// The membership already exists when the same e-mail is re-issued for the same
-// accommodation, and does not when the same e-mail is issued for a different
-// one. Reading the accessible accommodation is the existence check; blindly
-// inserting would hit the unique index on
-// (accommodation_id, oidc_issuer, oidc_subject) and hide the difference.
-func (r *ActivationRepository) ensureManagerMembership(
+func (r *ActivationRepository) requireExistingMembership(
 	ctx context.Context,
 	q generated.Querier,
 	command activation.CreateCommand,
@@ -186,10 +208,10 @@ func (r *ActivationRepository) ensureManagerMembership(
 	if err == nil {
 		return nil
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return activation.ErrUnavailable
+	if errors.Is(err, pgx.ErrNoRows) {
+		return activation.ErrConflict
 	}
-	return r.linkMembership(ctx, q, command, accountID)
+	return activation.ErrUnavailable
 }
 
 // The account is born without a hash, in pending_activation, which is exactly

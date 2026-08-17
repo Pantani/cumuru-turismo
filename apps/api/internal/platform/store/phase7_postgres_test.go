@@ -958,3 +958,108 @@ func assertAccountCredential(
 			status, hasHash, wantStatus, wantHash)
 	}
 }
+
+// D-05, adopted from the QA probe that found it. accounts_email_idx is unique
+// globally, not per accommodation, so a lookup by e-mail can land on an account
+// that belongs to somebody else. The earlier reuse added a membership and kept
+// the existing ones, handing whoever received the new link access to every
+// accommodation that account already reached.
+//
+// The assertion is on reachability, not on the error: counting memberships is
+// what distinguishes "refused" from "succeeded but harmless".
+func TestPhase7ActivationReuseNeverCrossesAccommodations(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	admin, runtime, first := openPhase7Integration(t, ctx)
+	second := seedPhase7Fixture(t, ctx, admin)
+	t.Cleanup(func() { cleanupPhase7Fixture(t, second, admin) })
+
+	repository := newPhase7ActivationRepository(t, runtime)
+	email := "alvo-" + mustV7(t).String() + "@exemplo.invalid"
+
+	issueActivationWithKey(t, ctx, repository, first, email, "cross-first")
+	_, _, err := repository.Create(ctx, activation.CreateCommand{
+		Actor: principal(second.subject), AccommodationID: second.accommodationID,
+		Email: email, DisplayName: "Operadora fictícia", ExpectedVersion: 1,
+		IdempotencyKey: "phase7-cross-second-" + second.accommodationID.String(),
+		RequestID:      "request-cross-second-" + second.accommodationID.String(),
+	})
+	if !errors.Is(err, activation.ErrConflict) {
+		t.Fatalf("Create() for a foreign accommodation error = %v, want ErrConflict", err)
+	}
+	assertAccountReaches(t, ctx, admin, email, first, second, 1)
+}
+
+// The refusals must be indistinguishable. A caller that could tell "belongs to
+// another accommodation" from "already activated" would learn the state of
+// somebody else's account from an endpoint it is allowed to call.
+func TestPhase7ActivationRefusalsDoNotDiscloseAccountState(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	admin, runtime, first := openPhase7Integration(t, ctx)
+	second := seedPhase7Fixture(t, ctx, admin)
+	t.Cleanup(func() { cleanupPhase7Fixture(t, second, admin) })
+	repository := newPhase7ActivationRepository(t, runtime)
+
+	foreign := "estranha-" + mustV7(t).String() + "@exemplo.invalid"
+	issueActivationWithKey(t, ctx, repository, first, foreign, "disclosure-foreign")
+
+	activated := "ativada-" + mustV7(t).String() + "@exemplo.invalid"
+	token := issueActivationWithKey(t, ctx, repository, second, activated, "disclosure-active")
+	if err := repository.Complete(ctx, activation.CompleteCommand{
+		Token: token, RateSubject: "203.0.113.0/24",
+		Password: "uma-senha-bem-longa", RequestID: "request-" + mustV7(t).String(),
+	}); err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+
+	foreignErr := createActivationError(ctx, repository, second, foreign, "probe-foreign")
+	activeErr := createActivationError(ctx, repository, second, activated, "probe-active")
+	if foreignErr == nil || activeErr == nil {
+		t.Fatalf("expected both probes refused; got %v and %v", foreignErr, activeErr)
+	}
+	if foreignErr.Error() != activeErr.Error() {
+		t.Fatalf("refusals differ: %q versus %q", foreignErr, activeErr)
+	}
+}
+
+func createActivationError(
+	ctx context.Context,
+	repository *store.ActivationRepository,
+	fixture phase7Fixture,
+	email string,
+	key string,
+) error {
+	_, _, err := repository.Create(ctx, activation.CreateCommand{
+		Actor: principal(fixture.subject), AccommodationID: fixture.accommodationID,
+		Email: email, DisplayName: "Operadora fictícia", ExpectedVersion: 1,
+		IdempotencyKey: "phase7-" + key + "-" + fixture.accommodationID.String(),
+		RequestID:      "request-" + key + "-" + fixture.accommodationID.String(),
+	})
+	return err
+}
+
+func assertAccountReaches(
+	t *testing.T,
+	ctx context.Context,
+	admin *pgxpool.Pool,
+	email string,
+	first phase7Fixture,
+	second phase7Fixture,
+	want int,
+) {
+	t.Helper()
+	var reach int
+	err := admin.QueryRow(ctx,
+		`SELECT count(*) FROM core.memberships AS m
+		 JOIN auth.accounts AS a ON a.id::text = m.oidc_subject
+		 WHERE a.email = $1 AND m.active AND m.accommodation_id = ANY($2)`,
+		email, []uuid.UUID{first.accommodationID, second.accommodationID},
+	).Scan(&reach)
+	if err != nil {
+		t.Fatalf("count reachable accommodations: %v", err)
+	}
+	if reach != want {
+		t.Fatalf("the account reaches %d accommodations, want %d", reach, want)
+	}
+}
