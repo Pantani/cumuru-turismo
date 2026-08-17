@@ -137,22 +137,48 @@ test("percorre a jornada local sem persistir authorities", async ({
   context,
   page,
 }) => {
+  // A Fase 7 responde 404 uniforme quando a capability não existe, para não
+  // revelar se ela existe (ADR-039). O painel consulta o convite de cada
+  // acomodação a cada carga, então "sem convite ativo" é um 404 esperado e o
+  // navegador o registra no console. Só esse par rota+status é tolerado; o
+  // resto continua exigindo zero, inclusive outro 404 em outra rota.
+  const ABSENT_CAPABILITY_ROUTE =
+    /^\/api\/v1\/accommodations\/[0-9a-f-]+\/invite$/;
+  // location().url vem vazio em erros de console sem recurso associado.
+  const pathnameOf = (url: string) => {
+    try {
+      return new URL(url).pathname;
+    } catch {
+      return "";
+    }
+  };
+  const isAbsentCapabilityRoute = (url: string) =>
+    ABSENT_CAPABILITY_ROUTE.test(pathnameOf(url));
   const consoleErrors: string[] = [];
   const failedAPIResponses: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text());
-    }
-  });
   page.on("response", (response) => {
-    if (
-      response.url().includes("/api/") &&
-      response.status() >= 400
-    ) {
-      failedAPIResponses.push(
-        `${response.status()} ${new URL(response.url()).pathname}`,
-      );
+    if (!response.url().includes("/api/") || response.status() < 400) {
+      return;
     }
+    if (response.status() === 404 && isAbsentCapabilityRoute(response.url())) {
+      return;
+    }
+    failedAPIResponses.push(
+      `${response.status()} ${new URL(response.url()).pathname}`,
+    );
+  });
+  page.on("console", (message) => {
+    if (message.type() !== "error") {
+      return;
+    }
+    // location().url é a URL do recurso que falhou, então o descarte é por
+    // pedido e não por categoria: um erro em qualquer outra rota, inclusive
+    // num asset, continua reprovando. Um status diferente de 404 nessa mesma
+    // rota ainda reprova pelo failedAPIResponses acima.
+    if (isAbsentCapabilityRoute(message.location().url)) {
+      return;
+    }
+    consoleErrors.push(message.text());
   });
 
   await page.goto("/");
