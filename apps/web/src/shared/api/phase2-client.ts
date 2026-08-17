@@ -1,4 +1,12 @@
 import type { components, operations } from "../../generated/schema";
+import {
+  invalidResponseProblem,
+  isNoStore,
+  MISSING_REQUEST_ID_DETAIL,
+  NON_NO_STORE_DETAIL,
+  problemFrom,
+  responseRequestId as contractRequestId,
+} from "./response-contract";
 
 type Schemas = components["schemas"];
 
@@ -183,33 +191,20 @@ function resultHeaders<T>(
 }
 
 function invalidResponse(detail: string, requestId: string | null = null) {
-  return new Phase2ApiError(
-    502,
-    {
-      type: "urn:cumuru:problem:invalid-api-response",
-      title: "O serviço respondeu fora do contrato.",
-      status: 502,
-      detail,
-    },
-    null,
-    requestId,
-  );
+  return new Phase2ApiError(502, invalidResponseProblem(detail), null, requestId);
 }
 
 function requireRequestId(response: Response) {
-  const requestId = response.headers.get("X-Request-ID");
-  if (requestId === null || requestId.trim().length === 0) {
-    throw invalidResponse("X-Request-ID obrigatório ausente ou vazio.");
+  const requestId = contractRequestId(response);
+  if (requestId === null) {
+    throw invalidResponse(MISSING_REQUEST_ID_DETAIL);
   }
-  return requestId.trim();
+  return requestId;
 }
 
 function requireNoStore(response: Response, requestId: string) {
-  if (response.headers.get("Cache-Control") !== "no-store") {
-    throw invalidResponse(
-      "Cache-Control deve ser exatamente no-store.",
-      requestId,
-    );
+  if (!isNoStore(response)) {
+    throw invalidResponse(NON_NO_STORE_DETAIL, requestId);
   }
 }
 
@@ -287,18 +282,6 @@ function requireResponseHeaders(
   requireLocation(response, contract.location === true, requestId);
   requireReplay(response, contract.replay === true, requestId);
   requireSurveyCapability(response, requestId);
-}
-
-async function problemFrom(response: Response): Promise<Schemas["Problem"]> {
-  try {
-    return (await response.json()) as Schemas["Problem"];
-  } catch {
-    return {
-      type: "about:blank",
-      title: "Não foi possível concluir a solicitação.",
-      status: response.status,
-    };
-  }
 }
 
 function usableToken(authenticated: boolean | undefined, token: string | null) {

@@ -75,7 +75,3 @@ export function resolveApiBaseUrl(configuredUrl: string | undefined) {
 
   return "/api/v1";
 }
-
-export const platformClient = createPlatformClient({
-  baseUrl: resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL),
-});

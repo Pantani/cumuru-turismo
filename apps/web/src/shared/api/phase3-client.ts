@@ -1,4 +1,12 @@
 import type { components, operations } from "../../generated/schema";
+import {
+  invalidResponseProblem,
+  isNoStore,
+  MISSING_REQUEST_ID_DETAIL,
+  NON_NO_STORE_DETAIL,
+  problemFrom,
+  responseRequestId as contractRequestId,
+} from "./response-contract";
 
 type Schemas = components["schemas"];
 
@@ -65,26 +73,16 @@ interface RequestSpec {
 }
 
 function invalidResponse(detail: string, requestId: string | null = null) {
-  return new Phase3ApiError(
-    502,
-    {
-      type: "urn:cumuru:problem:invalid-api-response",
-      title: "O serviço respondeu fora do contrato.",
-      status: 502,
-      detail,
-    },
-    null,
-    requestId,
-  );
+  return new Phase3ApiError(502, invalidResponseProblem(detail), null, requestId);
 }
 
 function requestIdFrom(response: Response) {
-  const requestId = response.headers.get("X-Request-ID")?.trim() ?? "";
-  if (requestId.length === 0) {
-    throw invalidResponse("X-Request-ID obrigatório ausente ou vazio.");
+  const requestId = contractRequestId(response);
+  if (requestId === null) {
+    throw invalidResponse(MISSING_REQUEST_ID_DETAIL);
   }
-  if (response.headers.get("Cache-Control") !== "no-store") {
-    throw invalidResponse("Cache-Control deve ser exatamente no-store.", requestId);
+  if (!isNoStore(response)) {
+    throw invalidResponse(NON_NO_STORE_DETAIL, requestId);
   }
   return requestId;
 }
@@ -92,18 +90,6 @@ function requestIdFrom(response: Response) {
 function retryAfterFrom(response: Response) {
   const value = response.headers.get("Retry-After");
   return value !== null && /^\d+$/.test(value) ? Number(value) : null;
-}
-
-async function problemFrom(response: Response): Promise<Schemas["Problem"]> {
-  try {
-    return (await response.json()) as Schemas["Problem"];
-  } catch {
-    return {
-      type: "about:blank",
-      title: "Não foi possível concluir a solicitação.",
-      status: response.status,
-    };
-  }
 }
 
 function requireStrongEtag(response: Response, requestId: string) {

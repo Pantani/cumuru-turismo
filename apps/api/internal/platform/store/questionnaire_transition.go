@@ -11,8 +11,6 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/platform/outbox"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store/generated"
 	"github.com/Pantani/cumuru/apps/api/internal/questionnaire"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 type transitionSpec struct {
@@ -197,35 +195,38 @@ func validateTransitionContent(
 	}
 }
 
+// The table is fixed for the life of the process, so it is built once instead of
+// on every transition.
+var questionnaireTransitionSpecs = map[questionnaire.Transition]transitionSpec{
+	questionnaire.TransitionSubmitReview: {
+		operation: idempotency.OperationSubmitQuestionnaireReview,
+		action:    audit.ActionQuestionnaireReview,
+		eventType: outbox.EventQuestionnaireReviewSubmitted,
+	},
+	questionnaire.TransitionRequestChanges: {
+		operation: idempotency.OperationRequestQuestionnaireChanges,
+		action:    audit.ActionQuestionnaireChanges,
+		eventType: outbox.EventQuestionnaireChangesRequested,
+	},
+	questionnaire.TransitionApprove: {
+		operation: idempotency.OperationApproveQuestionnaire,
+		action:    audit.ActionQuestionnaireApproved,
+		eventType: outbox.EventQuestionnaireApproved,
+	},
+	questionnaire.TransitionPublish: {
+		operation: idempotency.OperationPublishQuestionnaire,
+		action:    audit.ActionQuestionnairePublished,
+		eventType: outbox.EventQuestionnairePublished,
+	},
+	questionnaire.TransitionRetire: {
+		operation: idempotency.OperationRetireQuestionnaire,
+		action:    audit.ActionQuestionnaireRetired,
+		eventType: outbox.EventQuestionnaireRetired,
+	},
+}
+
 func questionnaireTransitionSpec(transition questionnaire.Transition) (transitionSpec, error) {
-	specs := map[questionnaire.Transition]transitionSpec{
-		questionnaire.TransitionSubmitReview: {
-			operation: idempotency.OperationSubmitQuestionnaireReview,
-			action:    audit.ActionQuestionnaireReview,
-			eventType: outbox.EventQuestionnaireReviewSubmitted,
-		},
-		questionnaire.TransitionRequestChanges: {
-			operation: idempotency.OperationRequestQuestionnaireChanges,
-			action:    audit.ActionQuestionnaireChanges,
-			eventType: outbox.EventQuestionnaireChangesRequested,
-		},
-		questionnaire.TransitionApprove: {
-			operation: idempotency.OperationApproveQuestionnaire,
-			action:    audit.ActionQuestionnaireApproved,
-			eventType: outbox.EventQuestionnaireApproved,
-		},
-		questionnaire.TransitionPublish: {
-			operation: idempotency.OperationPublishQuestionnaire,
-			action:    audit.ActionQuestionnairePublished,
-			eventType: outbox.EventQuestionnairePublished,
-		},
-		questionnaire.TransitionRetire: {
-			operation: idempotency.OperationRetireQuestionnaire,
-			action:    audit.ActionQuestionnaireRetired,
-			eventType: outbox.EventQuestionnaireRetired,
-		},
-	}
-	spec, ok := specs[transition]
+	spec, ok := questionnaireTransitionSpecs[transition]
 	if !ok {
 		return transitionSpec{}, errors.New("unknown questionnaire transition")
 	}
@@ -246,6 +247,3 @@ func (r *QuestionnaireRepository) EraseExpiredFreeText(
 }
 
 var _ questionnaire.Repository = (*QuestionnaireRepository)(nil)
-
-var _ = uuid.Nil
-var _ = pgx.ErrNoRows

@@ -75,13 +75,36 @@ arquivo.
   qualidade agregada;
 - botão de remover visitante ocupando uma célula inteira do formulário de
   registro, porque a distribuição em colunas estava no `fieldset` em vez do
-  grupo de campos aninhado.
+  grupo de campos aninhado;
+- `PHASE4_PRE_REGISTERED_WEIGHT` malformado era convertido em `NaN` e passava
+  pela checagem de política congelada, porque toda comparação com `NaN` é falsa;
+  o peso inválido chegava à aritmética de previsão. Toda leitura numérica de
+  ambiente passa a falhar nomeando o próprio campo, em vez de devolver um
+  sentinela para um validador posterior notar;
+- `DOCUMENT_HMAC_KEYS` estava fora da lista que a Fase 3 percorre ao exigir
+  chaves distintas, então uma chave de pesquisa podia reutilizar em silêncio a
+  chave que cega o CPF sob a
+  [ADR-038](docs/decisoes/ADR-038-documento-do-responsavel-cpf-ou-cnpj-por-organizacao.md);
+- keyring de cursor inválido era descartado em silêncio e deixava toda listagem
+  paginada sem cursor de próxima página; `httpapi.New` passa a recusar a
+  construção quando registra uma superfície que pagina;
+- conexão IndexedDB dos rascunhos cifrados vazava quando a operação falhava,
+  porque o `close()` ficava na última linha; uma conexão vazada bloqueia o
+  próximo upgrade de versão indefinidamente.
 
 ### Removido
 
 - injeção de identidade em tempo de build (`VITE_LOCAL_DEMO_MODE` e
   `VITE_LOCAL_DEMO_IDENTITY`), com o guarda `local-demo-build` e o alvo
-  `local-demo-build-test` correspondentes: o bundle não carrega mais credencial.
+  `local-demo-build-test` correspondentes: o bundle não carrega mais credencial;
+- metade não alcançável do pacote `idempotency` (`KeyHasher`, `Digest`,
+  `Identity` e `StoredResponse`), que reimplementava o mesmo HMAC já aplicado
+  pelo store; a lista de operações permitidas deixou de ser código morto e passa
+  a barrar, no `runIdempotent`, uma operação não registrada antes de gravar a
+  claim;
+- telas de espaço reservado `AuthenticatedPlaceholderPage` e
+  `RegistrationPlaceholderPage`, substituídas pelas telas reais, e a instância
+  `platformClient` sem nenhum consumidor.
 
 ## 0.6.0
 

@@ -1,30 +1,29 @@
+// Package idempotency holds the vocabulary a replayable mutation is described
+// with: which operation is being retried, how a request body is reduced to a
+// comparable hash, and how a still-running attempt is reported to the caller.
+//
+// Keying and response storage deliberately live in the store instead: the store
+// probes every key version under one transaction, which the caller cannot do
+// from here without reproducing the transaction itself.
 package idempotency
 
 import (
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"regexp"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-var (
-	ErrInvalidKey      = errors.New("invalid idempotency key")
-	ErrInvalidIdentity = errors.New("invalid idempotency identity")
-	ErrInvalidResponse = errors.New("invalid stored response")
-	ErrProcessing      = errors.New("idempotency request processing")
-	keyPattern         = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
-	versionPattern     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
-	etagPattern        = regexp.MustCompile(`^"[1-9][0-9]*"$`)
-)
+var ErrProcessing = errors.New("idempotency request processing")
 
+// ProcessingError reports that an identical request is still in flight, and how
+// long the caller should wait before retrying it.
 type ProcessingError struct {
 	RetryAfter time.Duration
 }
 
+// NewProcessingError floors the delay at one second: a Retry-After of zero would
+// invite an immediate retry against an attempt that is still running.
 func NewProcessingError(retryAfter time.Duration) error {
 	if retryAfter < time.Second {
 		retryAfter = time.Second
@@ -40,33 +39,10 @@ func (e *ProcessingError) Unwrap() error {
 	return ErrProcessing
 }
 
-type Digest struct {
-	Version string
-	Sum     []byte
-}
-
-type KeyHasher struct {
-	version string
-	key     []byte
-}
-
-func NewKeyHasher(version string, key []byte) (*KeyHasher, error) {
-	if !versionPattern.MatchString(version) || len(key) < 32 {
-		return nil, ErrInvalidKey
-	}
-	return &KeyHasher{version: version, key: append([]byte(nil), key...)}, nil
-}
-
-func (h *KeyHasher) Hash(value string) (Digest, error) {
-	if !keyPattern.MatchString(value) {
-		return Digest{}, ErrInvalidKey
-	}
-	mac := hmac.New(sha256.New, h.key)
-	_, _ = mac.Write([]byte("idempotency-key\x00"))
-	_, _ = mac.Write([]byte(value))
-	return Digest{Version: h.version, Sum: mac.Sum(nil)}, nil
-}
-
+// RequestHash reduces a typed request to the value a replay is compared against.
+// Encoding a struct rather than free-form input is what makes the comparison
+// stable: encoding/json orders struct fields by declaration and map keys by sort
+// order, so two semantically equal requests always hash alike.
 func RequestHash(value any) ([sha256.Size]byte, error) {
 	encoded, err := json.Marshal(value)
 	if err != nil {
@@ -75,6 +51,8 @@ func RequestHash(value any) ([sha256.Size]byte, error) {
 	return sha256.Sum256(encoded), nil
 }
 
+// Operation names the mutation a key replays. It is part of the stored identity,
+// so a key reused across two different operations never collides.
 type Operation string
 
 const (
@@ -98,6 +76,8 @@ const (
 	OperationSubmitSurveyResponse        Operation = "submitSurveyResponse"
 )
 
+// The allow-list is explicit rather than derived, so adding a constant without
+// deciding that it may be replayed does not silently make it replayable.
 var validOperations = map[Operation]bool{
 	OperationCreateAccommodation:         true,
 	OperationCreateMembership:            true,
@@ -119,70 +99,9 @@ var validOperations = map[Operation]bool{
 	OperationSubmitSurveyResponse:        true,
 }
 
-type Identity struct {
-	Actor      Digest
-	Key        Digest
-	Operation  Operation
-	ResourceID uuid.UUID
-}
-
-func (i Identity) Validate() error {
-	if !validDigest(i.Actor) || !validDigest(i.Key) {
-		return ErrInvalidIdentity
-	}
-	if !validOperations[i.Operation] || i.ResourceID == uuid.Nil {
-		return ErrInvalidIdentity
-	}
-	return nil
-}
-
-func validDigest(value Digest) bool {
-	return versionPattern.MatchString(value.Version) && len(value.Sum) == sha256.Size
-}
-
-type StoredResponse struct {
-	Status      int
-	ContentType string
-	Location    string
-	ETag        string
-	ResourceID  uuid.UUID
-	Body        []byte
-}
-
-// Only a successful JSON response with a resource identity is worth replaying;
-// anything else would make a retry return something the client cannot use.
-func successfulJSON(status int, contentType string) bool {
-	return status >= 200 && status <= 299 && contentType == "application/json"
-}
-
-func storableResponse(
-	status int,
-	contentType string,
-	etag string,
-	resourceID uuid.UUID,
-) bool {
-	if !successfulJSON(status, contentType) {
-		return false
-	}
-	if etag != "" && !etagPattern.MatchString(etag) {
-		return false
-	}
-	return resourceID != uuid.Nil
-}
-
-func NewStoredResponse(
-	status int,
-	contentType string,
-	location string,
-	etag string,
-	resourceID uuid.UUID,
-	body []byte,
-) (StoredResponse, error) {
-	if !storableResponse(status, contentType, etag, resourceID) {
-		return StoredResponse{}, ErrInvalidResponse
-	}
-	return StoredResponse{
-		Status: status, ContentType: contentType, Location: location,
-		ETag: etag, ResourceID: resourceID, Body: append([]byte(nil), body...),
-	}, nil
+// Valid reports whether the operation may be recorded against an idempotency
+// key. The store checks it before claiming one, so an unregistered operation
+// fails the mutation instead of persisting a row nothing can ever replay.
+func (o Operation) Valid() bool {
+	return validOperations[o]
 }

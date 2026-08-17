@@ -53,6 +53,9 @@ func WithAuthConfig(auth config.AuthConfig) Option {
 	}
 }
 
+// New builds a store over an arbitrary Querier. It exists for tests that drive
+// the store against a stub; the running processes use NewPhase2 or NewPhase3,
+// which own a real pool and the phase keyrings.
 func New(queries generated.Querier, timeout time.Duration) *Store {
 	return &Store{
 		queries: queries, timeout: timeout,
