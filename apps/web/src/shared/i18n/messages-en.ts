@@ -202,7 +202,7 @@ export const messagesEn: Messages = {
     "No. No indicator is broken down by property. The dashboard publishes only the village total, rounded and suppressed when few lodgings contribute.",
   "landing.faq.q3.question": "Does this replace the FNRH?",
   "landing.faq.q3.answer":
-    "No. Integration with FNRH Digital is a separate, optional track using each property's own official key. The Observatory neither issues nor shares that credential.",
+    "No. Integration with FNRH Digital is a separate, optional track using each property's own official key. The Observatory neither issues it nor shares it.",
   "landing.faq.q4.question": "Is the guest required to answer the survey?",
   "landing.faq.q4.answer":
     "Never. The profile survey is voluntary and separate from the stay record. Declining does not affect check-in.",
