@@ -49,6 +49,31 @@ inputs:
 runs:
   using: composite
   steps:
+    # As entradas têm dependências entre si. Pular a instalação em silêncio
+    # faria o job cair no Go ou no Node do runner, que não são fixados, e o
+    # gate passaria sobre uma toolchain diferente da declarada.
+    - name: Validate setup inputs
+      shell: bash
+      env:
+        INPUT_GO: ${{ inputs.go }}
+        INPUT_NODE: ${{ inputs.node }}
+        INPUT_NPM_INSTALL: ${{ inputs.npm-install }}
+        INPUT_GO_TOOLS: ${{ inputs.go-tools }}
+        INPUT_CHROMIUM: ${{ inputs.chromium }}
+      run: |
+        set -eu
+        status=0
+        require() {
+          if test "$1" = "true" && test "$2" != "true"; then
+            echo "setup: $3 exige $4=true" >&2
+            status=1
+          fi
+        }
+        require "${INPUT_NPM_INSTALL}" "${INPUT_NODE}" npm-install node
+        require "${INPUT_CHROMIUM}" "${INPUT_NPM_INSTALL}" chromium npm-install
+        require "${INPUT_GO_TOOLS}" "${INPUT_GO}" go-tools go
+        exit "${status}"
+
     - name: Set up Go
       if: inputs.go == 'true'
       uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -80,7 +105,10 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: .tools/bin
-        key: cumuru-go-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
+        # O próprio action.yml entra na chave: go-version mora aqui, e binário
+        # compilado com outro toolchain não pode ser restaurado como se fosse
+        # o mesmo. O Makefile entra porque fixa a versão de cada ferramenta.
+        key: cumuru-go-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile', '.github/actions/setup/action.yml') }}
 
     - name: Install pinned Go quality tools
       if: inputs.go-tools == 'true' && steps.go-tools-cache.outputs.cache-hit != 'true'

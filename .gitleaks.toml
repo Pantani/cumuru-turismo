@@ -14,6 +14,25 @@ regexTarget = "match"
 regexes = ['''U1VCU1RJVFVJUi1QT1It[A-Za-z0-9+/=]*''']
 
 [[allowlists]]
+description = "Phase 7 poster token fixture is a repeated hex alphabet"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^apps/api/internal/platform/httpapi/phase7_test\.go$''']
+regexTarget = "match"
+# Só o alfabeto hexadecimal repetido passa. Um token real colado no mesmo
+# arquivo não tem essa forma, então o gate continua fechado ali.
+regexes = ['''(?:0123456789abcdef){2,}[0-9a-f]*''']
+
+[[allowlists]]
+description = "Phase 7 fragment test uses a literal alphabet sample"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^apps/api/internal/platform/store/phase7_repository_test\.go$''']
+regexTarget = "match"
+# O valor exato exercita a codificação do fragmento contra host.invalid.
+regexes = ['''abcDEF-_0123456789''']
+
+[[allowlists]]
 description = "Generated API image SHA references are not credentials"
 targetRules = ["generic-api-key"]
 condition = "AND"

@@ -592,12 +592,18 @@ smoke: ## Executa o smoke da stack Compose local
 		SMOKE_PROFILE=local-demo bash deploy/scripts/smoke.sh
 
 smoke-local: ## Sobe a stack local, executa o smoke e derruba a stack mesmo em falha
+	@# `up` parcial deixa container e rede de pé; por isso o teardown roda em
+	@# todo caminho de falha, e o primeiro status diferente de zero é o que sai.
 	@set -eu; \
-	$(MAKE) --no-print-directory up; \
+	up_status=0; \
+	$(MAKE) --no-print-directory up || up_status=$$?; \
 	smoke_status=0; \
-	$(MAKE) --no-print-directory smoke || smoke_status=$$?; \
+	if test "$$up_status" -eq 0; then \
+		$(MAKE) --no-print-directory smoke || smoke_status=$$?; \
+	fi; \
 	down_status=0; \
 	$(MAKE) --no-print-directory down || down_status=$$?; \
+	if test "$$up_status" -ne 0; then exit "$$up_status"; fi; \
 	if test "$$smoke_status" -ne 0; then exit "$$smoke_status"; fi; \
 	exit "$$down_status"
 
