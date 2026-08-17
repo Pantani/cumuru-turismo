@@ -130,10 +130,14 @@ func loadConfig(process Process, lookup LookupEnv) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	reader := newEnvReader(lookup)
 	cfg := baseConfig(
-		process, parts.environment, lookup,
+		process, parts.environment, reader,
 		parts.trustedProxyCIDRs, parts.auth, parts.phases,
 	)
+	if err := reader.Err(); err != nil {
+		return Config{}, err
+	}
 	applyProcessAddresses(&cfg, process, lookup)
 	return cfg, nil
 }
@@ -141,33 +145,34 @@ func loadConfig(process Process, lookup LookupEnv) (Config, error) {
 func baseConfig(
 	process Process,
 	environment Environment,
-	lookup LookupEnv,
+	reader *envReader,
 	trustedProxyCIDRs []netip.Prefix,
 	auth AuthConfig,
 	phases phaseConfigs,
 ) Config {
+	lookup := reader.lookup
 	return Config{
 		Process:           process,
 		Environment:       environment,
 		DatabaseURL:       required(lookup, "DATABASE_URL"),
-		DatabaseTimeout:   duration(lookup, "DATABASE_TIMEOUT", 3*time.Second),
-		ShutdownTimeout:   duration(lookup, "SHUTDOWN_TIMEOUT", 10*time.Second),
-		ReadHeaderTimeout: duration(lookup, "HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
-		ReadTimeout:       duration(lookup, "HTTP_READ_TIMEOUT", 15*time.Second),
-		WriteTimeout:      duration(lookup, "HTTP_WRITE_TIMEOUT", 15*time.Second),
-		IdleTimeout:       duration(lookup, "HTTP_IDLE_TIMEOUT", 60*time.Second),
+		DatabaseTimeout:   reader.duration("DATABASE_TIMEOUT", 3*time.Second),
+		ShutdownTimeout:   reader.duration("SHUTDOWN_TIMEOUT", 10*time.Second),
+		ReadHeaderTimeout: reader.duration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
+		ReadTimeout:       reader.duration("HTTP_READ_TIMEOUT", 15*time.Second),
+		WriteTimeout:      reader.duration("HTTP_WRITE_TIMEOUT", 15*time.Second),
+		IdleTimeout:       reader.duration("HTTP_IDLE_TIMEOUT", 60*time.Second),
 		LogLevel:          optional(lookup, "LOG_LEVEL", "info"),
 		TrustedProxyCIDRs: trustedProxyCIDRs,
 		OIDC: OIDCConfig{
 			Mode:        OIDCMode(required(lookup, "OIDC_MODE")),
 			Issuer:      normalizeIssuer(required(lookup, "OIDC_ISSUER")),
 			Audience:    required(lookup, "OIDC_AUDIENCE"),
-			HTTPTimeout: duration(lookup, "OIDC_HTTP_TIMEOUT", 5*time.Second),
+			HTTPTimeout: reader.duration("OIDC_HTTP_TIMEOUT", 5*time.Second),
 		},
 		Telemetry: TelemetryConfig{
 			Exporter: optional(lookup, "OTEL_EXPORTER", "none"),
 			Endpoint: required(lookup, "OTEL_ENDPOINT"),
-			Timeout:  duration(lookup, "OTEL_TIMEOUT", 5*time.Second),
+			Timeout:  reader.duration("OTEL_TIMEOUT", 5*time.Second),
 		},
 		Auth:   auth,
 		Phase2: phases.phase2,
@@ -426,18 +431,6 @@ func optional(lookup LookupEnv, key, fallback string) string {
 		return fallback
 	}
 	return strings.TrimSpace(value)
-}
-
-func duration(lookup LookupEnv, key string, fallback time.Duration) time.Duration {
-	value, ok := lookup(key)
-	if !ok || strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		return 0
-	}
-	return parsed
 }
 
 func normalizeIssuer(value string) string {

@@ -61,6 +61,18 @@ func TestLoadPhase3RejectsUnsafeConfiguration(t *testing.T) {
 			},
 			wantErr: "PHASE3_KEYRINGS",
 		},
+		{
+			// The document keyring blinds a CPF under ADR-038. It was absent
+			// from the phase 2 list the overlap check walks, so a survey key
+			// could silently reuse it.
+			name: "overlap with document keyring",
+			change: func(values map[string]string) {
+				values["SURVEY_HMAC_CURRENT_VERSION"] =
+					values["DOCUMENT_HMAC_CURRENT_VERSION"]
+				values["SURVEY_HMAC_KEYS"] = values["DOCUMENT_HMAC_KEYS"]
+			},
+			wantErr: "PHASE3_KEYRINGS",
+		},
 	}
 
 	for _, test := range tests {

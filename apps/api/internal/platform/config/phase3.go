@@ -1,8 +1,6 @@
 package config
 
 import (
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -67,19 +65,15 @@ func applyPhase3Settings(
 	if err != nil {
 		return err
 	}
-	config.SurveyTTL = duration(lookup, "SURVEY_CAPABILITY_TTL", maximumSurveyTTL)
-	config.FreeTextTTL = duration(lookup, "SURVEY_FREE_TEXT_TTL", maximumSurveyTTL)
-	config.SurveySubmitRateLimit = positiveInteger(
-		lookup,
-		"SURVEY_SUBMIT_RATE_LIMIT",
-		10,
-	)
-	config.FreeTextCleanupEnabled, err = parseBoolean(
-		lookup,
+	reader := newEnvReader(lookup)
+	config.SurveyTTL = reader.duration("SURVEY_CAPABILITY_TTL", maximumSurveyTTL)
+	config.FreeTextTTL = reader.duration("SURVEY_FREE_TEXT_TTL", maximumSurveyTTL)
+	config.SurveySubmitRateLimit = reader.integer("SURVEY_SUBMIT_RATE_LIMIT", 10)
+	config.FreeTextCleanupEnabled = reader.boolean(
 		"SURVEY_FREE_TEXT_CLEANUP_ENABLED",
 		false,
 	)
-	if err != nil {
+	if err := reader.Err(); err != nil {
 		return err
 	}
 	config.SurveyKeys = keys.survey
@@ -158,6 +152,10 @@ func (c Phase3Config) validateFreeTextKeys() error {
 	return nil
 }
 
+// Every phase 2 keyring belongs here. A keyring missing from this list is one a
+// phase 3 key may silently duplicate, which is exactly what the overlap check
+// exists to prevent — DocumentKeys was added to Phase2Config without being
+// listed, so a survey key could share the key that blinds a CPF.
 func phase2Keyrings(config Phase2Config) []KeyringConfig {
 	return []KeyringConfig{
 		config.InviteKeys,
@@ -165,17 +163,17 @@ func phase2Keyrings(config Phase2Config) []KeyringConfig {
 		config.IdempotencyKeys,
 		config.RateLimitKeys,
 		config.CursorKeys,
+		config.DocumentKeys,
 	}
 }
 
+// parseBoolean keeps the standalone form for the loaders that decide whether a
+// whole phase is enabled before any other field is read.
 func parseBoolean(lookup LookupEnv, field string, fallback bool) (bool, error) {
-	value, ok := lookup(field)
-	if !ok || strings.TrimSpace(value) == "" {
-		return fallback, nil
-	}
-	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
-	if err != nil {
-		return false, invalid(field)
+	reader := newEnvReader(lookup)
+	parsed := reader.boolean(field, fallback)
+	if err := reader.Err(); err != nil {
+		return false, err
 	}
 	return parsed, nil
 }
