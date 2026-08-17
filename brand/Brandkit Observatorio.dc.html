@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta charset="utf-8">
+<title>Brandkit — Observatório Turístico de Cumuruxatiba</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,800&family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#04171a;color:#f2e9dc;font-family:"Geist",ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;font-synthesis:none}
+@keyframes cxmarquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+a{color:#ff5a36;text-decoration:none}
+a:hover{color:#ff8a6d}
+::selection{background:#ff5a36;color:#04171a}
+summary::-webkit-details-marker{display:none}
+</style>
+</helmet>
+
+<header style="padding:80px 28px 56px;max-width:1320px;margin:0 auto">
+  <p style="display:flex;align-items:center;gap:12px;margin:0 0 26px;color:#2fc2af;font-family:'Geist Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.18em;text-transform:uppercase">
+    <span style="width:34px;height:2px;background:#ff5a36"></span>Brandkit v1 · agosto 2026
+  </p>
+  <h1 style="max-width:18ch;margin:0 0 24px;color:#f2e9dc;font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(44px,7vw,104px);font-weight:800;line-height:.88;letter-spacing:-.048em">Observatório Turístico de <span style="color:#ff5a36">Cumuruxatiba</span></h1>
+  <p style="max-width:60ch;margin:0;color:#b7c9c6;font-size:18px;line-height:1.6;text-wrap:pretty">Regras visuais extraídas do site público. Tudo que for feito neste projeto — página, painel, PDF, apresentação, post — usa exclusivamente o que está aqui.</p>
+</header>
+
+<section data-screen-label="Cores" style="padding:0 28px 88px;max-width:1320px;margin:0 auto">
+  <p style="display:flex;align-items:center;gap:12px;margin:0 0 20px;color:#2fc2af;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase">
+    <span data-no-i18n="true" style="color:#ff5a36">01</span><span style="width:24px;height:1px;background:rgba(242,233,220,.3)"></span>Paleta
+  </p>
+  <h2 style="margin:0 0 12px;color:#f2e9dc;font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(30px,3.6vw,52px);font-weight:800;line-height:.95;letter-spacing:-.04em">Cinco cores. Nada além.</h2>
+  <p style="max-width:56ch;margin:0 0 36px;color:#7f9995;font-size:15px;line-height:1.6">Oceano é o fundo padrão. Areia é o fundo claro alternativo. Coral é a única cor de ênfase e ação. Turquesa marca dado observado. Nunca introduza uma sexta cor.</p>
+  <ul style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:0 0 40px;padding:0;list-style:none">
+    <li style="overflow:hidden;border-radius:18px;border:1px solid rgba(242,233,220,.16)">
+      <span style="display:block;height:132px;background:#04171a;border-bottom:1px solid rgba(242,233,220,.16)"></span>
+      <span style="display:block;padding:16px 18px;background:#0a2529">
+        <strong style="display:block;color:#f2e9dc;font-size:15px;font-weight:650">Oceano</strong>
+        <code data-no-i18n="true" style="display:block;margin-top:5px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:12px">#04171a</code>
+        <span style="display:block;margin-top:8px;color:#7f9995;font-size:12.5px;line-height:1.45">Fundo padrão, texto sobre coral e areia.</span>
+      </span>
+    </li>
+    <li style="overflow:hidden;border-radius:18px;border:1px solid rgba(242,233,220,.16)">
+      <span style="display:block;height:132px;background:#0a2529;border-bottom:1px solid rgba(242,233,220,.16)"></span>
+      <span style="display:block;padding:16px 18px;background:#0a2529">
+        <strong style="display:block;color:#f2e9dc;font-size:15px;font-weight:650">Oceano elevado</strong>
+        <code data-no-i18n="true" style="display:block;margin-top:5px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:12px">#0a2529</code>
+        <span style="display:block;margin-top:8px;color:#7f9995;font-size:12.5px;line-height:1.45">Cartões, campos, linhas de tabela.</span>
+      </span>
+    </li>
+    <li style="overflow:hidden;border-radius:18px;border:1px solid rgba(242,233,220,.16)">
+      <span style="display:block;height:132px;background:#ff5a36;border-bottom:1px solid rgba(242,233,220,.16)"></span>
+      <span style="display:block;padding:16px 18px;background:#0a2529">
+        <strong style="display:block;color:#f2e9dc;font-size:15px;font-weight:650">Coral</strong>
+        <code data-no-i18n="true" style="display:block;margin-top:5px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:12px">#ff5a36</code>
+        <span style="display:block;margin-top:8px;color:#7f9995;font-size:12.5px;line-height:1.45">Ação, ênfase, previsão, numeração.</span>
+      </span>
+    </li>
+    <li style="overflow:hidden;border-radius:18px;border:1px solid rgba(242,233,220,.16)">
+      <span style="display:block;height:132px;background:#2fc2af;border-bottom:1px solid rgba(242,233,220,.16)"></span>
+      <span style="display:block;padding:16px 18px;background:#0a2529">
+        <strong style="display:block;color:#f2e9dc;font-size:15px;font-weight:650">Turquesa</strong>
+        <code data-no-i18n="true" style="display:block;margin-top:5px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:12px">#2fc2af</code>
+        <span style="display:block;margin-top:8px;color:#7f9995;font-size:12.5px;line-height:1.45">Dado observado, rótulos, confirmação.</span>
+      </span>
+    </li>
+    <li style="overflow:hidden;border-radius:18px;border:1px solid rgba(242,233,220,.16)">
+      <span style="display:block;height:132px;background:#f2e9dc;border-bottom:1px solid rgba(242,233,220,.16)"></span>
+      <span style="display:block;padding:16px 18px;background:#0a2529">
+        <strong style="display:block;color:#f2e9dc;font-size:15px;font-weight:650">Areia</strong>
+        <code data-no-i18n="true" style="display:block;margin-top:5px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:12px">#f2e9dc</code>
+        <span style="display:block;margin-top:8px;color:#7f9995;font-size:12.5px;line-height:1.45">Texto sobre escuro e fundo de seção clara.</span>
+      </span>
+    </li>
+  </ul>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0 32px;border-top:1px solid rgba(242,233,220,.18)">
+    <div style="padding:20px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 6px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Apoio</p>
+      <p style="margin:0;color:#f2e9dc;font-size:14.5px;line-height:1.55"><code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">#e8dbc8</code> areia escura (seção clara alternada) · <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">#0e2c31</code> cabeçalho de tabela</p>
+    </div>
+    <div style="padding:20px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 6px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Texto</p>
+      <p style="margin:0;color:#f2e9dc;font-size:14.5px;line-height:1.55">Sobre escuro: <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">#f2e9dc</code> título · <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">#b7c9c6</code> corpo · <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">#7f9995</code> auxiliar</p>
+    </div>
+    <div style="padding:20px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 6px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Texto sobre claro</p>
+      <p style="margin:0;color:#f2e9dc;font-size:14.5px;line-height:1.55"><code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">#04171a</code> título · <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">#3d5a5c</code> corpo</p>
+    </div>
+    <div style="padding:20px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 6px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Proibido</p>
+      <p style="margin:0;color:#f2e9dc;font-size:14.5px;line-height:1.55">Gradiente decorativo de fundo, azul de link padrão, cinza neutro puro, verde/vermelho de status genéricos.</p>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Tipografia" style="padding:0 28px 88px;max-width:1320px;margin:0 auto">
+  <p style="display:flex;align-items:center;gap:12px;margin:0 0 20px;color:#2fc2af;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase">
+    <span data-no-i18n="true" style="color:#ff5a36">02</span><span style="width:24px;height:1px;background:rgba(242,233,220,.3)"></span>Tipografia
+  </p>
+  <h2 style="margin:0 0 36px;color:#f2e9dc;font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(30px,3.6vw,52px);font-weight:800;line-height:.95;letter-spacing:-.04em">Três famílias, papéis fixos</h2>
+  <div style="display:grid;gap:2px;margin-bottom:36px">
+    <div style="padding:28px 30px;background:#0a2529;border-radius:16px">
+      <p style="margin:0 0 14px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Bricolage Grotesque 800 · display</p>
+      <p style="margin:0 0 12px;color:#f2e9dc;font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(38px,5.4vw,76px);font-weight:800;line-height:.88;letter-spacing:-.048em">Pessoas-dia, não palpite</p>
+      <p style="margin:0;color:#7f9995;font-size:13.5px;line-height:1.55">Só títulos e números-herói. <code data-no-i18n="true" style="font-family:'Geist Mono',monospace">line-height</code> entre .86 e .95 · <code data-no-i18n="true" style="font-family:'Geist Mono',monospace">letter-spacing</code> −.04 a −.05em. Nunca em corpo de texto, nunca abaixo de 24px.</p>
+    </div>
+    <div style="padding:28px 30px;background:#0a2529;border-radius:16px">
+      <p style="margin:0 0 14px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Geist 300–700 · corpo e interface</p>
+      <p style="margin:0 0 12px;max-width:58ch;color:#f2e9dc;font-size:19px;line-height:1.6">Pousadas e casas de aluguel registram as estadias em um só lugar, e a vila recebe o número agregado.</p>
+      <p style="margin:0;color:#7f9995;font-size:13.5px;line-height:1.55">Corpo 15–19px · <code data-no-i18n="true" style="font-family:'Geist Mono',monospace">line-height</code> 1.55–1.65 · medida máxima 56ch · subtítulos 650. Parágrafos sempre com <code data-no-i18n="true" style="font-family:'Geist Mono',monospace">text-wrap: pretty</code>.</p>
+    </div>
+    <div style="padding:28px 30px;background:#0a2529;border-radius:16px">
+      <p style="margin:0 0 14px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Geist Mono 600 · rótulo e dado</p>
+      <p style="margin:0 0 12px;color:#2fc2af;font-family:'Geist Mono',monospace;font-size:14px;font-weight:600;letter-spacing:.16em;text-transform:uppercase">Publicação protegida · 61% de cobertura</p>
+      <p style="margin:0;color:#7f9995;font-size:13.5px;line-height:1.55">Eyebrows, rótulos de eixo, navegação, chips e qualquer número tabular. Caixa alta, 10.5–12.5px, <code data-no-i18n="true" style="font-family:'Geist Mono',monospace">letter-spacing</code> .1–.18em.</p>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 32px;border-top:1px solid rgba(242,233,220,.18)">
+    <div style="padding:20px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 6px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Hero</p>
+      <p style="margin:0;color:#f2e9dc;font-family:'Geist Mono',monospace;font-size:14px">clamp(52px, 8.4vw, 132px)</p>
+    </div>
+    <div style="padding:20px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 6px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Título de seção</p>
+      <p style="margin:0;color:#f2e9dc;font-family:'Geist Mono',monospace;font-size:14px">clamp(40px, 6.6vw, 100px)</p>
+    </div>
+    <div style="padding:20px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 6px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Subtítulo</p>
+      <p style="margin:0;color:#f2e9dc;font-family:'Geist Mono',monospace;font-size:14px">clamp(28px, 3.4vw, 48px)</p>
+    </div>
+    <div style="padding:20px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 6px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Número-herói</p>
+      <p style="margin:0;color:#f2e9dc;font-family:'Geist Mono',monospace;font-size:14px">clamp(56px, 12vw, 168px)</p>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Botões" style="padding:0 28px 88px;max-width:1320px;margin:0 auto">
+  <p style="display:flex;align-items:center;gap:12px;margin:0 0 20px;color:#2fc2af;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase">
+    <span data-no-i18n="true" style="color:#ff5a36">03</span><span style="width:24px;height:1px;background:rgba(242,233,220,.3)"></span>Botões e campos
+  </p>
+  <h2 style="margin:0 0 12px;color:#f2e9dc;font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(30px,3.6vw,52px);font-weight:800;line-height:.95;letter-spacing:-.04em">Cápsula, sempre</h2>
+  <p style="max-width:56ch;margin:0 0 32px;color:#7f9995;font-size:15px;line-height:1.6">Todo botão é <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">border-radius: 999px</code> com peso 650. Dois tamanhos: padrão (<code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">16px 26px</code> / 15px, altura mín. 48px) e compacto, só para a barra fixa do topo (<code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">11px 18px</code> / 13px, altura mín. 38px). Um primário por tela. Passe o mouse para ver o estado.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px;margin-bottom:32px">
+    <div style="padding:30px;background:#0a2529;border-radius:16px">
+      <p style="margin:0 0 20px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Sobre fundo escuro</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+        <a href="#" style="padding:16px 26px;color:#04171a;background:#ff5a36;border-radius:999px;font-size:15px;font-weight:650" style-hover="background:#f2e9dc;color:#04171a">Primário</a>
+        <a href="#" style="padding:16px 26px;color:#f2e9dc;border:1px solid rgba(242,233,220,.34);border-radius:999px;font-size:15px;font-weight:600" style-hover="border-color:#2fc2af;color:#2fc2af">Secundário</a>
+        <a href="#" style="padding:16px 8px;color:#2fc2af;border-bottom:1px solid rgba(47,194,175,.4);font-size:15px;font-weight:600" style-hover="color:#f2e9dc;border-color:#f2e9dc">Terciário</a>
+      </div>
+      <div style="display:grid;gap:8px">
+        <input placeholder="Campo de texto" style="min-height:50px;padding:14px 16px;color:#f2e9dc;background:#04171a;border:1px solid rgba(242,233,220,.24);border-radius:12px;font-family:'Geist',sans-serif;font-size:15px" />
+        <select style="min-height:50px;padding:14px 16px;color:#f2e9dc;background:#04171a;border:1px solid rgba(242,233,220,.24);border-radius:12px;cursor:pointer;font-family:'Geist',sans-serif;font-size:15px">
+          <option>Seletor</option>
+        </select>
+      </div>
+    </div>
+    <div style="padding:30px;background:#ff5a36;border-radius:16px">
+      <p style="margin:0 0 20px;color:rgba(4,23,26,.7);font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Sobre coral</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+        <button type="button" style="padding:16px 26px;color:#f2e9dc;background:#04171a;border:0;border-radius:999px;font-family:'Geist',sans-serif;font-size:15px;font-weight:650;cursor:pointer" style-hover="background:#0a2529">Primário</button>
+        <button type="button" style="padding:16px 26px;color:#04171a;background:transparent;border:1px solid rgba(4,23,26,.45);border-radius:999px;font-family:'Geist',sans-serif;font-size:15px;font-weight:600;cursor:pointer" style-hover="border-color:#04171a;background:rgba(4,23,26,.08)">Secundário</button>
+      </div>
+      <input placeholder="Campo sobre coral" style="width:100%;min-height:50px;padding:14px 16px;color:#04171a;background:rgba(255,255,255,.72);border:1px solid rgba(4,23,26,.35);border-radius:12px;font-family:'Geist',sans-serif;font-size:15px" />
+    </div>
+    <div style="padding:30px;background:#f2e9dc;border-radius:16px">
+      <p style="margin:0 0 20px;color:#3d5a5c;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Sobre areia</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px">
+        <a href="#" style="padding:16px 26px;color:#f2e9dc;background:#04171a;border-radius:999px;font-size:15px;font-weight:650" style-hover="background:#ff5a36;color:#04171a">Primário</a>
+        <a href="#" style="padding:16px 26px;color:#04171a;border:1px solid rgba(4,23,26,.35);border-radius:999px;font-size:15px;font-weight:600" style-hover="border-color:#ff5a36;color:#ff5a36">Secundário</a>
+      </div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px;margin-bottom:32px">
+    <div style="padding:30px;background:#0a2529;border-radius:16px">
+      <p style="margin:0 0 20px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Compacto · barra fixa do topo</p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px">
+        <a href="#" style="padding:11px 18px;color:#04171a;background:#ff5a36;border-radius:999px;font-size:13px;font-weight:650;white-space:nowrap" style-hover="background:#f2e9dc;color:#04171a">Cadastrar hospedagem</a>
+        <div data-no-i18n="true" style="display:flex;gap:6px">
+          <span style="padding:4px 2px;border-bottom:2px solid #ff5a36;color:#f2e9dc;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.08em">PT</span>
+          <span style="padding:4px 2px;border-bottom:2px solid transparent;color:#7f9995;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.08em">EN</span>
+          <span style="padding:4px 2px;border-bottom:2px solid transparent;color:#7f9995;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.08em">ES</span>
+        </div>
+      </div>
+      <p style="margin:16px 0 0;max-width:44ch;color:#7f9995;font-size:12.5px;line-height:1.5">O seletor de idioma é a única exceção à cápsula: aba mono de 11px com régua inferior de 2px — coral no ativo, transparente nos demais. Nunca use esse padrão fora do cabeçalho.</p>
+    </div>
+    <div style="padding:30px;background:#0a2529;border-radius:16px">
+      <p style="margin:0 0 20px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Navegação do cabeçalho</p>
+      <nav style="display:flex;flex-wrap:wrap;gap:20px">
+        <a href="#" style="color:#b7c9c6;font-family:'Geist Mono',monospace;font-size:11.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase" style-hover="color:#ff5a36">Números</a>
+        <a href="#" style="color:#b7c9c6;font-family:'Geist Mono',monospace;font-size:11.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase" style-hover="color:#ff5a36">Anfitriões</a>
+        <a href="#" style="color:#b7c9c6;font-family:'Geist Mono',monospace;font-size:11.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase" style-hover="color:#ff5a36">Privacidade</a>
+      </nav>
+      <p style="margin:16px 0 0;max-width:44ch;color:#7f9995;font-size:12.5px;line-height:1.5">Link de navegação é mono 11.5px caixa alta, peso 500, sem fundo e sem borda; hover troca para coral. Barra fixa com fundo oceano a 82% e blur de 14px.</p>
+    </div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+    <span style="padding:7px 14px;color:#04171a;background:#2fc2af;border-radius:999px;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase">Chip informativo</span>
+    <span style="padding:6px 13px;color:#ff5a36;border:1px solid rgba(255,90,54,.5);border-radius:999px;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase">Dado protegido</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;color:#b7c9c6;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase"><span style="width:14px;height:8px;background:#2fc2af"></span>Legenda observado</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;color:#b7c9c6;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase"><span style="width:14px;height:3px;background:#ff5a36"></span>Legenda previsto</span>
+  </div>
+</section>
+
+<section data-screen-label="Componentes" style="padding:0 28px 88px;max-width:1320px;margin:0 auto">
+  <p style="display:flex;align-items:center;gap:12px;margin:0 0 20px;color:#2fc2af;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase">
+    <span data-no-i18n="true" style="color:#ff5a36">04</span><span style="width:24px;height:1px;background:rgba(242,233,220,.3)"></span>Componentes
+  </p>
+  <h2 style="margin:0 0 36px;color:#f2e9dc;font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(30px,3.6vw,52px);font-weight:800;line-height:.95;letter-spacing:-.04em">Peças recorrentes</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin-bottom:24px">
+    <article style="padding:34px;background:#0a2529;border:1px solid rgba(47,194,175,.4);border-radius:20px">
+      <p style="margin:0 0 6px;color:#2fc2af;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Cartão de indicador · observado</p>
+      <p style="margin:0 0 14px;color:#7f9995;font-size:13px">● Observado</p>
+      <p style="margin:0 0 8px;color:#2fc2af;font-family:'Bricolage Grotesque',sans-serif;font-size:72px;font-weight:800;line-height:.85;letter-spacing:-.05em;font-variant-numeric:tabular-nums">788</p>
+      <p style="margin:0 0 16px;color:#f2e9dc;font-size:15px;font-weight:600">pessoas-dia</p>
+      <p style="margin:0;max-width:42ch;color:#7f9995;font-size:13.5px;line-height:1.55">Borda turquesa a 40%, fundo oceano elevado, raio 20px, padding 34px. O número herda a cor do tipo de dado.</p>
+    </article>
+    <article style="padding:34px;background:#0a2529;border:1px solid rgba(255,90,54,.42);border-radius:20px">
+      <p style="margin:0 0 6px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Cartão de indicador · previsto</p>
+      <p style="margin:0 0 14px;color:#7f9995;font-size:13px">◇ Previsto</p>
+      <p style="margin:0 0 8px;color:#ff5a36;font-family:'Bricolage Grotesque',sans-serif;font-size:72px;font-weight:800;line-height:.85;letter-spacing:-.05em;font-variant-numeric:tabular-nums">1010</p>
+      <p style="margin:0 0 16px;color:#f2e9dc;font-size:15px;font-weight:600">5 de setembro · faixa provável 830–1250</p>
+      <p style="margin:0;max-width:42ch;color:#7f9995;font-size:13.5px;line-height:1.55">Previsão nunca aparece sem a faixa provável ao lado. Observado nunca usa coral; previsto nunca usa turquesa.</p>
+    </article>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 32px;margin-bottom:24px;border-top:1px solid rgba(242,233,220,.18)">
+    <div style="padding:24px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 10px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Régua de dados</p>
+      <p style="margin:0;color:#f2e9dc;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:800;letter-spacing:-.035em;line-height:1.1">571 pessoas-dia</p>
+      <p style="margin:8px 0 0;max-width:40ch;color:#7f9995;font-size:12.5px;line-height:1.5">Métrica secundária vive em linha de régua (borda 1px a 18%), nunca em cartão. Rótulo mono, valor display 24px, dica 12.5px.</p>
+    </div>
+    <div style="padding:24px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 10px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Barra de proporção</p>
+      <span style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;background:#0a2529;overflow:hidden">
+        <span style="position:absolute;inset:0 auto 0 0;width:72%;background:linear-gradient(90deg,rgba(47,194,175,.45),rgba(47,194,175,.08))"></span>
+        <span style="position:relative;color:#f2e9dc;font-size:14px;font-weight:550">sábado</span>
+        <span style="position:relative;color:#f2e9dc;font-family:'Geist Mono',monospace;font-size:13px;font-weight:600">781 pessoas-dia</span>
+      </span>
+      <p style="margin:8px 0 0;max-width:40ch;color:#7f9995;font-size:12.5px;line-height:1.5">Preenchimento em degradê turquesa 45%→8%, sem raio, empilhado com gap 2px.</p>
+    </div>
+  </div>
+  <div style="display:grid;gap:0;margin-bottom:32px;border-top:1px solid rgba(242,233,220,.2)">
+    <details style="border-bottom:1px solid rgba(242,233,220,.2)">
+      <summary style="padding:22px 0;cursor:pointer;color:#f2e9dc;font-size:17px;font-weight:600;letter-spacing:-.015em;list-style:none">Acordeão — pergunta frequente</summary>
+      <p style="margin:0;padding:0 0 24px;max-width:56ch;color:#b7c9c6;font-size:15px;line-height:1.65;text-wrap:pretty">Sem caixa, sem fundo: apenas régua de 1px, título 17px peso 600 e resposta em corpo 15px com medida máxima de 56ch.</p>
+    </details>
+  </div>
+  <p style="margin:0 0 14px;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Faixa de dados — assinatura da marca</p>
+  <div style="overflow:hidden;background:#ff5a36;border-top:2px solid #04171a;border-bottom:2px solid #04171a;margin-bottom:16px">
+    <div style="display:flex;width:max-content;animation:cxmarquee 34s linear infinite">
+      <ul data-no-i18n="true" style="display:flex;align-items:center;gap:34px;margin:0;padding:14px 17px;list-style:none;color:#04171a;font-family:'Geist Mono',monospace;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap">
+        <li>Presença hoje 788</li>
+        <li style="opacity:.5">◆</li>
+        <li>Pico previsto 1010</li>
+        <li style="opacity:.5">◆</li>
+        <li>Hospedagens ativas 46</li>
+        <li style="opacity:.5">◆</li>
+        <li>Cobertura estimada 61%</li>
+        <li style="opacity:.5">◆</li>
+        <li>Dados fictícios de protótipo</li>
+        <li style="opacity:.5">◆</li>
+      </ul>
+      <ul aria-hidden="true" data-no-i18n="true" style="display:flex;align-items:center;gap:34px;margin:0;padding:14px 17px;list-style:none;color:#04171a;font-family:'Geist Mono',monospace;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap">
+        <li>Presença hoje 788</li>
+        <li style="opacity:.5">◆</li>
+        <li>Pico previsto 1010</li>
+        <li style="opacity:.5">◆</li>
+        <li>Hospedagens ativas 46</li>
+        <li style="opacity:.5">◆</li>
+        <li>Cobertura estimada 61%</li>
+        <li style="opacity:.5">◆</li>
+        <li>Dados fictícios de protótipo</li>
+        <li style="opacity:.5">◆</li>
+      </ul>
+    </div>
+  </div>
+  <p style="margin:0;max-width:72ch;color:#7f9995;font-size:13.5px;line-height:1.6;text-wrap:pretty">Faixa sangrada em coral, réguas de 2px oceano acima e abaixo, mono 12.5px caixa alta com <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">letter-spacing:.1em</code>, separador <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">◆</code> a 50% de opacidade. A lista é duplicada (a segunda com <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">aria-hidden</code>) dentro de um <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">width:max-content</code> e roda com <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">animation: cxmarquee 34s linear infinite</code>. Declare no helmet da peça: <code data-no-i18n="true" style="font-family:'Geist Mono',monospace;color:#b7c9c6">@keyframes cxmarquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}</code>. Uma faixa por página, sempre logo abaixo do hero.</p>
+</section>
+
+<section data-screen-label="Layout" style="padding:0 28px 88px;max-width:1320px;margin:0 auto">
+  <p style="display:flex;align-items:center;gap:12px;margin:0 0 20px;color:#2fc2af;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase">
+    <span data-no-i18n="true" style="color:#ff5a36">05</span><span style="width:24px;height:1px;background:rgba(242,233,220,.3)"></span>Layout e ritmo
+  </p>
+  <h2 style="margin:0 0 36px;color:#f2e9dc;font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(30px,3.6vw,52px);font-weight:800;line-height:.95;letter-spacing:-.04em">Grade e alternância</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0 32px;border-top:1px solid rgba(242,233,220,.18)">
+    <div style="padding:22px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 8px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Contêiner</p>
+      <p style="margin:0;max-width:44ch;color:#b7c9c6;font-size:14.5px;line-height:1.6">Largura máxima 1320px, padding lateral 28px, respiro vertical de seção 96px.</p>
+    </div>
+    <div style="padding:22px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 8px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Alternância de fundo</p>
+      <p style="margin:0;max-width:44ch;color:#b7c9c6;font-size:14.5px;line-height:1.6">Oceano → areia → areia escura → coral → oceano. No máximo uma seção coral chapada por página.</p>
+    </div>
+    <div style="padding:22px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 8px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Numeração</p>
+      <p style="margin:0;max-width:44ch;color:#b7c9c6;font-size:14.5px;line-height:1.6">Toda seção abre com eyebrow: número coral, régua de 24px e rótulo mono em caixa alta.</p>
+    </div>
+    <div style="padding:22px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 8px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Grades</p>
+      <p style="margin:0;max-width:44ch;color:#b7c9c6;font-size:14.5px;line-height:1.6">Sempre flex/grid com gap. Grade de réguas usa padding uniforme e <code data-no-i18n="true" style="font-family:'Geist Mono',monospace">gap: 0 32px</code> — nunca padding assimétrico por coluna.</p>
+    </div>
+    <div style="padding:22px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 8px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Raios</p>
+      <p style="margin:0;max-width:44ch;color:#b7c9c6;font-size:14.5px;line-height:1.6">Cartão 20px · painel 22px · campo 12px · imagem 18px · botão e chip 999px. Nada de sombra colorida.</p>
+    </div>
+    <div style="padding:22px 0;border-bottom:1px solid rgba(242,233,220,.18)">
+      <p style="margin:0 0 8px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Imagem</p>
+      <p style="margin:0;max-width:44ch;color:#b7c9c6;font-size:14.5px;line-height:1.6">Foto real ou placeholder arrastável. Sem ilustração vetorial, sem ícone decorativo, sem emoji.</p>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Voz" style="padding:0 28px 96px;max-width:1320px;margin:0 auto">
+  <p style="display:flex;align-items:center;gap:12px;margin:0 0 20px;color:#2fc2af;font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase">
+    <span data-no-i18n="true" style="color:#ff5a36">06</span><span style="width:24px;height:1px;background:rgba(242,233,220,.3)"></span>Voz e dado
+  </p>
+  <h2 style="max-width:20ch;margin:0 0 36px;color:#f2e9dc;font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(30px,3.6vw,52px);font-weight:800;line-height:.95;letter-spacing:-.04em">Fala de vila, rigor de estatística</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+    <div style="padding:30px;background:#0a2529;border-left:3px solid #2fc2af;border-radius:0 16px 16px 0">
+      <p style="margin:0 0 16px;color:#2fc2af;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Faça</p>
+      <ul style="display:grid;gap:12px;margin:0;padding:0;list-style:none;color:#b7c9c6;font-size:14.5px;line-height:1.55">
+        <li>Frase curta, sujeito concreto: "Sua casa também é turismo."</li>
+        <li>Sempre nomear a unidade: pessoas-dia.</li>
+        <li>Previsão sempre acompanhada da faixa provável.</li>
+        <li>Dizer o que o dado não é: cobertura parcial, não censo.</li>
+        <li>Rótulo de dado fictício visível em toda peça de protótipo.</li>
+      </ul>
+    </div>
+    <div style="padding:30px;background:#0a2529;border-left:3px solid #ff5a36;border-radius:0 16px 16px 0">
+      <p style="margin:0 0 16px;color:#ff5a36;font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">Não faça</p>
+      <ul style="display:grid;gap:12px;margin:0;padding:0;list-style:none;color:#b7c9c6;font-size:14.5px;line-height:1.55">
+        <li>Jargão de gestão: "solução integrada", "ecossistema".</li>
+        <li>Tom de fiscalização ou obrigatoriedade.</li>
+        <li>Número por estabelecimento em qualquer peça pública.</li>
+        <li>Dado inventado sem o aviso de protótipo.</li>
+        <li>Emoji, exclamação dupla, promessa de crescimento.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer style="padding:32px 28px;border-top:1px solid rgba(242,233,220,.14)">
+  <div style="max-width:1320px;margin:0 auto;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between">
+    <p style="margin:0;max-width:64ch;color:#7f9995;font-size:12.5px;line-height:1.55">Referência viva. Qualquer nova peça deste projeto deve poder ser conferida contra este documento sem exceção.</p>
+    <p data-no-i18n="true" style="margin:0;color:#7f9995;font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.14em">BRANDKIT · CUMURUXATIBA 2026</p>
+  </div>
+</footer>
+
+</x-dc>
+</body>
+</html>

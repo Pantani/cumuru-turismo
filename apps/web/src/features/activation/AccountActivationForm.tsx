@@ -28,6 +28,11 @@ type AccommodationActivationContext =
 const guestClient = createPhase7Client({ getAccessToken: () => null });
 
 /** Consumed, revoked, expired and forged all answer the same 404, by design. */
+/**
+ * Mesma regra do canal aberto: `problem.title` é escrito para quem opera o
+ * serviço, e esta tela é pública. Só o `422` continua vindo do servidor, porque
+ * é a política de senha e a pessoa precisa saber o que corrigir.
+ */
 function describeActivationFailure(error: unknown) {
   if (!(error instanceof Phase7ApiError)) {
     return "Sem conexão agora. Tente de novo em instantes.";
@@ -35,7 +40,10 @@ function describeActivationFailure(error: unknown) {
   if (error.status === 404) {
     return "Este link de acesso não é mais válido. Peça outro a quem administra a hospedagem.";
   }
-  return error.problem.title;
+  if (error.status === 422) {
+    return error.problem.title;
+  }
+  return "Não conseguimos concluir a ativação agora. Tente de novo em alguns instantes.";
 }
 
 interface SecretFieldProps {

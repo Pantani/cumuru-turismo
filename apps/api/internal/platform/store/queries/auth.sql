@@ -137,7 +137,14 @@ VALUES (
   sqlc.arg(scopes),
   'pending_activation'
 )
-RETURNING id, email, display_name, scopes, status, created_at;
+-- O RETURNING não pode projetar created_at: app_runtime tem SELECT por coluna em
+-- auth.accounts e created_at não está na lista. RETURNING exige SELECT sobre a
+-- coluna projetada, então a cláusula derrubava a transação inteira com
+-- "permission denied for table accounts" — no INSERT, que é o primeiro passo da
+-- emissão. Conceder SELECT (created_at) resolveria o sintoma ampliando
+-- privilégio para um valor que ninguém lê, contra a minimização por coluna da
+-- baseline. O Go consome apenas row.ID.
+RETURNING id, email, display_name, scopes, status;
 
 -- name: RevokeOpenActivationCapabilities :execrows
 -- A reemissão revoga a capability anterior na mesma transação: o índice parcial

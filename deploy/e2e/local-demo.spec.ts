@@ -42,6 +42,20 @@ async function signIn(page: Page) {
   ).toBeVisible();
 }
 
+/**
+ * A sessão vive só na memória da aba, então uma navegação completa pode ou não
+ * preservá-la. Voltar à área do operador precisa funcionar nos dois casos.
+ */
+async function ensureWorkspace(page: Page) {
+  await page.goto("/acesso");
+  const accommodations = page.getByRole("region", { name: "Suas hospedagens" });
+  if (await accommodations.isVisible().catch(() => false)) {
+    return accommodations;
+  }
+  await signIn(page);
+  return accommodations;
+}
+
 /** The board is titled after the selected accommodation, never after an id. */
 function stayBoardFor(page: Page, accommodationName: string) {
   return page.getByRole("region", {
@@ -137,48 +151,54 @@ test("percorre a jornada local sem persistir authorities", async ({
   context,
   page,
 }) => {
-  // A Fase 7 responde 404 uniforme quando a capability não existe, para não
-  // revelar se ela existe (ADR-039). O painel consulta o convite de cada
-  // acomodação a cada carga, então "sem convite ativo" é um 404 esperado e o
-  // navegador o registra no console. Só esse par rota+status é tolerado; o
-  // resto continua exigindo zero, inclusive outro 404 em outra rota.
-  const ABSENT_CAPABILITY_ROUTE =
-    /^\/api\/v1\/accommodations\/[0-9a-f-]+\/invite$/;
-  // location().url vem vazio em erros de console sem recurso associado.
-  const pathnameOf = (url: string) => {
-    try {
-      return new URL(url).pathname;
-    } catch {
-      return "";
-    }
-  };
-  const isAbsentCapabilityRoute = (url: string) =>
-    ABSENT_CAPABILITY_ROUTE.test(pathnameOf(url));
   const consoleErrors: string[] = [];
   const failedAPIResponses: string[] = [];
-  page.on("response", (response) => {
-    if (!response.url().includes("/api/") || response.status() < 400) {
-      return;
-    }
-    if (response.status() === 404 && isAbsentCapabilityRoute(response.url())) {
-      return;
-    }
-    failedAPIResponses.push(
-      `${response.status()} ${new URL(response.url()).pathname}`,
-    );
-  });
+  // Exceção nomeada, deliberadamente estreita. O painel do cartaz consulta
+  // GET /accommodations/{id}/invite assim que monta, e "não há cartaz ativo" é
+  // 404 declarado no contrato, não falha. Tolerar 404 em geral cegaria o gate
+  // inteiro; aqui só este caminho, só com este status, e só antes de o cartaz
+  // existir. Depois de emitido, um 404 nesta mesma rota volta a ser falha.
+  const posterAbsenceRoute = /^\/api\/v1\/accommodations\/[0-9a-fA-F-]+\/invite$/u;
+  const declaredPosterAbsences: string[] = [];
+  const declaredPosterConsoleErrors: string[] = [];
+  let posterIssued = false;
+
+  // O navegador registra o mesmo 404 duas vezes: uma na rede e uma no console.
+  // Aceitá-lo na rede e proibi-lo no console faria o spec se contradizer sobre
+  // o mesmo fato. A exceção é a mesma, com os mesmos três limites — aquela
+  // rota, aquele status, e só antes da emissão —, e o casamento é pela URL de
+  // origem da mensagem, não pelo texto, que é do navegador e não do contrato.
   page.on("console", (message) => {
     if (message.type() !== "error") {
       return;
     }
-    // location().url é a URL do recurso que falhou, então o descarte é por
-    // pedido e não por categoria: um erro em qualquer outra rota, inclusive
-    // num asset, continua reprovando. Um status diferente de 404 nessa mesma
-    // rota ainda reprova pelo failedAPIResponses acima.
-    if (isAbsentCapabilityRoute(message.location().url)) {
+    const location = message.location().url;
+    const pathname = location === "" ? "" : new URL(location).pathname;
+    if (
+      !posterIssued &&
+      posterAbsenceRoute.test(pathname) &&
+      message.text().includes("404")
+    ) {
+      declaredPosterConsoleErrors.push(`${pathname} ${message.text()}`);
       return;
     }
     consoleErrors.push(message.text());
+  });
+  page.on("response", (response) => {
+    if (!response.url().includes("/api/") || response.status() < 400) {
+      return;
+    }
+    const pathname = new URL(response.url()).pathname;
+    const entry = `${response.status()} ${pathname}`;
+    if (
+      !posterIssued &&
+      response.status() === 404 &&
+      posterAbsenceRoute.test(pathname)
+    ) {
+      declaredPosterAbsences.push(entry);
+      return;
+    }
+    failedAPIResponses.push(entry);
   });
 
   await page.goto("/");
@@ -299,6 +319,105 @@ test("percorre a jornada local sem persistir authorities", async ({
     page.getByRole("heading", { name: "Participação registrada" }),
   ).toBeVisible();
 
+  // --- Fase 7: cartaz, autocadastro pelo link aberto e aprovação -----------
+  //
+  // Fecha N-45: o QR é gerado no navegador, sob a CSP existente, sem nenhuma
+  // requisição a host externo, e a prova de trabalho é resolvida pelo módulo
+  // real do cliente — não por uma reimplementação.
+  // A jornada terminou na pesquisa; a área do operador precisa ser reaberta e a
+  // hospedagem reselecionada antes de o painel do cartaz existir.
+  const workspace = await ensureWorkspace(page);
+  await workspace.getByRole("button", { name: formalName }).click();
+
+  const posterPanel = page.getByRole("region", {
+    name: "Cartaz de autocadastro",
+  });
+  await expect(posterPanel).toBeVisible();
+
+  const posterResponsePromise = page.waitForResponse((response) =>
+    response.request().method() === "POST" &&
+    /\/api\/v1\/accommodations\/[0-9a-fA-F-]+\/invite$/u.test(
+      new URL(response.url()).pathname,
+    )
+  );
+  await posterPanel.getByRole("button", { name: "Emitir cartaz" }).click();
+  const posterResponse = await posterResponsePromise;
+  expect(posterResponse.status()).toBe(201);
+  posterIssued = true;
+
+  const poster = await posterResponse.json() as { url: string };
+  const posterURL = new URL(poster.url);
+  // O token vive no fragmento e nunca no caminho: é isso que o mantém fora de
+  // linha de requisição, access log, WAF e CDN (ADR-039).
+  expect(posterURL.pathname).toBe("/i");
+  expect(posterURL.search).toBe("");
+  const posterToken = posterURL.hash.replace(/^#/u, "");
+  expect(posterToken.length).toBeGreaterThanOrEqual(64);
+
+  // O QR é desenhado no próprio navegador; nenhuma imagem vem de fora.
+  await expect(
+    page.getByRole("group", { name: "Cartaz pronto para impressão" }),
+  ).toBeVisible();
+
+  await page.goto(`/i#${posterToken}`);
+  await expect(
+    page.getByRole("heading", { name: "Aviso de privacidade" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Confirme os dados da estadia" }),
+  ).toBeVisible();
+
+  await page.getByLabel("Data de chegada").fill("2026-11-03");
+  await page.getByLabel("Data de saída").fill("2026-11-07");
+  await page.getByLabel("UF de residência do visitante 1").fill("BA");
+  await page.getByLabel("Município IBGE do visitante 1").fill("2925509");
+
+  const submitResponsePromise = page.waitForResponse((response) =>
+    response.request().method() === "POST" &&
+    new URL(response.url()).pathname === "/api/v1/accommodation-invite/submit"
+  );
+  await page.getByRole("button", { name: "Enviar autocadastro" }).click();
+  const submitResponse = await submitResponsePromise;
+  expect(submitResponse.status()).toBe(200);
+  expect(await submitResponse.json()).toMatchObject({
+    approval_state: "pending",
+    stay_status: "pre_registered",
+    status: "accepted",
+  });
+  // O corpo enviado carrega a solução da prova de trabalho, resolvida pelo
+  // módulo do cliente sob WebCrypto, e nenhum campo de identidade.
+  const submitBody = submitResponse.request().postDataJSON() as Record<
+    string,
+    unknown
+  >;
+  expect(submitBody).toHaveProperty("proof_of_work");
+  for (const forbidden of ["contact", "document_number", "email", "full_name"]) {
+    expect(JSON.stringify(submitBody)).not.toContain(forbidden);
+  }
+  await expect(
+    page.getByRole("heading", { name: "Autocadastro enviado" }),
+  ).toBeVisible();
+
+  // A sessão vive só na memória da aba, então voltar exige entrar de novo.
+  const workspaceAgain = await ensureWorkspace(page);
+  await workspaceAgain.getByRole("button", { name: formalName }).click();
+
+  const queue = page.getByRole("region", { name: "Aguardando aprovação" });
+  await expect(queue).toBeVisible();
+  const pending = queue.getByRole("listitem").first();
+  await expect(pending).toBeVisible();
+
+  const approveResponsePromise = page.waitForResponse((response) =>
+    response.request().method() === "POST" &&
+    new URL(response.url()).pathname.endsWith("/approve")
+  );
+  await pending.getByRole("button", { name: "Aprovar" }).click();
+  const approveResponse = await approveResponsePromise;
+  expect(approveResponse.status()).toBe(200);
+  await expect(
+    page.getByRole("group", { name: "Autocadastro aprovado" }),
+  ).toBeVisible();
+
   await page.evaluate(async () => {
     if ("serviceWorker" in navigator) {
       await navigator.serviceWorker.ready;
@@ -392,4 +511,23 @@ test("percorre a jornada local sem persistir authorities", async ({
   expect(await context.cookies()).toEqual([]);
   expect(consoleErrors).toEqual([]);
   expect(failedAPIResponses).toEqual([]);
+  // A exceção só se justifica enquanto o estado que ela descreve acontecer. Se
+  // nunca ocorrer, ela virou tolerância morta e precisa sair daqui — por isso a
+  // asserção exige que tenha ocorrido, e que cada ocorrência seja exatamente o
+  // 404 do painel do cartaz antes da emissão.
+  expect(declaredPosterAbsences.length).toBeGreaterThan(0);
+  for (const absence of declaredPosterAbsences) {
+    expect(absence).toMatch(
+      /^404 \/api\/v1\/accommodations\/[0-9a-fA-F-]+\/invite$/u,
+    );
+  }
+  // A tolerância do console também não pode sobreviver à sua causa: se nunca
+  // ocorrer, ela virou cegueira e sai daqui. E cada ocorrência precisa vir da
+  // rota do cartaz, não de qualquer 404 que o navegador resolva registrar.
+  expect(declaredPosterConsoleErrors.length).toBeGreaterThan(0);
+  for (const logged of declaredPosterConsoleErrors) {
+    expect(logged).toMatch(
+      /^\/api\/v1\/accommodations\/[0-9a-fA-F-]+\/invite /u,
+    );
+  }
 });

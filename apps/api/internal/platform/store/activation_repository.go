@@ -113,7 +113,7 @@ func (r *ActivationRepository) issueActivation(
 	if err != nil {
 		return storedMutation{}, activationDomainError(err)
 	}
-	account, err := r.createPendingAccount(ctx, q, command)
+	account, err := r.resolveActivationAccount(ctx, q, command)
 	if err != nil {
 		return storedMutation{}, err
 	}
@@ -130,10 +130,72 @@ func (r *ActivationRepository) issueActivation(
 	})
 }
 
+// resolveActivationAccount is what makes re-issuing work. The contract and the
+// ADR-041 describe a re-issue as the same account receiving a new capability,
+// not a second account: creating one violates accounts_email_idx and aborts the
+// whole transaction, which is how the endpoint came to answer 409 on every
+// second call.
+func (r *ActivationRepository) resolveActivationAccount(
+	ctx context.Context,
+	q generated.Querier,
+	command activation.CreateCommand,
+) (uuid.UUID, error) {
+	row, err := q.FindAuthAccountByEmail(ctx, NormalizeEmail(command.Email))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return r.provisionAccount(ctx, q, command)
+	}
+	if err != nil {
+		return uuid.Nil, activation.ErrUnavailable
+	}
+	return r.reusePendingAccount(ctx, q, command, row)
+}
+
+// An account that already activated keeps its credential. Re-issuing must never
+// downgrade it to pending nor erase the password — accounts_credential_state_valid
+// ties a missing hash to pending_activation, so a downgrade would either violate
+// the CHECK or destroy a live credential. Refusing is the only answer that
+// touches neither.
+func (r *ActivationRepository) reusePendingAccount(
+	ctx context.Context,
+	q generated.Querier,
+	command activation.CreateCommand,
+	row generated.FindAuthAccountByEmailRow,
+) (uuid.UUID, error) {
+	if row.Status != accountStatusPendingActivation {
+		return uuid.Nil, activation.ErrConflict
+	}
+	accountID := idFromPG(row.ID)
+	return accountID, r.ensureManagerMembership(ctx, q, command, accountID)
+}
+
+// The membership already exists when the same e-mail is re-issued for the same
+// accommodation, and does not when the same e-mail is issued for a different
+// one. Reading the accessible accommodation is the existence check; blindly
+// inserting would hit the unique index on
+// (accommodation_id, oidc_issuer, oidc_subject) and hide the difference.
+func (r *ActivationRepository) ensureManagerMembership(
+	ctx context.Context,
+	q generated.Querier,
+	command activation.CreateCommand,
+	accountID uuid.UUID,
+) error {
+	_, err := q.GetAccessibleAccommodation(ctx, generated.GetAccessibleAccommodationParams{
+		AccommodationID: idToPG(command.AccommodationID),
+		OidcIssuer:      access.LocalSessionIssuer, OidcSubject: accountID.String(),
+	})
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return activation.ErrUnavailable
+	}
+	return r.linkMembership(ctx, q, command, accountID)
+}
+
 // The account is born without a hash, in pending_activation, which is exactly
 // what accounts_credential_state_valid ties together. It cannot authenticate
 // until the activation writes the password.
-func (r *ActivationRepository) createPendingAccount(
+func (r *ActivationRepository) provisionAccount(
 	ctx context.Context,
 	q generated.Querier,
 	command activation.CreateCommand,
@@ -151,7 +213,8 @@ func (r *ActivationRepository) createPendingAccount(
 	if err != nil {
 		return uuid.Nil, activationWriteError(err)
 	}
-	return r.linkMembership(ctx, q, command, idFromPG(row.ID))
+	created := idFromPG(row.ID)
+	return created, r.linkMembership(ctx, q, command, created)
 }
 
 // The membership binds the pending account to the accommodation as a manager.
@@ -162,10 +225,10 @@ func (r *ActivationRepository) linkMembership(
 	q generated.Querier,
 	command activation.CreateCommand,
 	accountID uuid.UUID,
-) (uuid.UUID, error) {
+) error {
 	membershipID, err := uuid.NewV7()
 	if err != nil {
-		return uuid.Nil, activation.ErrUnavailable
+		return activation.ErrUnavailable
 	}
 	_, err = q.CreateActivationManagerMembership(
 		ctx, generated.CreateActivationManagerMembershipParams{
@@ -176,9 +239,9 @@ func (r *ActivationRepository) linkMembership(
 		},
 	)
 	if err != nil {
-		return uuid.Nil, activationWriteError(err)
+		return activationWriteError(err)
 	}
-	return accountID, nil
+	return nil
 }
 
 // Re-issuing revokes the previous capability in the same transaction, and the
