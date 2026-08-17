@@ -6,7 +6,7 @@
  *
  * The challenge is opaque and MAC-authenticated by the API; the client cannot
  * lower the difficulty, because the difficulty travels inside the MAC. The work
- * is a toll, not a bot defence: what protects data subjects in this phase is
+ * is a toll, not a bot defence: what protects data subjects here is
  * human approval, purge on rejection and expiry, and the presence filter.
  *
  * Wire convention, pinned by the tests in `proof-of-work.test.ts`:

@@ -53,6 +53,38 @@ arquivo.
 
 ### Alterado
 
+- **o código passou a ser nomeado por funcionalidade, não pela fase que a
+  entregou.** `Phase2Config`, `Phase3Config`, `Phase4Config` e `Phase7Config`
+  viraram `CoreConfig`, `QuestionnaireConfig`, `AnalyticsConfig` e
+  `SelfServiceConfig`; os arquivos `config/phase*.go` viraram `core.go`,
+  `questionnaire.go`, `analytics.go` e `selfservice.go`, com `keyring.go` e
+  `url.go` extraídos. Fase continua existindo apenas como ordem de entrega no
+  harness. O mapa completo está em **Vocabulário de funcionalidades** no
+  [`README`](README.md);
+
+- **quebra de configuração:** `PHASE3_ENABLED`, `PHASE4_*` e `PHASE7_ENABLED`
+  passam a ser `QUESTIONNAIRE_ENABLED`, `ANALYTICS_*` e
+  `SELF_SERVICE_ENABLED`. Runtimes já provisionados precisam renomear as chaves
+  antes do próximo deploy; não há alias de compatibilidade;
+
+- **quebra de contrato:** a extensão `x-cumuru-implementation-phase` passa a ser
+  `x-cumuru-feature`, com valores `platform`, `core`, `questionnaire`,
+  `analytics`, `self-service` e `deferred` no lugar do número da fase; e o valor
+  de enum `phase_not_implemented` de `UnavailableQualityCount.reason_code`
+  passa a ser `not_implemented`;
+
+- os quatro clients web foram reconstruídos sobre um transporte único,
+  `shared/api/http-client.ts`, que concentra sessão, cabeçalhos, contrato de
+  resposta e uma só classe `ApiError` no lugar de `Phase2ApiError`,
+  `Phase3ApiError`, `Phase4ApiError` e `Phase7ApiError` — `use-operation`
+  deixou de precisar testar `instanceof` duas vezes para uma única falha. Os
+  validadores de payload público saíram para `shared/api/analytics-payload.ts`;
+
+- os alvos de teste e os scripts `deploy/scripts/test-phase*.sh` e
+  `deploy/compose.phase*.yaml` passaram a nomear a funcionalidade:
+  `core-integration`, `questionnaire-integration`, `analytics-full-stack`,
+  `self-service-integration`, entre outros;
+
 - a CI deixou de ser um job sequencial único e passa a executar catorze jobs
   paralelos com uma porta única `ci` exigida pela proteção de branch; cada job
   instala apenas a cadeia de ferramentas que usa através da action composta

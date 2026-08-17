@@ -1,4 +1,4 @@
-import { Phase7ApiError } from "../../shared/api/phase7-client";
+import { ApiError } from "../../shared/api/http-client";
 
 const strongEtagPattern = /^"([1-9][0-9]*)"$/u;
 
@@ -17,5 +17,5 @@ export function versionFromEtag(etag: string | null) {
 
 /** A missing poster is a state of the screen, not a failure to report. */
 export function isNotFound(error: unknown) {
-  return error instanceof Phase7ApiError && error.status === 404;
+  return error instanceof ApiError && error.status === 404;
 }

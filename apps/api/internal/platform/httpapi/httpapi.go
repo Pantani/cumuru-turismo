@@ -166,13 +166,13 @@ func (d Dependencies) registerFeatureRoutes(mux *http.ServeMux, metrics *httpMet
 	if d.Questionnaires != nil {
 		d.registerQuestionnaireRoutes(mux, metrics)
 	}
-	d.registerPhase7Routes(mux, metrics)
+	d.registerOpenChannelRoutes(mux, metrics)
 	d.registerAnalyticsRoutes(mux, metrics)
 }
 
-// The open channel is registered only when the phase is on, so a disabled phase
+// The open channel is registered only when the feature is on, so a disabled feature
 // answers 404 instead of exposing a half-configured route.
-func (d Dependencies) registerPhase7Routes(mux *http.ServeMux, metrics *httpMetrics) {
+func (d Dependencies) registerOpenChannelRoutes(mux *http.ServeMux, metrics *httpMetrics) {
 	if d.Stays != nil && d.SelfServiceEnabled {
 		d.registerSelfServiceRoutes(mux, metrics)
 	}

@@ -10,7 +10,7 @@ import (
 
 // ErrMinorNotAccepted refuses a submission about a child made by a stranger.
 // There is no way to verify a guardian in an anonymous form, and the assisted
-// channel of the Fase 2 exists precisely for that case.
+// channel of the core exists precisely for that case.
 var ErrMinorNotAccepted = errors.New("minor is not accepted in the open channel")
 
 // SelfServiceVisitor carries the generalized fields and nothing else.
@@ -30,7 +30,7 @@ type SelfServiceVisitor struct {
 	ResidenceCityCode string
 }
 
-// generalized reuses the Fase 2 group rules verbatim. The conversion is only
+// generalized reuses the core group rules verbatim. The conversion is only
 // legal while the two structs stay field-for-field identical, which is the
 // point: the day somebody adds an identity field to Visitor, this stops
 // compiling instead of quietly carrying it into the open channel.

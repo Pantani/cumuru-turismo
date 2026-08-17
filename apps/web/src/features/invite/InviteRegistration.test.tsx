@@ -29,7 +29,7 @@ const inviteContext = {
   privacy_notice_version: "2026-07",
 };
 
-function phase2Response(body: unknown, init: ResponseInit = {}) {
+function coreResponse(body: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("Cache-Control", "no-store");
   headers.set("X-Request-ID", "request-invite-registration-test");
@@ -74,7 +74,7 @@ describe("registro por convite", () => {
   it("não renderiza nem inclui a capability no cache do TanStack Query", async () => {
     captureCapability();
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      phase2Response(inviteContext),
+      coreResponse(inviteContext),
     );
     const queryClient = new QueryClient();
 
@@ -127,7 +127,7 @@ describe("registro por convite", () => {
     const user = userEvent.setup();
     captureCapability();
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      phase2Response(inviteContext),
+      coreResponse(inviteContext),
     );
     render(<RegistrationPage />);
     await screen.findByRole("heading", {
@@ -153,10 +153,10 @@ describe("registro por convite", () => {
       captureCapability();
       const fetcher = vi
         .spyOn(globalThis, "fetch")
-        .mockResolvedValueOnce(phase2Response(inviteContext))
-        .mockResolvedValueOnce(phase2Response(inviteContext))
+        .mockResolvedValueOnce(coreResponse(inviteContext))
+        .mockResolvedValueOnce(coreResponse(inviteContext))
         .mockResolvedValueOnce(
-          phase2Response(
+          coreResponse(
             { submission_id: "0190aabb-7ccd-7eef-8abc-001122334455", status: "accepted" },
             {
               status: 200,
@@ -202,10 +202,10 @@ describe("registro por convite", () => {
     const user = userEvent.setup();
     captureCapability();
     vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(phase2Response(inviteContext))
-      .mockResolvedValueOnce(phase2Response(inviteContext))
+      .mockResolvedValueOnce(coreResponse(inviteContext))
+      .mockResolvedValueOnce(coreResponse(inviteContext))
       .mockResolvedValueOnce(
-        phase2Response(
+        coreResponse(
           { submission_id: "0190aabb-7ccd-7eef-8abc-001122334455", status: "accepted" },
           {
             headers: {
@@ -235,10 +235,10 @@ describe("registro por convite", () => {
     const user = userEvent.setup();
     captureCapability();
     vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(phase2Response(inviteContext))
-      .mockResolvedValueOnce(phase2Response(inviteContext))
+      .mockResolvedValueOnce(coreResponse(inviteContext))
+      .mockResolvedValueOnce(coreResponse(inviteContext))
       .mockResolvedValueOnce(
-        phase2Response(
+        coreResponse(
           {
             submission_id: "0190aabb-7ccd-7eef-8abc-001122334455",
             status: "accepted",
@@ -272,9 +272,9 @@ describe("registro por convite", () => {
     const user = userEvent.setup();
     captureCapability();
     vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(phase2Response(inviteContext))
+      .mockResolvedValueOnce(coreResponse(inviteContext))
       .mockResolvedValueOnce(
-        phase2Response(
+        coreResponse(
           {
             type: "urn:cumuru:problem:invite-not-found",
             title: "Convite expirado.",
@@ -323,7 +323,7 @@ describe("registro por convite", () => {
     window.history.replaceState(null, "", `/registro#draft=${saved.id}`);
     captureCapability();
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      phase2Response(
+      coreResponse(
         {
           type: "urn:cumuru:problem:invite-not-found",
           title: "Convite expirado.",
@@ -352,7 +352,7 @@ describe("registro por convite", () => {
     captureCapability();
     const engineeringTitle = "Upstream dependency returned an unexpected shape.";
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      phase2Response(
+      coreResponse(
         { type: "about:blank", title: engineeringTitle, status: 503 },
         { status: 503, headers: { "Content-Type": "application/problem+json" } },
       ),
@@ -369,7 +369,7 @@ describe("registro por convite", () => {
   it("não apresenta violações axe no formulário carregado", async () => {
     captureCapability();
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      phase2Response(inviteContext),
+      coreResponse(inviteContext),
     );
     const { container } = render(<RegistrationPage />);
     await screen.findByRole("heading", {

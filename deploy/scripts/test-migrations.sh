@@ -202,7 +202,7 @@ VALUES (
   decode('aa', 'hex'),
   'fixture-v1',
   'user',
-  'phase1.fixture',
+  'platform.fixture',
   'accommodation',
   'success'
 );
@@ -312,12 +312,12 @@ outbox_payload_columns="$(
 )"
 test "${outbox_payload_columns}" = "0"
 
-preserved_phase2_stays="$(
+preserved_core_stays="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command='SELECT count(*) FROM core.stays'
 )"
-test "${preserved_phase2_stays}" = "0"
+test "${preserved_core_stays}" = "0"
 
 survey_catalog_tables="$(
   psql_as cumuru_migration cumuru-local-migration-only \
@@ -1241,7 +1241,7 @@ VALUES
     1,
     1,
     'pseudonym_not_approved',
-    'phase_not_implemented'
+    'not_implemented'
   ),
   (
     '00000000-0000-7000-8000-000000000702',
@@ -1252,7 +1252,7 @@ VALUES
     2,
     2,
     'pseudonym_not_approved',
-    'phase_not_implemented'
+    'not_implemented'
   );
 
 INSERT INTO analytics.quality_coverage (
@@ -1348,7 +1348,7 @@ expect_psql_failure \
 psql_as cumuru_migration cumuru-local-migration-only \
   --command="DELETE FROM public_data.publications WHERE publication_version = 170"
 
-phase4_public_views="$(
+analytics_public_views="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="
@@ -1363,14 +1363,14 @@ phase4_public_views="$(
         )
     "
 )"
-test "${phase4_public_views}" = "4"
+test "${analytics_public_views}" = "4"
 
-phase4_public_role="$(
+analytics_public_role="$(
   psql_as cumuru_public cumuru-local-public-only \
     --tuples-only --no-align \
     --command='SET ROLE public_runtime; SELECT current_user'
 )"
-test "${phase4_public_role}" = "SET"$'\n'"public_runtime"
+test "${analytics_public_role}" = "SET"$'\n'"public_runtime"
 
 for public_view in \
   current_summary \
@@ -1438,7 +1438,7 @@ expect_psql_failure \
   "SELECT encrypted_free_text FROM survey.answers LIMIT 1"
 
 psql_as cumuru_migration cumuru-local-migration-only \
-  --command="CREATE TABLE public_data.phase4_default_privilege_canary (
+  --command="CREATE TABLE public_data.analytics_default_privilege_canary (
     canary integer
   )"
 
@@ -1447,10 +1447,10 @@ expect_psql_failure \
   cumuru-local-public-only \
   "public_runtime inherited SELECT on a future public_data table" \
   "SET ROLE public_runtime;
-   SELECT count(*) FROM public_data.phase4_default_privilege_canary"
+   SELECT count(*) FROM public_data.analytics_default_privilege_canary"
 
 psql_as cumuru_migration cumuru-local-migration-only \
-  --command="DROP TABLE public_data.phase4_default_privilege_canary"
+  --command="DROP TABLE public_data.analytics_default_privilege_canary"
 
 psql_as cumuru_migration cumuru-local-migration-only \
   --command="
@@ -1524,20 +1524,20 @@ document_guard_after_rollback="$(
 test "${document_guard_after_rollback}" = "0"
 run_migrate up 1
 
-# ADR-039/040/041: a Fase 7 aplica-se sobre a 000002 e volta sem deixar resíduo.
+# ADR-039/040/041: a autoatendimento aplica-se sobre a 000002 e volta sem deixar resíduo.
 run_migrate up 1
-phase7_version="$(
+self_service_version="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${phase7_version}" = "3:false"
+test "${self_service_version}" = "3:false"
 
 # O CREATE em platform é reaberto só para transferir o dono da função de
 # varredura e devolvido na mesma transação. Sem a reabertura o ALTER ... OWNER
 # falha com permission denied; sem a devolução migration_admin sai da migração
 # podendo criar objeto em platform. As duas metades são verificadas aqui.
-phase7_cleanup_owner="$(
+self_service_cleanup_owner="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="
@@ -1550,9 +1550,9 @@ phase7_cleanup_owner="$(
         'platform.cleanup_expired_operational_records(timestamptz, integer)'::regprocedure
     "
 )"
-test "${phase7_cleanup_owner}" = "migration_admin:true:false:true"
+test "${self_service_cleanup_owner}" = "migration_admin:true:false:true"
 
-phase7_contract="$(
+self_service_contract="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="
@@ -1590,10 +1590,10 @@ phase7_contract="$(
         )::text
     "
 )"
-test "${phase7_contract}" = "true:true:1:1:1:3"
+test "${self_service_contract}" = "true:true:1:1:1:3"
 
 run_migrate down 1
-phase7_rollback="$(
+self_service_rollback="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="
@@ -1622,7 +1622,7 @@ phase7_rollback="$(
         'platform.cleanup_expired_operational_records(timestamptz, integer)'::regprocedure
     "
 )"
-test "${phase7_rollback}" = "true:true:migration_admin:false:false:0:0"
+test "${self_service_rollback}" = "true:true:migration_admin:false:false:0:0"
 
 run_migrate up
 

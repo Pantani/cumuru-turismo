@@ -65,7 +65,7 @@ func TestEventIsClosedAndRejectsUnapprovedFields(t *testing.T) {
 
 func TestQuestionnaireEventAllowsGlobalOrganization(t *testing.T) {
 	t.Parallel()
-	event := phase3Event(
+	event := questionnaireEvent(
 		audit.ActorUser,
 		audit.ActionQuestionnairePublished,
 		audit.EntityQuestionnaireVersion,
@@ -79,7 +79,7 @@ func TestQuestionnaireEventAllowsGlobalOrganization(t *testing.T) {
 
 func TestSurveyEventRequiresSurveyPurpose(t *testing.T) {
 	t.Parallel()
-	event := phase3Event(
+	event := questionnaireEvent(
 		audit.ActorSurveyCapability,
 		audit.ActionSurveyRecorded,
 		audit.EntitySurveyResponse,
@@ -120,7 +120,7 @@ func TestAccommodationCreatedEventUsesOnlyAllowlistedFields(t *testing.T) {
 	}
 }
 
-func phase3Event(
+func questionnaireEvent(
 	actorType audit.ActorType,
 	action audit.Action,
 	entity audit.EntityType,

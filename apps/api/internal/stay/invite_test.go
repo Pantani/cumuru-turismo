@@ -131,7 +131,7 @@ func TestInviteCodecRefusesAnUnknownPurpose(t *testing.T) {
 	}
 }
 
-// The Fase 2 token must not change shape: an invite issued before this phase
+// The core token must not change shape: an invite issued before this feature
 // still has to reconstruct byte for byte, or every idempotent replay of
 // createStayInvite would start returning a token the poster no longer matches.
 func TestStayPurposeKeepsTheHistoricalMAC(t *testing.T) {
@@ -149,6 +149,6 @@ func TestStayPurposeKeepsTheHistoricalMAC(t *testing.T) {
 	// was parameterized.
 	const historical = "AZ8AAAAAcACAAAAAAAAAEBSLnee77_cGfDsUsbTitOzUjZSg4SGTRQ9UCzhPtqs5"
 	if token != historical {
-		t.Fatalf("Issue() = %q, want the pre-phase-7 encoding %q", token, historical)
+		t.Fatalf("Issue() = %q, want the pre-self-service encoding %q", token, historical)
 	}
 }

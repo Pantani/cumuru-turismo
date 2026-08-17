@@ -1,4 +1,4 @@
-import { Phase7ApiError } from "../../shared/api/phase7-client";
+import { ApiError } from "../../shared/api/http-client";
 import {
   ProofOfWorkAbortedError,
   ProofOfWorkExhaustedError,
@@ -38,7 +38,7 @@ function localFailureMessage(error: unknown) {
 }
 
 export function describeSelfServiceFailure(error: unknown) {
-  if (!(error instanceof Phase7ApiError)) {
+  if (!(error instanceof ApiError)) {
     return localFailureMessage(error);
   }
   if (error.retryAfterSeconds !== null) {
@@ -49,7 +49,7 @@ export function describeSelfServiceFailure(error: unknown) {
 
 /** A refusal that will never succeed on retry must not keep a local copy. */
 export function shouldPurgeDraft(error: unknown) {
-  if (!(error instanceof Phase7ApiError)) {
+  if (!(error instanceof ApiError)) {
     return false;
   }
   return error.status === 404 || error.status === 403 || error.status === 422;

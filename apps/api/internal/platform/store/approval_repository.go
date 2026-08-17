@@ -18,7 +18,7 @@ func (r *StayRepository) Approve(
 	ctx context.Context,
 	command stay.ApprovalCommand,
 ) (result stay.MutationResult, replayed bool, err error) {
-	if !r.store.phase7.Enabled {
+	if !r.store.selfService.Enabled {
 		return result, false, stay.ErrNotFound
 	}
 	now := r.store.currentTime()
@@ -43,7 +43,7 @@ func (r *StayRepository) Reject(
 	ctx context.Context,
 	command stay.RejectionCommand,
 ) (result stay.MutationResult, replayed bool, err error) {
-	if !r.store.phase7.Enabled {
+	if !r.store.selfService.Enabled {
 		return result, false, stay.ErrNotFound
 	}
 	now := r.store.currentTime()
@@ -88,7 +88,7 @@ func decisionIdempotency(
 	}
 }
 
-// approveStay demands the phase's own operation, never update_stay: reusing the
+// approveStay demands the feature's own operation, never update_stay: reusing the
 // edit permission would hand approval to every operator allowed to correct a
 // date, and approval is the control standing between an anonymous submission
 // and a statistic (N-25, ADR-040).
@@ -267,7 +267,7 @@ func (s *Store) recordDecision(
 // way to keep the data forever. The expiry therefore performs exactly the same
 // purge as the rejection (E-05, N-30).
 func (r *StayRepository) ExpireApprovals(ctx context.Context) (int, error) {
-	if !r.store.phase7.Enabled {
+	if !r.store.selfService.Enabled {
 		return 0, nil
 	}
 	now := r.store.currentTime()
@@ -281,7 +281,7 @@ func (r *StayRepository) ExpireApprovals(ctx context.Context) (int, error) {
 	err = r.store.inTransaction(ctx, func(q generated.Querier) error {
 		rows, sweepErr := q.ExpirePendingSelfServiceStays(
 			ctx, generated.ExpirePendingSelfServiceStaysParams{
-				Cutoff: timeToPG(now), BatchSize: r.store.phase7.ExpirySweepBatchSize,
+				Cutoff: timeToPG(now), BatchSize: r.store.selfService.ExpirySweepBatchSize,
 			},
 		)
 		if sweepErr != nil {

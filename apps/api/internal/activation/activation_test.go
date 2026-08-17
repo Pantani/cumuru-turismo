@@ -8,7 +8,7 @@ import (
 )
 
 // The activated account mirrors the accommodation operator and carries the
-// phase's own approval scope. Without stays:approve the whole flow is hollow:
+// feature's own approval scope. Without stays:approve the whole flow is hollow:
 // the accommodation that received the link could not approve its own queue, and
 // approval would stay with the principal that self-provisioned.
 //

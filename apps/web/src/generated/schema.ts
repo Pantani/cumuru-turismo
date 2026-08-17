@@ -1691,7 +1691,7 @@ export interface components {
             /** @constant */
             status: "not_available";
             /** @enum {string} */
-            reason_code: "phase_not_implemented" | "pseudonym_not_approved" | "insufficient_source";
+            reason_code: "not_implemented" | "pseudonym_not_approved" | "insufficient_source";
         };
         QualityCount: components["schemas"]["AvailableQualityCount"] | components["schemas"]["UnavailableQualityCount"];
         AvailableQualityCoverage: {
@@ -2496,7 +2496,7 @@ export interface operations {
                 limit?: components["parameters"]["PageLimit"];
                 accommodation_id?: string;
                 status?: components["schemas"]["StayStatus"];
-                /** @description Fila de aprovação por acomodação. Nenhum endpoint novo de listagem: cursor, limite, ordenação e isolamento por membership são os da Fase 2. */
+                /** @description Fila de aprovação por acomodação. Nenhum endpoint novo de listagem: cursor, limite, ordenação e isolamento por membership são os do núcleo. */
                 approval_state?: components["schemas"]["StayApprovalState"];
                 provenance?: components["schemas"]["StayProvenance"];
                 arrival_from?: string;

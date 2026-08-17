@@ -1,10 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { components } from "../../generated/schema";
-import {
-  Phase4ApiError,
-  type Phase4Client,
-} from "../../shared/api/phase4-client";
+import { ApiError } from "../../shared/api/http-client";
+import { type AnalyticsClient } from "../../shared/api/analytics-client";
 import { accommodationCategoryLabels } from "../operator/stay-lifecycle";
 
 type Schemas = components["schemas"];
@@ -12,7 +10,7 @@ type QualityCount = Schemas["QualityCount"];
 type QualityCoverage = Schemas["QualityCoverage"];
 
 interface AnalyticsQualityProps {
-  client: Phase4Client;
+  client: AnalyticsClient;
 }
 
 const dateTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -25,7 +23,7 @@ const reasonMessages: Record<
   Schemas["UnavailableQualityCount"]["reason_code"],
   string
 > = {
-  phase_not_implemented: "A integração FNRH pertence à Fase 5.",
+  not_implemented: "A integração FNRH ainda não foi implementada.",
   pseudonym_not_approved:
     "Não há pseudônimo transversal aprovado para esta análise.",
   insufficient_source: "A fonte agregada ainda é insuficiente.",
@@ -41,10 +39,10 @@ function categoryLabel(code: string) {
 }
 
 function qualityError(error: unknown) {
-  if (error instanceof Phase4ApiError && error.status === 403) {
+  if (error instanceof ApiError && error.status === 403) {
     return "Sua sessão não possui o escopo analytics:read:internal.";
   }
-  if (error instanceof Phase4ApiError && error.status === 401) {
+  if (error instanceof ApiError && error.status === 401) {
     return "A sessão institucional não está disponível.";
   }
   return "Não foi possível carregar a qualidade agregada.";

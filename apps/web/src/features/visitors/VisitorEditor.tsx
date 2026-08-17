@@ -6,7 +6,7 @@ import {
 
 import type { components } from "../../generated/schema";
 import { createUuidV7 } from "../../shared/identity/uuid-v7";
-import type { ValidationIssue } from "../../shared/validation/phase2-validation";
+import type { ValidationIssue } from "../../shared/validation/core-validation";
 
 type VisitorInput = components["schemas"]["VisitorInput"];
 type VisitorField =

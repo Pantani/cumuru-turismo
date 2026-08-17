@@ -3,13 +3,13 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Phase4Client } from "../shared/api/phase4-client";
+import type { AnalyticsClient } from "../shared/api/analytics-client";
 import { LocaleProvider } from "../shared/i18n/LocaleProvider";
 import type { Locale } from "../shared/i18n/locale";
 import PublicFoundationPage from "./PublicFoundationPage";
 
 const pending = new Promise<never>(() => undefined);
-const client: Phase4Client = {
+const client: AnalyticsClient = {
   getSummary: vi.fn(() => pending),
   getPresence: vi.fn(() => pending),
   getPreferences: vi.fn(() => pending),

@@ -21,8 +21,8 @@ export LOCAL_E2E_PORT
 #      faixa no mesmo instante, ver o mesmo octeto livre e pedi-lo juntas.
 #
 # A faixa começa em 16 para não encostar nos octetos 0-9, todos fixados por
-# overlays (base, migration-test, phase2, phase3, phase4, e2e antigo,
-# local-test, dev, phase7).
+# overlays (base, migration-test, core, questionnaire, analytics, e2e antigo,
+# local-test, dev, self-service).
 E2E_SUBNET_FIRST_OCTET=16
 E2E_SUBNET_LAST_OCTET=215
 
@@ -131,7 +131,7 @@ COMPOSE=(
   --env-file "${LOCAL_ENV_FILE}"
   --file "${ROOT_DIR}/compose.yaml"
   --file "${ROOT_DIR}/compose.local.yaml"
-  --file "${ROOT_DIR}/deploy/compose.phase4-full-stack.yaml"
+  --file "${ROOT_DIR}/deploy/compose.analytics-full-stack.yaml"
   --file "${ROOT_DIR}/deploy/compose.local-e2e.yaml"
   --project-name "${PROJECT_NAME}"
 )

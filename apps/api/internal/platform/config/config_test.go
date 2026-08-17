@@ -214,7 +214,7 @@ func validLocal() map[string]string {
 		"OIDC_AUDIENCE":       "cumuru-local",
 		"OTEL_EXPORTER":       "none",
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32,::1/128",
-	}, validPhase2())
+	}, validCore())
 }
 
 func validProduction() map[string]string {
@@ -229,13 +229,13 @@ func validProduction() map[string]string {
 		"OTEL_EXPORTER":       "otlp",
 		"OTEL_ENDPOINT":       "https://telemetry.invalid/v1/traces",
 		"TRUSTED_PROXY_CIDRS": "10.20.30.40/32",
-	}, merge(validPhase2(), map[string]string{
+	}, merge(validCore(), map[string]string{
 		"INVITE_BASE_URL":      "https://registro.invalid/convites",
 		"CORS_ALLOWED_ORIGINS": "https://registro.invalid",
 	}))
 }
 
-func validPhase2() map[string]string {
+func validCore() map[string]string {
 	return map[string]string{
 		"INVITE_BASE_URL":                  "http://127.0.0.1:5173/convites",
 		"INVITE_TTL":                       "72h",

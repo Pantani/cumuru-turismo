@@ -9,10 +9,8 @@ import {
 } from "react";
 
 import type { components } from "../../generated/schema";
-import {
-  type Phase3Client,
-  Phase3ApiError,
-} from "../../shared/api/phase3-client";
+import { ApiError } from "../../shared/api/http-client";
+import { type QuestionnaireClient } from "../../shared/api/questionnaire-client";
 import { createUuidV7 } from "../../shared/identity/uuid-v7";
 
 type Schemas = components["schemas"];
@@ -80,7 +78,7 @@ function errorMessage(error: unknown) {
   if (error instanceof SyntaxError) {
     return "A definição JSON não é válida.";
   }
-  if (error instanceof Phase3ApiError) {
+  if (error instanceof ApiError) {
     return error.problem.title;
   }
   return "Não foi possível concluir a operação.";
@@ -132,7 +130,7 @@ function definitionFrom(version: Schemas["QuestionnaireVersionAdmin"]): Definiti
 }
 
 interface CreateFormProps {
-  client: Phase3Client;
+  client: QuestionnaireClient;
   disabled: boolean;
   onCreated: (id: string, etag: string) => void;
   report: (message: string) => void;
@@ -215,7 +213,7 @@ function CreateForm({ client, disabled, onCreated, report }: CreateFormProps) {
 }
 
 interface CatalogProps {
-  client: Phase3Client;
+  client: QuestionnaireClient;
   selectedId: string;
   onSelect: (id: string) => void;
 }
@@ -271,7 +269,7 @@ function Catalog({ client, onSelect, selectedId }: CatalogProps) {
 }
 
 type VersionResult = Awaited<
-  ReturnType<Phase3Client["getQuestionnaireVersion"]>
+  ReturnType<QuestionnaireClient["getQuestionnaireVersion"]>
 >;
 
 const versionStatusLabels: Record<
@@ -286,7 +284,7 @@ const versionStatusLabels: Record<
 };
 
 interface VersionCatalogProps {
-  client: Phase3Client;
+  client: QuestionnaireClient;
   questionnaireId: string;
   selectedVersionId: string;
   onSelect: (
@@ -399,7 +397,7 @@ function VersionCatalog({
 }
 
 interface VersionEditorProps {
-  client: Phase3Client;
+  client: QuestionnaireClient;
   initialEtag: string;
   initialVersion: Schemas["QuestionnaireVersionAdmin"] | null;
   initialVersionId: string;
@@ -512,7 +510,7 @@ function VersionEditor({
 
   async function execute(
     label: string,
-    action: (key: string) => ReturnType<Phase3Client["approve"]>,
+    action: (key: string) => ReturnType<QuestionnaireClient["approve"]>,
   ) {
     const expectedVersionId = versionIdRef.current;
     const generation = ++operationGeneration.current;
@@ -649,7 +647,7 @@ function VersionEditor({
   );
 }
 
-export function QuestionnaireAdmin({ client }: { client: Phase3Client }) {
+export function QuestionnaireAdmin({ client }: { client: QuestionnaireClient }) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
   const [questionnaireId, setQuestionnaireId] = useState("");

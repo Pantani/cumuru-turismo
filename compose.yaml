@@ -1,6 +1,6 @@
 name: cumuru
 
-x-phase2-local-environment: &phase2-local-environment
+x-core-local-environment: &core-local-environment
   # Fixtures públicas, determinísticas e exclusivas de local/teste.
   INVITE_BASE_URL: ${INVITE_BASE_URL:-http://127.0.0.1:4173/convites}
   INVITE_TTL: ${INVITE_TTL:-72h}
@@ -21,7 +21,7 @@ x-phase2-local-environment: &phase2-local-environment
   CURSOR_HMAC_KEYS: ${CURSOR_HMAC_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtY3Vyc29yLWtleS12MS0wMDA=}
   DOCUMENT_HMAC_CURRENT_VERSION: ${DOCUMENT_HMAC_CURRENT_VERSION:-local-v1}
   DOCUMENT_HMAC_KEYS: ${DOCUMENT_HMAC_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtZG9jdW1lbnQtdjEtMDA=}
-  PHASE3_ENABLED: ${PHASE3_ENABLED:-true}
+  QUESTIONNAIRE_ENABLED: ${QUESTIONNAIRE_ENABLED:-true}
   SURVEY_CAPABILITY_TTL: ${SURVEY_CAPABILITY_TTL:-24h}
   SURVEY_FREE_TEXT_TTL: ${SURVEY_FREE_TEXT_TTL:-24h}
   SURVEY_SUBMIT_RATE_LIMIT: ${SURVEY_SUBMIT_RATE_LIMIT:-10}
@@ -30,18 +30,18 @@ x-phase2-local-environment: &phase2-local-environment
   SURVEY_HMAC_KEYS: ${SURVEY_HMAC_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3Qtc3VydmV5LWhtYWMtdjEtMDAw}
   SURVEY_FREE_TEXT_CURRENT_VERSION: ${SURVEY_FREE_TEXT_CURRENT_VERSION:-local-v1}
   SURVEY_FREE_TEXT_KEYS: ${SURVEY_FREE_TEXT_KEYS:-local-v1=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
-  PHASE4_ENABLED: ${PHASE4_ENABLED:-true}
+  ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-true}
   PUBLIC_DATABASE_TIMEOUT: ${PUBLIC_DATABASE_TIMEOUT:-3s}
-  PHASE4_PRIMARY_CELL_THRESHOLD: ${PHASE4_PRIMARY_CELL_THRESHOLD:-10}
-  PHASE4_MINIMUM_REPORTING_ACCOMMODATIONS: ${PHASE4_MINIMUM_REPORTING_ACCOMMODATIONS:-3}
-  PHASE4_ROUNDING_BASE: ${PHASE4_ROUNDING_BASE:-10}
-  PHASE4_PRE_REGISTERED_WEIGHT: ${PHASE4_PRE_REGISTERED_WEIGHT:-0.80}
-  PHASE4_INCREMENTAL_INTERVAL: ${PHASE4_INCREMENTAL_INTERVAL:-15m}
-  PHASE4_FULL_RECONCILIATION_INTERVAL: ${PHASE4_FULL_RECONCILIATION_INTERVAL:-24h}
-  # Fase 7: autoatendimento e aprovação. Sem esta habilitação as rotas do canal
+  ANALYTICS_PRIMARY_CELL_THRESHOLD: ${ANALYTICS_PRIMARY_CELL_THRESHOLD:-10}
+  ANALYTICS_MINIMUM_REPORTING_ACCOMMODATIONS: ${ANALYTICS_MINIMUM_REPORTING_ACCOMMODATIONS:-3}
+  ANALYTICS_ROUNDING_BASE: ${ANALYTICS_ROUNDING_BASE:-10}
+  ANALYTICS_PRE_REGISTERED_WEIGHT: ${ANALYTICS_PRE_REGISTERED_WEIGHT:-0.80}
+  ANALYTICS_INCREMENTAL_INTERVAL: ${ANALYTICS_INCREMENTAL_INTERVAL:-15m}
+  ANALYTICS_FULL_RECONCILIATION_INTERVAL: ${ANALYTICS_FULL_RECONCILIATION_INTERVAL:-24h}
+  # autoatendimento: autoatendimento e aprovação. Sem esta habilitação as rotas do canal
   # aberto não são registradas, e qualquer gate que sonde /accommodation-invite
   # ou /activation fica verde por ausência de rota em vez de por comportamento.
-  PHASE7_ENABLED: ${PHASE7_ENABLED:-true}
+  SELF_SERVICE_ENABLED: ${SELF_SERVICE_ENABLED:-true}
   # Keyring próprio: o loader recusa sobreposição com qualquer outro ring, porque
   # uma chave vazada permitiria forjar token de convite ou digest de idempotência.
   PROOF_OF_WORK_HMAC_CURRENT_VERSION: ${PROOF_OF_WORK_HMAC_CURRENT_VERSION:-local-v1}
@@ -102,7 +102,7 @@ services:
         BUILD_TIME: "${CUMURU_BUILD_TIME:?build metadata wrapper is required}"
     command: ["/app/api"]
     environment:
-      <<: *phase2-local-environment
+      <<: *core-local-environment
       APP_ENV: local
       HTTP_ADDRESS: 0.0.0.0:8080
       OPERATIONS_ADDRESS: 0.0.0.0:9090
@@ -131,7 +131,7 @@ services:
         BUILD_TIME: "${CUMURU_BUILD_TIME:?build metadata wrapper is required}"
     command: ["/app/worker"]
     environment:
-      <<: *phase2-local-environment
+      <<: *core-local-environment
       APP_ENV: local
       DATABASE_URL: postgres://cumuru_worker:cumuru-local-worker-only@postgres:5432/cumuru?sslmode=disable
       OIDC_MODE: fake

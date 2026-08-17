@@ -26,9 +26,9 @@ type Store struct {
 	queries          generated.Querier
 	timeout          time.Duration
 	pool             *pgxpool.Pool
-	phase2           config.Phase2Config
-	phase3           config.Phase3Config
-	phase7           config.Phase7Config
+	core             config.CoreConfig
+	questionnaire    config.QuestionnaireConfig
+	selfService      config.SelfServiceConfig
 	auth             config.AuthConfig
 	surveyCodec      *questionnaire.CapabilityCodec
 	textCipher       *questionnaire.TextCipher
@@ -46,12 +46,12 @@ func WithCurrentTime(now func() time.Time) Option {
 	}
 }
 
-// WithPhase7Config enables the open self-registration channel and the account
+// WithSelfServiceConfig enables the open self-registration channel and the account
 // activation capability. Absent, the surfaces are simply not registered, which
 // is a 404 rather than a half-configured route.
-func WithPhase7Config(phase7 config.Phase7Config) Option {
+func WithSelfServiceConfig(selfService config.SelfServiceConfig) Option {
 	return func(store *Store) {
-		store.phase7 = phase7
+		store.selfService = selfService
 	}
 }
 
@@ -64,8 +64,8 @@ func WithAuthConfig(auth config.AuthConfig) Option {
 }
 
 // New builds a store over an arbitrary Querier. It exists for tests that drive
-// the store against a stub; the running processes use NewPhase2 or NewPhase3,
-// which own a real pool and the phase keyrings.
+// the store against a stub; the running processes use NewCore or NewQuestionnaire,
+// which own a real pool and the feature keyrings.
 func New(queries generated.Querier, timeout time.Duration) *Store {
 	return &Store{
 		queries: queries, timeout: timeout,
@@ -74,37 +74,37 @@ func New(queries generated.Querier, timeout time.Duration) *Store {
 	}
 }
 
-func NewPhase2(pool *pgxpool.Pool, timeout time.Duration, phase2 config.Phase2Config) *Store {
+func NewCore(pool *pgxpool.Pool, timeout time.Duration, core config.CoreConfig) *Store {
 	return &Store{
 		queries:          generated.New(pool),
 		timeout:          timeout,
 		pool:             pool,
-		phase2:           phase2,
+		core:             core,
 		surveyPairPermit: make(chan struct{}, 1),
 		now:              time.Now,
 	}
 }
 
-func NewPhase3(
+func NewQuestionnaire(
 	pool *pgxpool.Pool,
 	timeout time.Duration,
-	phase2 config.Phase2Config,
-	phase3 config.Phase3Config,
+	core config.CoreConfig,
+	settings config.QuestionnaireConfig,
 	options ...Option,
 ) (*Store, error) {
-	store := NewPhase2(pool, timeout, phase2)
+	store := NewCore(pool, timeout, core)
 	for _, option := range options {
 		option(store)
 	}
-	store.phase3 = phase3
-	if !phase3.Enabled {
+	store.questionnaire = settings
+	if !settings.Enabled {
 		return store, nil
 	}
-	codec, err := questionnaire.NewCapabilityCodec(questionnaireKeyring(phase3.SurveyKeys))
+	codec, err := questionnaire.NewCapabilityCodec(questionnaireKeyring(settings.SurveyKeys))
 	if err != nil {
 		return nil, err
 	}
-	textCipher, err := questionnaire.NewTextCipher(questionnaireKeyring(phase3.FreeTextKeys))
+	textCipher, err := questionnaire.NewTextCipher(questionnaireKeyring(settings.FreeTextKeys))
 	if err != nil {
 		return nil, err
 	}

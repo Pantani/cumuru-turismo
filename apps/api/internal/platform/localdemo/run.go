@@ -286,11 +286,11 @@ func fixtureServiceFactory(
 ) (servicesAt, error) {
 	var currentTime atomic.Pointer[time.Time]
 	currentTime.Store(&initialTime)
-	platformStore, err := store.NewPhase3(
+	platformStore, err := store.NewQuestionnaire(
 		pool,
 		cfg.DatabaseTimeout,
-		cfg.Phase2,
-		cfg.Phase3,
+		cfg.Core,
+		cfg.Questionnaire,
 		store.WithCurrentTime(func() time.Time { return *currentTime.Load() }),
 	)
 	if err != nil {
@@ -320,16 +320,16 @@ func publishAnalytics(
 	cfg config.Config,
 	asOf time.Time,
 ) error {
-	platformStore, err := store.NewPhase3(
+	platformStore, err := store.NewQuestionnaire(
 		pool,
 		cfg.DatabaseTimeout,
-		cfg.Phase2,
-		cfg.Phase3,
+		cfg.Core,
+		cfg.Questionnaire,
 	)
 	if err != nil {
 		return err
 	}
-	repository := store.NewAnalyticsRepository(platformStore, cfg.Phase4)
+	repository := store.NewAnalyticsRepository(platformStore, cfg.Analytics)
 	civil, err := stay.ParseCivilDate(civilDate(asOf))
 	if err != nil {
 		return err

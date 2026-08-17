@@ -7,7 +7,7 @@ import {
 } from "react";
 
 import type { components } from "../../generated/schema";
-import { createPhase7Client } from "../../shared/api/phase7-client";
+import { createSelfServiceClient } from "../../shared/api/self-service-client";
 import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import { deleteDraft, saveDraft } from "../../shared/offline/encrypted-drafts";
 import { solveProofOfWork } from "../../shared/security/proof-of-work";
@@ -16,11 +16,11 @@ import {
   peekSelfServiceCapability,
 } from "../../shared/security/self-service-capability";
 import { setSurveyCapability } from "../../shared/security/survey-capability";
-import type { ValidationIssue } from "../../shared/validation/phase2-validation";
+import type { ValidationIssue } from "../../shared/validation/core-validation";
 import {
   validateSelfRegistrationDraft,
   type SelfRegistrationDraft,
-} from "../../shared/validation/phase7-validation";
+} from "../../shared/validation/self-service-validation";
 import { defaultStayDates } from "../operator/stay-lifecycle";
 import {
   createVisitor,
@@ -44,7 +44,7 @@ type AccommodationInviteContext =
   components["schemas"]["AccommodationInviteContext"];
 type VisitorInput = components["schemas"]["VisitorInput"];
 
-const guestClient = createPhase7Client({ getAccessToken: () => null });
+const guestClient = createSelfServiceClient({ getAccessToken: () => null });
 
 /** ADR-040: `minor` is not offered, so it cannot be chosen and then refused. */
 const openChannelRoles = [

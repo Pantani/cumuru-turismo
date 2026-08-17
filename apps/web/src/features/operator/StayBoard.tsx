@@ -28,7 +28,7 @@ function partition(stays: readonly Stay[]) {
 }
 
 export function StayBoard({ accommodation }: StayBoardProps) {
-  const { client } = useAuthSession();
+  const { coreClient: client } = useAuthSession();
   const operation = useOperation();
   const { run } = operation;
   const [stays, setStays] = useState<readonly Stay[]>([]);

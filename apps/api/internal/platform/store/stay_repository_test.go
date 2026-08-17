@@ -89,7 +89,7 @@ func TestConsumedCapabilityIsAllowedOnlyForReplayLookup(t *testing.T) {
 
 // A null max_uses means unlimited. Comparing use_count against the pointer
 // without testing for nil first is the Go mirror of the silent SQL failure this
-// phase corrected: the unlimited capability would read as already spent.
+// feature corrected: the unlimited capability would read as already spent.
 func TestUnlimitedCapabilityIsNeverExhausted(t *testing.T) {
 	t.Parallel()
 

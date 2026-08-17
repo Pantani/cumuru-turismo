@@ -27,7 +27,7 @@ import (
 type StayRepository struct {
 	store *Store
 	codec *stay.InviteCodec
-	// challenges is nil when the phase is off, and every open-channel route
+	// challenges is nil when the feature is off, and every open-channel route
 	// answers not-found rather than issuing a challenge with no key.
 	challenges *proofofwork.Issuer
 	// hashKey is resolved once so no write path can reach the request digest
@@ -37,8 +37,8 @@ type StayRepository struct {
 
 func NewStayRepository(store *Store) (*StayRepository, error) {
 	codec, err := stay.NewInviteCodec(stay.InviteKeyring{
-		CurrentVersion: store.phase2.InviteKeys.CurrentVersion,
-		Keys:           store.phase2.InviteKeys.Keys,
+		CurrentVersion: store.core.InviteKeys.CurrentVersion,
+		Keys:           store.core.InviteKeys.Keys,
 	})
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func NewStayRepository(store *Store) (*StayRepository, error) {
 	if err != nil {
 		return nil, err
 	}
-	challenges, err := newChallengeIssuer(store.phase7)
+	challenges, err := newChallengeIssuer(store.selfService)
 	if err != nil {
 		return nil, err
 	}
@@ -56,17 +56,17 @@ func NewStayRepository(store *Store) (*StayRepository, error) {
 	}, nil
 }
 
-// newChallengeIssuer fails closed: with the phase on and no usable key the
+// newChallengeIssuer fails closed: with the feature on and no usable key the
 // repository refuses to exist, because a challenge signed with an empty key is
 // a MAC anybody can forge.
-func newChallengeIssuer(phase7 config.Phase7Config) (*proofofwork.Issuer, error) {
-	if !phase7.Enabled {
+func newChallengeIssuer(selfService config.SelfServiceConfig) (*proofofwork.Issuer, error) {
+	if !selfService.Enabled {
 		return nil, nil
 	}
 	return proofofwork.NewIssuer(proofofwork.Keyring{
-		CurrentVersion: phase7.ProofOfWorkKeys.CurrentVersion,
-		Keys:           phase7.ProofOfWorkKeys.Keys,
-	}, phase7.ChallengeTTL)
+		CurrentVersion: selfService.ProofOfWorkKeys.CurrentVersion,
+		Keys:           selfService.ProofOfWorkKeys.Keys,
+	}, selfService.ChallengeTTL)
 }
 
 var _ stay.Repository = (*StayRepository)(nil)
@@ -514,7 +514,7 @@ func (r *StayRepository) insertInvite(
 	if err != nil {
 		return inviteReplayPayload{}, stay.ErrUnavailable
 	}
-	expiresAt := now.Add(r.store.phase2.InviteTTL)
+	expiresAt := now.Add(r.store.core.InviteTTL)
 	_, err = q.CreateInvite(ctx, generated.CreateInviteParams{
 		InviteID: idToPG(inviteID), TokenHmac: digest, TokenKeyVersion: keyVersion,
 		PrivacyNoticeVersion: command.PrivacyNoticeVersion,
@@ -534,7 +534,7 @@ func (r *StayRepository) reconstructInvite(payload inviteReplayPayload) (stay.In
 	if err != nil {
 		return stay.InviteCreated{}, stay.ErrUnavailable
 	}
-	base := *r.store.phase2.InviteBaseURL
+	base := *r.store.core.InviteBaseURL
 	base.Path = strings.TrimRight(base.Path, "/") + "/" + token
 	return stay.InviteCreated{
 		InviteID: payload.InviteID, URL: base.String(),
@@ -650,7 +650,7 @@ func (r *StayRepository) GetInvite(
 	now := r.store.currentTime()
 	err := r.applyRateLimit(
 		ctx, "invite_context", request.Token, request.RateSubject,
-		r.store.phase2.InviteContextRateLimit, now,
+		r.store.core.InviteContextRateLimit, now,
 	)
 	if err != nil {
 		return stay.InviteContext{}, err
@@ -671,7 +671,7 @@ func (r *StayRepository) SubmitInviteGroup(
 	now := r.store.currentTime()
 	err = r.applyRateLimit(
 		ctx, "invite_submit", command.Token, command.RateSubject,
-		r.store.phase2.InviteSubmitRateLimit, now,
+		r.store.core.InviteSubmitRateLimit, now,
 	)
 	if err != nil {
 		return result, false, err
@@ -1507,18 +1507,18 @@ func (r *StayRepository) applyRateLimit(
 	limit int,
 	now time.Time,
 ) error {
-	key, ok := r.store.phase2.RateLimitKeys.Key(r.store.phase2.RateLimitKeys.CurrentVersion)
+	key, ok := r.store.core.RateLimitKeys.Key(r.store.core.RateLimitKeys.CurrentVersion)
 	if !ok {
 		return stay.ErrUnavailable
 	}
-	window := now.Truncate(r.store.phase2.RateLimitWindow)
+	window := now.Truncate(r.store.core.RateLimitWindow)
 	ctx, cancel := context.WithTimeout(ctx, r.store.timeout)
 	defer cancel()
 	row, err := r.store.queries.IncrementRateLimit(ctx, generated.IncrementRateLimitParams{
 		Scope: scope, SubjectHmac: rateLimitDigest(key, scope, token, subject),
-		SubjectKeyVersion: r.store.phase2.RateLimitKeys.CurrentVersion,
+		SubjectKeyVersion: r.store.core.RateLimitKeys.CurrentVersion,
 		WindowStartedAt:   timeToPG(window),
-		ExpiresAt:         timeToPG(window.Add(2 * r.store.phase2.RateLimitWindow)),
+		ExpiresAt:         timeToPG(window.Add(2 * r.store.core.RateLimitWindow)),
 	})
 	if err != nil {
 		return stay.ErrUnavailable
