@@ -1,5 +1,6 @@
 import type { Phase4Client } from "../../shared/api/phase4-client";
 import { useLocale } from "../../shared/i18n/LocaleProvider";
+import { usePresenceFormat } from "../analytics/presence-format";
 import { usePublicSummary } from "../analytics/public-summary";
 import { ImageSlot } from "./ImageSlot";
 import { todayHeadline } from "./summary-values";
@@ -11,8 +12,9 @@ import { todayHeadline } from "./summary-values";
  */
 export function HeroSection({ client }: { client?: Phase4Client }) {
   const { t } = useLocale();
+  const format = usePresenceFormat();
   const summary = usePublicSummary(client);
-  const today = todayHeadline(t, summary.data?.data.presence_today);
+  const today = todayHeadline(t, format, summary.data?.data.presence_today);
 
   return (
     <section className="lp-hero" id="topo">

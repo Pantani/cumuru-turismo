@@ -258,10 +258,15 @@ describe("dashboard público da Fase 4", () => {
     expect(
       await screen.findByRole("img", { name: /Série de 4 dias/ }),
     ).toBeInTheDocument();
+    const tiles = screen.getByRole("list", {
+      name: "Estatísticas dos últimos 30 dias observados",
+    });
+    // A média do observado é 110; se a referência escorregasse para a série
+    // combinada, o previsto de 150 puxaria o valor para 130.
+    const average = within(tiles).getByText("Média diária").closest("li");
+    expect(average).not.toBeNull();
     expect(
-      screen.getByRole("list", {
-        name: "Estatísticas dos últimos 30 dias observados",
-      }),
+      within(average as HTMLElement).getByText("110 pessoas-dia"),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("list", { name: "Média por dia da semana" }),

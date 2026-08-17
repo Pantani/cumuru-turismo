@@ -14,7 +14,7 @@ export function ContactSection() {
           <p className="lp-lead">{t("landing.contact.lead")}</p>
           <div className="lp-hero-actions">
             <a className="lp-button-primary" href={mailto}>
-              {t("landing.contact.whatsapp")}
+              {t("landing.contact.write")}
             </a>
             <a className="lp-button-ghost" href={mailto}>
               {t("landing.contact.visit")}

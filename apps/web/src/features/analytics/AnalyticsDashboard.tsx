@@ -201,7 +201,11 @@ function DayValue({
 }) {
   return (
     <>
-      <span>{copy.t("analytics.value.observed", { value: day.value })}</span>
+      <span>
+        {copy.t("analytics.value.observed", {
+          value: copy.format.count(day.value),
+        })}
+      </span>
       <time className="stat-when" dateTime={day.date}>
         {copy.format.date(day.date)}
       </time>
@@ -210,13 +214,15 @@ function DayValue({
 }
 
 function averageTile(copy: Copy, stats: SeriesStats): StatTile {
-  const { t } = copy;
+  const { format, t } = copy;
   return {
     label: t("analytics.tile.average"),
     value:
       stats.average === null
         ? t("analytics.empty")
-        : t("analytics.value.observed", { value: Math.round(stats.average) }),
+        : t("analytics.value.observed", {
+            value: format.count(Math.round(stats.average)),
+          }),
     hint: t("analytics.tile.averageHint", { count: stats.published.length }),
   };
 }
@@ -366,14 +372,16 @@ function WeekdayValue({
   entry: WeekdayAverage;
   copy: Copy;
 }) {
-  const { t } = copy;
+  const { format, t } = copy;
   if (entry.average === null) {
     return <span className="stat-when">{t("analytics.weekday.none")}</span>;
   }
   return (
     <span>
       <strong>
-        {t("analytics.value.observed", { value: Math.round(entry.average) })}
+        {t("analytics.value.observed", {
+          value: format.count(Math.round(entry.average)),
+        })}
       </strong>
       <span className="stat-when">
         {entry.days === 1

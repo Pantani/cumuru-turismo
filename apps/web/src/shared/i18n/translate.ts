@@ -15,18 +15,41 @@ const CATALOG: Record<Locale, Messages> = {
   es: messagesEs,
 };
 
-const PLACEHOLDER = /\{(\w+)\}/g;
-
 /**
- * Substitui `{nome}` pelos parâmetros. Um placeholder sem valor é defeito de
- * chamada, não de conteúdo: lançar aqui o expõe no teste em vez de publicar
- * `{count}` cru para o leitor.
+ * Gramática de placeholder. Exportada porque o teste de paridade compara os
+ * parâmetros das três traduções: se ela ficasse duplicada lá, mudar o parser
+ * aqui deixaria o teste validando uma gramática que não existe mais.
  */
-export function interpolate(template: string, params?: MessageParams): string {
-  return template.replace(PLACEHOLDER, (_match, name: string) => {
+export const PLACEHOLDER = /\{(\w+)\}/g;
+
+export function placeholdersOf(template: string): string[] {
+  return [...template.matchAll(PLACEHOLDER)]
+    .map((match) => match[1] ?? "")
+    .sort();
+}
+
+function reportMissing(name: string, key: string): void {
+  const message = `Parâmetro "${name}" ausente na mensagem "${key}".`;
+  // Em desenvolvimento e em teste o defeito precisa parar a execução. Em
+  // produção `t` roda dentro do render: lançar derrubaria a subárvore inteira e
+  // o leitor veria página em branco no lugar de uma frase malformada.
+  if (import.meta.env.DEV) {
+    throw new Error(message);
+  }
+  console.error(message);
+}
+
+/** Substitui `{nome}` pelos parâmetros informados. */
+export function interpolate(
+  template: string,
+  params?: MessageParams,
+  key: string = template,
+): string {
+  return template.replace(PLACEHOLDER, (match, name: string) => {
     const value = params?.[name];
     if (value === undefined) {
-      throw new Error(`Parâmetro "${name}" ausente na mensagem "${template}".`);
+      reportMissing(name, key);
+      return match;
     }
     return String(value);
   });
@@ -38,5 +61,5 @@ export function messagesFor(locale: Locale): Messages {
 
 export function createTranslate(locale: Locale): Translate {
   const messages = messagesFor(locale);
-  return (key, params) => interpolate(messages[key], params);
+  return (key, params) => interpolate(messages[key], params, key);
 }

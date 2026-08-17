@@ -131,17 +131,14 @@ function RouteContent({ children, focusOnMount, onFocused }: RouteContentProps) 
 }
 
 /**
- * A capa pública é escura por desenho, e o cabeçalho, o rodapé e o fundo de
- * overscroll ficam fora de `main`. A classe vai na raiz enquanto a rota da capa
- * está montada e sai ao trocar de rota, para que as telas autenticadas
- * continuem seguindo o tema do sistema.
+ * O anúncio ao vivo já conta a troca de rota a quem está na página; a aba do
+ * navegador continuava dizendo só o nome do site. Quem trabalha com várias
+ * abas abertas precisa distinguir "Registro" de "Qualidade" pelo título.
  */
-function useObservatoryTheme(pathname: string) {
+function useDocumentTitle(title: string) {
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle("theme-observatory", pathname === "/");
-    return () => root.classList.remove("theme-observatory");
-  }, [pathname]);
+    document.title = title;
+  }, [title]);
 }
 
 function useCapabilityRevision() {
@@ -255,9 +252,9 @@ export function App({ routeRenderer = renderRoute }: AppProps) {
     useRouting();
   const mainRef = useRef<HTMLElement>(null);
   useCapabilityRevision();
-  useObservatoryTheme(pathname);
 
   const currentTitle = routeTitle(t, pathname);
+  useDocumentTitle(t("app.documentTitle", { page: currentTitle }));
 
   return (
     <div className="site-shell">

@@ -19,6 +19,7 @@ export const messagesPt = {
   "app.brand.name": "Observatório Turístico",
   "app.brand.place": "Cumuruxatiba · Prado, Bahia",
   "app.signOut": "Sair",
+  "app.documentTitle": "{page} · Observatório Turístico de Cumuruxatiba",
   "app.routeAnnounce": "Página atual: {title}",
   "app.routeLoading": "Carregando página…",
   "app.footer.note":
@@ -223,7 +224,7 @@ export const messagesPt = {
   "landing.contact.title": "Quer entender melhor antes de entrar?",
   "landing.contact.lead":
     "A equipe passa nas hospedagens para explicar pessoalmente e ajudar no primeiro cadastro. Chame pelo WhatsApp ou peça uma visita.",
-  "landing.contact.whatsapp": "Falar no WhatsApp",
+  "landing.contact.write": "Escrever para a equipe",
   "landing.contact.visit": "Pedir uma visita",
   "landing.contact.email": "E-mail",
   "landing.contact.inPerson": "Atendimento presencial",

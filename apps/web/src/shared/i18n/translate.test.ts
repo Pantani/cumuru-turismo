@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { LOCALES, preferredLocale } from "./locale";
 import { messagesPt } from "./messages-pt";
-import { createTranslate, interpolate, messagesFor } from "./translate";
-
-const PLACEHOLDER = /\{(\w+)\}/g;
-
-function placeholdersOf(template: string): string[] {
-  return [...template.matchAll(PLACEHOLDER)].map((match) => match[1] ?? "").sort();
-}
+import {
+  createTranslate,
+  interpolate,
+  messagesFor,
+  placeholdersOf,
+} from "./translate";
 
 describe("dicionário do Observatório", () => {
   it("publica exatamente as mesmas chaves em todos os idiomas", () => {
@@ -55,10 +54,14 @@ describe("interpolação", () => {
     );
   });
 
-  it("recusa parâmetro ausente em vez de publicar o marcador cru", () => {
-    expect(() => interpolate("Média de {count} dias")).toThrowError(
-      /count/,
-    );
+  it("recusa parâmetro ausente em desenvolvimento e em teste", () => {
+    expect(() => interpolate("Média de {count} dias")).toThrowError(/count/);
+  });
+
+  it("nomeia a chave no erro, não a frase traduzida", () => {
+    expect(() =>
+      createTranslate("pt")("analytics.tile.averageHint"),
+    ).toThrowError(/analytics\.tile\.averageHint/);
   });
 
   it("traduz a mesma chave em cada idioma", () => {

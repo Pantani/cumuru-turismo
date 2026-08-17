@@ -2,7 +2,12 @@ import { useLocale } from "./LocaleProvider";
 import { LOCALES, type Locale } from "./locale";
 import type { MessageKey } from "./translate";
 
-/** Sigla no botão e nome por extenso no rótulo acessível: "PT" sozinho não diz nada a um leitor de tela. */
+/**
+ * Sigla no botão e nome por extenso no rótulo acessível. O nome acessível
+ * precisa conter o rótulo visível (WCAG 2.2 SC 2.5.3 Label in Name): quem usa
+ * comando de voz diz "clicar PT", então a sigla não pode ser substituída pelo
+ * nome do idioma — ela vem junto.
+ */
 const SHORT_KEYS: Record<Locale, MessageKey> = {
   pt: "app.locale.pt",
   en: "app.locale.en",
@@ -22,7 +27,7 @@ export function LocaleSwitcher() {
       {LOCALES.map((code) => (
         <button
           aria-current={code === locale ? "true" : undefined}
-          aria-label={t(NAME_KEYS[code])}
+          aria-label={`${t(SHORT_KEYS[code])} · ${t(NAME_KEYS[code])}`}
           key={code}
           lang={code}
           onClick={() => setLocale(code)}

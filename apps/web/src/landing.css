@@ -1,66 +1,10 @@
 /* ===========================================================================
    Cumuru — capa pública do Observatório
 
-   A capa é editorial e sempre escura: falésia de argila (coral), mar aberto
-   (teal) e areia (creme). Não é um segundo tema do produto — é o tema desta
-   página. `.theme-observatory` fica na raiz enquanto a capa está montada, e
-   redefine os mesmos tokens de `styles.css` que o painel já consome. Assim o
-   painel de indicadores herda a paleta da capa sem uma linha de CSS própria, e
-   as telas autenticadas continuam exatamente como estavam.
-
-   Cor com significado, igual ao resto do sistema: observado é teal, previsto é
-   coral, dado protegido é neutro.
+   Só o que é exclusivo da capa mora aqui: as faixas editoriais coloridas, a
+   capa, a faixa em movimento e as vagas de foto. Cor, tipografia e superfície
+   vêm dos tokens de `styles.css`, que já são os do design em todo o site.
    =========================================================================== */
-
-.theme-observatory {
-  color-scheme: dark;
-
-  --bg: #04171a;
-  --bg-tint-a: rgba(47, 194, 175, 0.08);
-  --bg-tint-b: rgba(255, 90, 54, 0.07);
-  --surface: #0a2529;
-  --surface-2: #0e2c31;
-  --surface-sunken: #04171a;
-  --line: rgba(242, 233, 220, 0.14);
-  --line-strong: rgba(242, 233, 220, 0.28);
-
-  --ink: #f2e9dc;
-  --ink-2: #b7c9c6;
-  --ink-3: #7f9995;
-
-  --brand: #2fc2af;
-  --brand-strong: #63dbc8;
-  --brand-wash: rgba(47, 194, 175, 0.14);
-  --brand-ring: rgba(47, 194, 175, 0.38);
-
-  --coral: #ff5a36;
-  --coral-strong: #ff8a6d;
-  --coral-wash: rgba(255, 90, 54, 0.16);
-
-  --positive: #35c48c;
-  --positive-wash: rgba(53, 196, 140, 0.14);
-  --danger: #ff7a63;
-  --danger-wash: rgba(255, 122, 99, 0.16);
-
-  --muted-mark: #3c565a;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 20px -12px rgba(0, 0, 0, 0.65);
-  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.35), 0 24px 48px -24px rgba(0, 0, 0, 0.8);
-
-  /* Tipografia editorial exclusiva da capa. */
-  --lp-display:
-    "Bricolage Grotesque Variable", "Geist Variable", ui-sans-serif, system-ui,
-    sans-serif;
-  --lp-shell: min(100% - 3rem, 82.5rem);
-  /* Altura do cabeçalho de rotas: o índice de seções gruda logo abaixo dele. */
-  --lp-header-h: 4.8125rem;
-}
-
-.theme-observatory .primary-action,
-.theme-observatory .brand-mark {
-  color: #04211f;
-}
 
 /* --------------------------------------------------------------------------
    Índice de seções
@@ -68,13 +12,13 @@
 
 .lp-section-nav {
   position: sticky;
-  top: var(--lp-header-h);
+  top: var(--header-h);
   z-index: 9;
   display: flex;
   align-items: center;
   gap: 1.75rem;
   flex-wrap: wrap;
-  padding: 0.75rem max(1.5rem, calc((100% - var(--lp-shell)) / 2));
+  padding: 0.75rem max(1.5rem, calc((100% - var(--shell)) / 2));
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
@@ -113,9 +57,9 @@
 .lp-section-nav-cta {
   margin-left: auto;
   padding: 0.6rem 1.1rem;
-  color: #04171a;
+  color: var(--on-accent);
   background: var(--coral);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-family: var(--font-ui);
   font-size: 0.82rem;
   font-weight: 650;
@@ -125,7 +69,7 @@
 }
 
 .lp-section-nav-cta:hover {
-  color: #04171a;
+  color: var(--on-accent);
   background: var(--ink);
 }
 
@@ -134,7 +78,7 @@
    -------------------------------------------------------------------------- */
 
 .lp-shell {
-  width: var(--lp-shell);
+  width: var(--shell);
   margin-inline: auto;
 }
 
@@ -149,7 +93,7 @@
   --lp-muted: var(--ink-2);
   --lp-rule: var(--line);
   color: var(--lp-ink);
-  background: #04171a;
+  background: var(--bg);
 }
 
 .lp-section-contact {
@@ -157,31 +101,31 @@
   --lp-muted: var(--ink-2);
   --lp-rule: var(--line);
   color: var(--lp-ink);
-  background: #0a2529;
+  background: var(--surface);
 }
 
 .lp-section-sand {
-  --lp-ink: #04171a;
-  --lp-muted: #3d5a5c;
-  --lp-rule: rgba(4, 23, 26, 0.22);
+  --lp-ink: var(--on-accent);
+  --lp-muted: var(--on-accent-2);
+  --lp-rule: color-mix(in srgb, var(--on-accent) 22%, transparent);
   color: var(--lp-ink);
-  background: #f2e9dc;
+  background: var(--ink);
 }
 
 .lp-section-clay {
-  --lp-ink: #04171a;
-  --lp-muted: #3d5a5c;
-  --lp-rule: rgba(4, 23, 26, 0.22);
+  --lp-ink: var(--on-accent);
+  --lp-muted: var(--on-accent-2);
+  --lp-rule: color-mix(in srgb, var(--on-accent) 22%, transparent);
   color: var(--lp-ink);
-  background: #e8dbc8;
+  background: var(--sand-2);
 }
 
 .lp-section-coral {
-  --lp-ink: #04171a;
-  --lp-muted: rgba(4, 23, 26, 0.8);
-  --lp-rule: rgba(4, 23, 26, 0.85);
+  --lp-ink: var(--on-accent);
+  --lp-muted: color-mix(in srgb, var(--on-accent) 80%, transparent);
+  --lp-rule: color-mix(in srgb, var(--on-accent) 85%, transparent);
   color: var(--lp-ink);
-  background: #ff5a36;
+  background: var(--coral);
 }
 
 /* --------------------------------------------------------------------------
@@ -192,7 +136,7 @@
   max-width: 16ch;
   margin: 0 0 1.5rem;
   color: var(--lp-ink);
-  font-family: var(--lp-display);
+  font-family: var(--font-display);
   font-size: clamp(2.5rem, 6vw, 5.5rem);
   font-weight: 800;
   line-height: 0.9;
@@ -210,7 +154,7 @@
 }
 
 .lp-section-coral .lp-accent {
-  color: #f2e9dc;
+  color: var(--ink);
 }
 
 .lp-lead {
@@ -241,7 +185,7 @@
 }
 
 .lp-section-coral .lp-index-number {
-  color: #f2e9dc;
+  color: var(--ink);
 }
 
 .lp-index-rule {
@@ -274,7 +218,7 @@
   justify-content: center;
   min-height: 3.25rem;
   padding: 0.95rem 1.75rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 1rem;
   font-weight: 650;
   text-decoration: none;
@@ -285,12 +229,12 @@
 }
 
 .lp-button-primary {
-  color: #04171a;
+  color: var(--on-accent);
   background: var(--coral);
 }
 
 .lp-button-primary:hover {
-  color: #04171a;
+  color: var(--on-accent);
   background: var(--ink);
 }
 
@@ -306,13 +250,13 @@
 
 .lp-button-dark {
   width: 100%;
-  color: #f2e9dc;
-  background: #04171a;
+  color: var(--ink);
+  background: var(--bg);
 }
 
 .lp-button-dark:hover {
-  color: #f2e9dc;
-  background: #0a2529;
+  color: var(--ink);
+  background: var(--surface);
 }
 
 /* --------------------------------------------------------------------------
@@ -323,7 +267,7 @@
   position: relative;
   overflow: hidden;
   color: var(--ink);
-  background: #04171a;
+  background: var(--bg);
   --lp-ink: var(--ink);
   --lp-rule: var(--line-strong);
 }
@@ -342,16 +286,16 @@
   pointer-events: none;
   background: linear-gradient(
     90deg,
-    #04171a 0%,
-    #04171a 44%,
-    rgba(4, 23, 26, 0.72) 58%,
-    rgba(4, 23, 26, 0.18) 100%
+    var(--bg) 0%,
+    var(--bg) 44%,
+    color-mix(in srgb, var(--bg) 72%, transparent) 58%,
+    color-mix(in srgb, var(--bg) 18%, transparent) 100%
   );
 }
 
 .lp-hero-body {
   position: relative;
-  width: var(--lp-shell);
+  width: var(--shell);
   margin-inline: auto;
   padding-block: clamp(3.5rem, 7vw, 6rem);
 }
@@ -360,7 +304,7 @@
   max-width: 15ch;
   margin: 0 0 2rem;
   color: var(--ink);
-  font-family: var(--lp-display);
+  font-family: var(--font-display);
   font-size: clamp(2.75rem, 8vw, 7.5rem);
   font-weight: 800;
   line-height: 0.9;
@@ -405,7 +349,7 @@
 .lp-hero-metric-value {
   margin: 0;
   color: var(--ink);
-  font-family: var(--lp-display);
+  font-family: var(--font-display);
   /* O piso desce o suficiente para "Dado protegido" caber em tela de telefone:
      o rótulo entra no lugar do número quando a célula não é publicável. */
   font-size: clamp(2.5rem, 11vw, 9.5rem);
@@ -436,7 +380,7 @@
 .lp-ticker {
   overflow: hidden;
   background: var(--coral);
-  border-block: 2px solid #04171a;
+  border-block: 2px solid var(--bg);
 }
 
 .lp-ticker-rail {
@@ -452,7 +396,7 @@
   margin: 0;
   padding: 0.85rem 1.05rem;
   list-style: none;
-  color: #04171a;
+  color: var(--on-accent);
   font-family: var(--font-num);
   font-size: 0.78rem;
   font-weight: 600;
@@ -496,11 +440,11 @@
   background:
     repeating-linear-gradient(
       135deg,
-      rgba(242, 233, 220, 0.05) 0 8px,
+      color-mix(in srgb, var(--ink) 5%, transparent) 0 8px,
       transparent 8px 16px
     ),
-    #0a2529;
-  border: 1px dashed rgba(242, 233, 220, 0.24);
+    var(--surface);
+  border: 1px dashed var(--line-strong);
 }
 
 .lp-image-slot-tag {
@@ -514,7 +458,7 @@
 
 .lp-image-slot-caption {
   max-width: 28ch;
-  color: #b7c9c6;
+  color: var(--ink-2);
   font-size: 0.86rem;
   line-height: 1.45;
   text-wrap: pretty;
@@ -541,7 +485,7 @@
 .lp-step-number {
   margin: 0 0 1rem;
   color: var(--coral);
-  font-family: var(--lp-display);
+  font-family: var(--font-display);
   font-size: 3.25rem;
   font-weight: 800;
   line-height: 0.8;
@@ -644,7 +588,7 @@
   max-width: 24ch;
   margin: 0 0 1.1rem;
   color: var(--lp-ink);
-  font-family: var(--lp-display);
+  font-family: var(--font-display);
   font-size: clamp(1.6rem, 3vw, 2.6rem);
   font-weight: 800;
   line-height: 1;
@@ -664,7 +608,7 @@
   display: grid;
   gap: 1rem;
   position: sticky;
-  top: calc(var(--lp-header-h) + 3.5rem);
+  top: calc(var(--header-h) + 3.5rem);
 }
 
 .lp-hosts-portrait {
@@ -675,15 +619,15 @@
 
 .lp-register {
   padding: 2rem;
-  color: #04171a;
+  color: var(--on-accent);
   background: var(--coral);
   border-radius: 1.25rem;
 }
 
 .lp-register h3 {
   margin: 0 0 0.6rem;
-  color: #04171a;
-  font-family: var(--lp-display);
+  color: var(--on-accent);
+  font-family: var(--font-display);
   font-size: 2rem;
   font-weight: 800;
   line-height: 0.95;
@@ -693,7 +637,7 @@
 .lp-register > p {
   margin: 0 0 1.4rem;
   max-width: 40ch;
-  color: rgba(4, 23, 26, 0.78);
+  color: color-mix(in srgb, var(--on-accent) 78%, transparent);
   font-size: 0.92rem;
   line-height: 1.55;
   text-wrap: pretty;
@@ -701,7 +645,7 @@
 
 .lp-register-footnote {
   margin: 0.9rem 0 0;
-  color: rgba(4, 23, 26, 0.7);
+  color: color-mix(in srgb, var(--on-accent) 70%, transparent);
   font-family: var(--font-num);
   font-size: 0.68rem;
   letter-spacing: 0.06em;
@@ -751,7 +695,7 @@
 .lp-prototype-note {
   margin-top: 3rem;
   padding: 1.6rem 1.75rem;
-  background: #04171a;
+  background: var(--bg);
   border-radius: 1.1rem;
 }
 
@@ -768,7 +712,7 @@
 .lp-prototype-note p {
   margin: 0;
   max-width: 88ch;
-  color: #b7c9c6;
+  color: var(--ink-2);
   font-size: 0.92rem;
   line-height: 1.6;
   text-wrap: pretty;
@@ -1038,7 +982,7 @@
 }
 
 .landing .analytics-dashboard > .dashboard-heading h2 {
-  font-family: var(--lp-display);
+  font-family: var(--font-display);
   font-size: clamp(2.25rem, 5vw, 4.5rem);
   font-weight: 800;
   line-height: 0.9;
@@ -1078,8 +1022,8 @@
   .lp-hero-veil {
     background: linear-gradient(
       180deg,
-      rgba(4, 23, 26, 0.65) 0%,
-      #04171a 55%
+      color-mix(in srgb, var(--bg) 65%, transparent) 0%,
+      var(--bg) 55%
     );
   }
 
