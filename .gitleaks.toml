@@ -33,6 +33,17 @@ regexTarget = "match"
 regexes = ['''abcDEF-_0123456789''']
 
 [[allowlists]]
+description = "Phase 7 store fixtures build keys from a literal prefix plus UUID"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^apps/api/internal/platform/store/phase7_postgres_test\.go$''']
+regexTarget = "match"
+# Só o prefixo nomeado do fixture passa; o valor real é montado em tempo de
+# teste concatenando um UUID. Uma chave literal colada aqui não tem prefixo e
+# continua sendo detectada.
+regexes = ['''"phase7-[a-z0-9-]+-"''']
+
+[[allowlists]]
 description = "Generated API image SHA references are not credentials"
 targetRules = ["generic-api-key"]
 condition = "AND"
