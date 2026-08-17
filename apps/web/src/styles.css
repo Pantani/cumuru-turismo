@@ -18,8 +18,6 @@
 
   /* Superfícies */
   --bg: #04171a;
-  --bg-tint-a: rgba(47, 194, 175, 0.08);
-  --bg-tint-b: rgba(255, 90, 54, 0.07);
   --surface: #0a2529;
   --surface-2: #0e2c31;
   --surface-sunken: #04171a;
@@ -41,7 +39,6 @@
   --brand: #2fc2af;
   --brand-strong: #63dbc8;
   --brand-wash: rgba(47, 194, 175, 0.14);
-  --brand-ring: rgba(47, 194, 175, 0.38);
 
   --coral: #ff5a36;
   --coral-strong: #ff8a6d;
@@ -74,6 +71,9 @@
   --radius: 0.875rem;
   --radius-lg: 1.25rem;
   --radius-pill: 999px;
+  /* Campo, conforme o brandkit ("Cápsula, sempre"): raio 12px fixo, não parte
+     da escala sm/lg dos cartões. */
+  --radius-field: 0.75rem;
   /* Altura do cabeçalho de rotas; o índice de seções da capa gruda logo abaixo. */
   --header-h: 4.8125rem;
 
@@ -114,19 +114,6 @@ body {
   min-width: 320px;
   min-height: 100dvh;
   margin: 0;
-}
-
-/* Campo ambiente: duas auroras muito fracas tiram o achatamento da página
-   sem custar repaint, porque ficam fixas atrás de todo o conteúdo. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(70rem 40rem at 12% -8%, var(--bg-tint-a), transparent 62%),
-    radial-gradient(52rem 34rem at 96% 4%, var(--bg-tint-b), transparent 60%);
 }
 
 button,
@@ -248,11 +235,8 @@ summary:focus-visible,
   place-items: center;
   flex: 0 0 auto;
   color: var(--on-accent);
-  background: linear-gradient(145deg, var(--brand) 0%, var(--brand-strong) 100%);
+  background: var(--brand);
   border-radius: 0.85rem;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 6px 14px -8px var(--brand-ring);
   font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -1179,12 +1163,12 @@ h4 {
 .panel-card input,
 .panel-card select {
   width: 100%;
-  min-height: 2.75rem;
-  padding: 0.65rem 0.8rem;
+  min-height: 3.125rem;
+  padding: 0.875rem 1rem;
   color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  border-radius: var(--radius-field);
   font-weight: 450;
   transition:
     border-color var(--dur) var(--ease),
@@ -1596,30 +1580,31 @@ h4 {
 .primary-action,
 .ghost-action,
 .quiet-action {
-  min-height: 2.75rem;
-  padding: 0.6rem 1.35rem;
+  min-height: 3rem;
+  padding: 1rem 1.625rem;
   border-radius: var(--radius-pill);
   cursor: pointer;
   font-weight: 650;
-  font-size: 0.9rem;
+  font-size: 0.9375rem;
   transition:
     background-color var(--dur) var(--ease),
     border-color var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease),
+    color var(--dur) var(--ease),
     transform var(--dur) var(--ease);
 }
 
-/* Teal e coral são fundos claros: recebem a tinta profunda, nunca branco. */
+/* Sobre fundo escuro o primário é sempre coral com tinta oceano — turquesa é
+   dado observado/confirmação, não ação (brandkit, seção Botões). */
 .primary-action {
   color: var(--on-accent);
-  background: var(--brand);
-  border: 1px solid var(--brand);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 8px 18px -12px var(--brand-ring);
+  background: var(--coral);
+  border: 1px solid var(--coral);
 }
 
 .primary-action:hover:not(:disabled) {
-  background: var(--brand-strong);
-  border-color: var(--brand-strong);
+  color: var(--on-accent);
+  background: var(--ink);
+  border-color: var(--ink);
 }
 
 .primary-action:active:not(:disabled) {
@@ -1628,12 +1613,13 @@ h4 {
 
 .ghost-action {
   color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--ink) 34%, transparent);
 }
 
 .ghost-action:hover:not(:disabled) {
-  background: var(--brand-wash);
+  color: var(--brand);
+  background: transparent;
   border-color: var(--brand);
 }
 
