@@ -10,6 +10,8 @@ export const messagesPt = {
   // ---------------------------------------------------------------- Navegação
   "app.nav.public": "Painel público",
   "app.nav.registration": "Registro",
+  "app.nav.selfRegistration": "Autocadastro",
+  "app.nav.activation": "Ativação",
   "app.nav.survey": "Pesquisa",
   "app.nav.workspace": "Área da hospedagem",
   "app.nav.questionnaires": "Questionários",
@@ -34,6 +36,8 @@ export const messagesPt = {
 
   "app.title.public": "Painel público do turismo",
   "app.title.registration": "Registro de visitantes",
+  "app.title.selfRegistration": "Autocadastro pelo cartaz",
+  "app.title.activation": "Ativação da conta",
   "app.title.survey": "Pesquisa com o visitante",
   "app.title.workspace": "Área da hospedagem",
   "app.title.questionnaires": "Questionários",

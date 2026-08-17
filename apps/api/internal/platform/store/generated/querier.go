@@ -14,8 +14,15 @@ type Querier interface {
 	AcquireAccommodationOnboardingLock(ctx context.Context, actorLockKey string) error
 	AcquireLocalDemoRunLock(ctx context.Context) error
 	AcquireSeedRunLock(ctx context.Context) error
+	// Condicionado ao estado pendente: repetir a ativação não reescreve a senha de
+	// uma conta já ativa.
+	ActivateAccountPassword(ctx context.Context, arg ActivateAccountPasswordParams) (int64, error)
 	ApplyStayTransition(ctx context.Context, arg ApplyStayTransitionParams) (ApplyStayTransitionRow, error)
 	ApproveQuestionnaireVersion(ctx context.Context, arg ApproveQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
+	// Exige manager ativa e acomodação ativa. O status da estadia NÃO muda: a
+	// espera de aprovação é proveniência mais carimbo, nunca um estado novo da
+	// máquina de estadia.
+	ApproveSelfServiceStay(ctx context.Context, arg ApproveSelfServiceStayParams) (ApproveSelfServiceStayRow, error)
 	AssumePublicRuntimeRole(ctx context.Context) error
 	CheckReadiness(ctx context.Context) (int32, error)
 	ClaimIdempotencyKey(ctx context.Context, arg ClaimIdempotencyKeyParams) (PlatformIdempotencyRecord, error)
@@ -24,22 +31,56 @@ type Querier interface {
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) (CompleteIdempotencyKeyRow, error)
 	CompletePublicationRun(ctx context.Context, arg CompletePublicationRunParams) (int64, error)
 	CompleteReconciliationRun(ctx context.Context, arg CompleteReconciliationRunParams) (int64, error)
+	// Uso único, atômico com a escrita do hash pelo chamador. Zero linhas é o mesmo
+	// 404 uniforme de token ausente, errado, expirado, consumido ou revogado.
+	ConsumeActivationCapability(ctx context.Context, arg ConsumeActivationCapabilityParams) (ConsumeActivationCapabilityRow, error)
 	ConsumeInvite(ctx context.Context, arg ConsumeInviteParams) (ConsumeInviteRow, error)
 	ConsumeSurveyCapability(ctx context.Context, arg ConsumeSurveyCapabilityParams) (SurveyCapability, error)
+	// Cartaz reutilizável da acomodação (ADR-039). max_uses nulo significa uso
+	// ilimitado; stay_id fica nulo e invites_target_valid garante a exclusividade.
+	CreateAccommodationInvite(ctx context.Context, arg CreateAccommodationInviteParams) (CreateAccommodationInviteRow, error)
 	CreateAccommodationMembership(ctx context.Context, arg CreateAccommodationMembershipParams) (CreateAccommodationMembershipRow, error)
+	// Conta pendente: nasce sem hash, com password_must_change false, sem
+	// tentativas e sem bloqueio, exatamente o que accounts_credential_state_valid
+	// exige do estado pending_activation (ADR-041).
+	CreateActivationAccount(ctx context.Context, arg CreateActivationAccountParams) (CreateActivationAccountRow, error)
+	CreateActivationCapability(ctx context.Context, arg CreateActivationCapabilityParams) (CreateActivationCapabilityRow, error)
+	// Vínculo da conta pendente com a acomodação (ADR-041). Gated em
+	// a.status = 'active' porque issue_activation só existe na acomodação ativa;
+	// CreateAccommodationMembership é mais permissiva (<> 'closed') e não serve.
+	CreateActivationManagerMembership(ctx context.Context, arg CreateActivationManagerMembershipParams) (CreateActivationManagerMembershipRow, error)
 	CreateAssistedGroupSubmission(ctx context.Context, arg CreateAssistedGroupSubmissionParams) (CreateAssistedGroupSubmissionRow, error)
 	CreateInvite(ctx context.Context, arg CreateInviteParams) (CreateInviteRow, error)
 	CreateInviteGroupSubmission(ctx context.Context, arg CreateInviteGroupSubmissionParams) (CreateInviteGroupSubmissionRow, error)
 	CreateQuestionnaire(ctx context.Context, arg CreateQuestionnaireParams) (SurveyQuestionnaire, error)
 	CreateQuestionnaireVersion(ctx context.Context, arg CreateQuestionnaireVersionParams) (CreateQuestionnaireVersionRow, error)
+	CreateSelfServiceGroupSubmission(ctx context.Context, arg CreateSelfServiceGroupSubmissionParams) (CreateSelfServiceGroupSubmissionRow, error)
+	// created_by_membership_id é omitido de propósito: não existe autora, e
+	// stays_provenance_author_valid exige exatamente isso quando a proveniência é
+	// self_service. Nenhuma membership sintética de sistema é fabricada.
+	CreateSelfServiceStay(ctx context.Context, arg CreateSelfServiceStayParams) (CreateSelfServiceStayRow, error)
 	CreateStay(ctx context.Context, arg CreateStayParams) (CreateStayRow, error)
 	CreateSurveyCapability(ctx context.Context, arg CreateSurveyCapabilityParams) (SurveyCapability, error)
 	DeleteDraftConsentRequirements(ctx context.Context, questionnaireVersionID pgtype.UUID) error
 	DeleteDraftQuestionnaireContent(ctx context.Context, questionnaireVersionID pgtype.UUID) error
 	DeleteExpiredAuthSessions(ctx context.Context, cutoff pgtype.Timestamptz) error
 	DeletePresenceDay(ctx context.Context, arg DeletePresenceDayParams) (int64, error)
+	// Rejeição e expiração eliminam os visitantes generalizados e preservam a
+	// casca auditável em core.stays. Não há restrição de "pelo menos um visitante",
+	// então a estadia sobrevive sem violar invariante.
+	DeleteSelfServiceStayVisitors(ctx context.Context, stayID pgtype.UUID) (int64, error)
 	DeleteStagedMetricCellsForRun(ctx context.Context, publicationRunID pgtype.UUID) (int64, error)
 	EraseExpiredSurveyFreeText(ctx context.Context, cutoff pgtype.Timestamptz) (int32, error)
+	// Varredura do worker. Eliminar somente na rejeição permitiria retenção
+	// indefinida por inação, então a expiração carimba e o chamador executa a mesma
+	// purga de visitantes (ADR-040). Não há membership decisora: o ramo 'expired'
+	// de stays_approval_fields_valid exige exatamente isso.
+	// A organização é projetada porque a varredura precisa gravar auditoria e
+	// audit.Event.Validate exige organization_id não nulo para EntityStay. Como a
+	// varredura não tem ator por definição, nenhuma query a resolve por membership:
+	// o vínculo tem de vir da própria acomodação. O bloqueio é FOR UPDATE OF s para
+	// não travar linhas de core.accommodations.
+	ExpirePendingSelfServiceStays(ctx context.Context, arg ExpirePendingSelfServiceStaysParams) ([]ExpirePendingSelfServiceStaysRow, error)
 	FinalizeInviteSubmission(ctx context.Context, arg FinalizeInviteSubmissionParams) (FinalizeInviteSubmissionRow, error)
 	FindAuthAccountByEmail(ctx context.Context, email string) (FindAuthAccountByEmailRow, error)
 	FindAuthAccountByID(ctx context.Context, id pgtype.UUID) (FindAuthAccountByIDRow, error)
@@ -49,6 +90,13 @@ type Querier interface {
 	FindSeedAccount(ctx context.Context, email string) (FindSeedAccountRow, error)
 	GetAccessibleAccommodation(ctx context.Context, arg GetAccessibleAccommodationParams) (GetAccessibleAccommodationRow, error)
 	GetAccessibleStay(ctx context.Context, arg GetAccessibleStayParams) (GetAccessibleStayRow, error)
+	GetAccommodationInviteForCapability(ctx context.Context, inviteID pgtype.UUID) (GetAccommodationInviteForCapabilityRow, error)
+	// O e-mail NÃO é projetado: a capability não é prova de titularidade do
+	// endereço, então o contexto público não pode devolvê-lo.
+	GetActivationCapability(ctx context.Context, capabilityID pgtype.UUID) (GetActivationCapabilityRow, error)
+	// Sem token e sem HMAC na projeção: a URL só existe na criação e no replay
+	// idempotente exato (ADR-019).
+	GetActiveAccommodationInvite(ctx context.Context, arg GetActiveAccommodationInviteParams) (GetActiveAccommodationInviteRow, error)
 	GetCurrentMethodology(ctx context.Context) (GetCurrentMethodologyRow, error)
 	GetCurrentPublicationVersion(ctx context.Context) (int64, error)
 	GetInviteForCapability(ctx context.Context, inviteID pgtype.UUID) (GetInviteForCapabilityRow, error)
@@ -97,6 +145,10 @@ type Querier interface {
 	// InsertSeedAccount never updates password_hash on conflict: re-running the
 	// seeder must not reset a credential the administrator already rotated.
 	InsertSeedAccount(ctx context.Context, arg InsertSeedAccountParams) error
+	// Somente dados generalizados. O canal aberto não aceita nome, documento,
+	// e-mail nem telefone (ADR-040), e role='minor' é recusado na aplicação antes
+	// de chegar aqui.
+	InsertSelfServiceVisitor(ctx context.Context, arg InsertSelfServiceVisitorParams) (InsertSelfServiceVisitorRow, error)
 	InsertStagedMetricCell(ctx context.Context, arg InsertStagedMetricCellParams) error
 	InsertSurveyAnswer(ctx context.Context, arg InsertSurveyAnswerParams) error
 	InsertSurveyResponse(ctx context.Context, arg InsertSurveyResponseParams) error
@@ -116,6 +168,11 @@ type Querier interface {
 	ListMetricMappings(ctx context.Context, arg ListMetricMappingsParams) ([]AnalyticsMetricMapping, error)
 	ListPresenceDaysForStay(ctx context.Context, stayID pgtype.UUID) ([]AnalyticsPresenceDay, error)
 	ListPresenceFactsForWindow(ctx context.Context, arg ListPresenceFactsForWindowParams) ([]ListPresenceFactsForWindowRow, error)
+	// O WHERE não muda de propósito. A elegibilidade por aprovação é decidida em
+	// presenceEligible(), no Go, sobre esta projeção. Filtrar aqui deixaria os
+	// fatos já materializados de uma estadia rejeitada órfãos: a cláusula EXISTS
+	// abaixo precisa continuar trazendo a estadia agora inelegível justamente para
+	// que o diff apague o que existia.
 	ListPresenceReconciliationStays(ctx context.Context) ([]ListPresenceReconciliationStaysRow, error)
 	ListPresenceSourceStays(ctx context.Context) ([]ListPresenceSourceStaysRow, error)
 	ListQuestionOptionsForVersion(ctx context.Context, questionnaireVersionID pgtype.UUID) ([]SurveyQuestionOption, error)
@@ -136,6 +193,9 @@ type Querier interface {
 	PublishQuestionnaireVersion(ctx context.Context, arg PublishQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	RecordAggregationFailureQualitySnapshot(ctx context.Context, arg RecordAggregationFailureQualitySnapshotParams) (RecordAggregationFailureQualitySnapshotRow, error)
 	RegisterAuthFailure(ctx context.Context, arg RegisterAuthFailureParams) error
+	// Aprovação e cancelamento numa única sentença: a estadia rejeitada sai da
+	// presença por dois caminhos independentes (approval_state e status).
+	RejectSelfServiceStay(ctx context.Context, arg RejectSelfServiceStayParams) (RejectSelfServiceStayRow, error)
 	ReleaseLocalDemoRunLock(ctx context.Context) (bool, error)
 	ReleaseSeedRunLock(ctx context.Context) (bool, error)
 	RequestQuestionnaireVersionChanges(ctx context.Context, arg RequestQuestionnaireVersionChangesParams) (SurveyQuestionnaireVersion, error)
@@ -145,13 +205,25 @@ type Querier interface {
 	// ends the sessions the previous secret opened, including the one that
 	// requested it.
 	RevokeAccountSessions(ctx context.Context, arg RevokeAccountSessionsParams) error
+	// A rotação revoga o cartaz anterior na mesma transação: o índice parcial
+	// invites_accommodation_single_active_idx torna dois ativos impossíveis.
+	RevokeActiveAccommodationInvites(ctx context.Context, arg RevokeActiveAccommodationInvitesParams) (int64, error)
 	RevokeActiveInvites(ctx context.Context, arg RevokeActiveInvitesParams) (int64, error)
 	RevokeAuthSession(ctx context.Context, arg RevokeAuthSessionParams) error
+	// A reemissão revoga a capability anterior na mesma transação: o índice parcial
+	// activation_capabilities_open_idx garante no máximo uma aberta por conta.
+	RevokeOpenActivationCapabilities(ctx context.Context, arg RevokeOpenActivationCapabilitiesParams) (int64, error)
 	// RotateAccountPassword clears the provisional flag in the same statement that
 	// writes the new secret, so a rotation cannot land while leaving the session
 	// restricted.
 	RotateAccountPassword(ctx context.Context, arg RotateAccountPasswordParams) error
 	SetPublicRuntimeSearchPath(ctx context.Context) error
+	// Livro de nonces do proof-of-work. O INSERT com conflito na chave primária
+	// afeta zero linhas e é exatamente o replay: sem este gasto, a mesma solução
+	// seria reenviada durante todo o TTL e o controle valeria zero. O chamador
+	// devolve a mesma resposta indistinguível dada a um desafio inválido, para o
+	// endpoint não virar oráculo.
+	SpendProofOfWorkChallenge(ctx context.Context, arg SpendProofOfWorkChallengeParams) (int64, error)
 	SubmitQuestionnaireVersionReview(ctx context.Context, arg SubmitQuestionnaireVersionReviewParams) (SurveyQuestionnaireVersion, error)
 	TouchAuthSession(ctx context.Context, arg TouchAuthSessionParams) error
 	UpdateAccommodation(ctx context.Context, arg UpdateAccommodationParams) (UpdateAccommodationRow, error)

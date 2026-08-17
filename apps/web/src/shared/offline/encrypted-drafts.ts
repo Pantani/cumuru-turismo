@@ -200,6 +200,17 @@ export async function inspectDraftRecord(id: string) {
   return record;
 }
 
+/** Enumerates stored drafts so a test can prove what a device actually kept. */
+export async function listDraftIds() {
+  const database = await openDatabase();
+  const transaction = database.transaction(DRAFT_STORE, "readonly");
+  const records = await requestResult(
+    transaction.objectStore(DRAFT_STORE).getAll() as IDBRequest<DraftRecord[]>,
+  );
+  database.close();
+  return records.map((record) => record.id);
+}
+
 export async function inspectDraftPresence(id: string) {
   const database = await openDatabase();
   const draft = await getStored<DraftRecord>(database, DRAFT_STORE, id);

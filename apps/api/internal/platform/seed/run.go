@@ -19,9 +19,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// adminScopes is the full set of scopes the application enforces today. The
-// administrator is the account that must reach every one of them; it is not a
+// adminScopes is the set the administrator receives at seed time. It is not a
 // separate authorization tier, because the API has none.
+//
+// It is deliberately not the full set of scopes the application enforces. A
+// scope gated by a phase flag is granted by that phase's own activation path,
+// never by the seed, because the seed runs against a deployment where the flag
+// may be off: deploy/runtime.env.example ships PHASE7_ENABLED=false. Granting
+// such a scope here would make the client render panels for routes the API does
+// not register, which is a visible break rather than a missing feature.
+//
+// stays:approve is the case today. It reaches an account through the phase 7
+// activation capability (internal/activation.Scopes), and through the local
+// demo fixture, where compose.local.yaml pins PHASE7_ENABLED to true.
 var adminScopes = []string{
 	"platform:read",
 	"accommodations:onboard",

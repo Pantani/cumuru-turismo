@@ -70,10 +70,11 @@ func TestConsumedCapabilityIsAllowedOnlyForReplayLookup(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	singleUse := int32(1)
 	row := generated.GetInviteForCapabilityRow{
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 		UseCount:            1,
-		MaxUses:             1,
+		MaxUses:             &singleUse,
 		StayStatus:          generated.CoreStayStatus(stay.StatusInvited),
 		AccommodationStatus: generated.CoreAccommodationStatus("active"),
 	}
@@ -86,14 +87,41 @@ func TestConsumedCapabilityIsAllowedOnlyForReplayLookup(t *testing.T) {
 	}
 }
 
-func TestPreRegisteredCapabilityIsAllowedOnlyForConsumedReplayLookup(t *testing.T) {
+// A null max_uses means unlimited. Comparing use_count against the pointer
+// without testing for nil first is the Go mirror of the silent SQL failure this
+// phase corrected: the unlimited capability would read as already spent.
+func TestUnlimitedCapabilityIsNeverExhausted(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
 	row := generated.GetInviteForCapabilityRow{
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+		UseCount:            97,
+		MaxUses:             nil,
+		StayStatus:          generated.CoreStayStatus(stay.StatusInvited),
+		AccommodationStatus: generated.CoreAccommodationStatus("active"),
+	}
+	if !validCapabilityRow(row, now, false) {
+		t.Fatal("unlimited capability read as consumed")
+	}
+
+	// The mirror case: an unlimited capability never reaches the exhausted state
+	// a pre-registered stay requires for a replay lookup.
+	row.StayStatus = generated.CoreStayStatus(stay.StatusPreRegistered)
+	if validCapabilityRow(row, now, true) {
+		t.Fatal("unlimited capability accepted as an exhausted replay lookup")
+	}
+}
+
+func TestPreRegisteredCapabilityIsAllowedOnlyForConsumedReplayLookup(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	singleUse := int32(1)
+	row := generated.GetInviteForCapabilityRow{
+		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 		UseCount:            1,
-		MaxUses:             1,
+		MaxUses:             &singleUse,
 		StayStatus:          generated.CoreStayStatus(stay.StatusPreRegistered),
 		AccommodationStatus: generated.CoreAccommodationStatus("active"),
 	}

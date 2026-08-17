@@ -28,7 +28,23 @@ const (
 	argonPHCPrefix  = "$argon2id$"
 	argonVersionTag = "v=19"
 	argonSegments   = 6
+
+	// unmatchableHash was derived from a random secret that was discarded, with
+	// the same cost as a live credential. It exists so an account that cannot
+	// authenticate at all — one still in pending_activation, which carries no
+	// hash — is refused at the price of a full verification instead of a pointer
+	// test. A short-circuit there answers in nanoseconds and turns the login
+	// endpoint into an account-state oracle.
+	unmatchableHash = "$argon2id$v=19$m=19456,t=2,p=1$" +
+		"7K/cizSMtH96qcovY8htQg$wdO5rMrlKA4o4rwJ6E8EBcdOmE68TdidlVC29pAHfOo"
 )
+
+// UnmatchableHash returns an Argon2id encoding no password can satisfy. The
+// caller uses it in place of a missing credential so the refusal costs the same
+// as a wrong password.
+func UnmatchableHash() string {
+	return unmatchableHash
+}
 
 // PasswordHasher holds the Argon2id cost. The defaults follow the OWASP
 // Password Storage Cheat Sheet configuration of 19 MiB, two iterations and one

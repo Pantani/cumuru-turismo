@@ -81,11 +81,12 @@ func TestReviewerIdentityRemainsDistinctAcrossKeyRotation(t *testing.T) {
 
 func assertSameHash(t *testing.T, left, right any) {
 	t.Helper()
-	leftHash, err := idempotency.RequestHash(left)
+	key := []byte("request-hash-key-material-is-at-least-32-bytes")
+	leftHash, err := idempotency.RequestHash(key, left)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rightHash, err := idempotency.RequestHash(right)
+	rightHash, err := idempotency.RequestHash(key, right)
 	if err != nil {
 		t.Fatal(err)
 	}

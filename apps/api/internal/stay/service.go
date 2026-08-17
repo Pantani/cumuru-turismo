@@ -12,9 +12,13 @@ import (
 )
 
 var (
-	ErrInvalidInput       = errors.New("invalid input")
-	ErrNotFound           = errors.New("resource not found")
-	ErrConflict           = errors.New("resource conflict")
+	ErrInvalidInput = errors.New("invalid input")
+	ErrNotFound     = errors.New("resource not found")
+	ErrConflict     = errors.New("resource conflict")
+	// ErrForbidden separates "you are not allowed to do this" from "this does
+	// not exist". It is used only where the caller already proved membership,
+	// so the distinction discloses nothing new.
+	ErrForbidden          = errors.New("operation not permitted")
 	ErrPreconditionFailed = errors.New("precondition failed")
 	ErrInviteConsumed     = errors.New("invite consumed")
 	ErrRateLimited        = errors.New("rate limited")
@@ -36,9 +40,15 @@ type Record struct {
 	NoShowAt               *time.Time `json:"no_show_at,omitempty"`
 	CancellationReasonCode *string    `json:"cancellation_reason_code,omitempty"`
 	NoShowReasonCode       *string    `json:"no_show_reason_code,omitempty"`
-	Version                int64      `json:"version"`
-	CreatedAt              time.Time  `json:"created_at"`
-	UpdatedAt              time.Time  `json:"updated_at"`
+	// The three approval fields are required by the contract and emitted even
+	// when null, so a handler that forgets one breaks the contract test instead
+	// of returning a stay whose countability the client has to guess.
+	Provenance        Provenance `json:"provenance"`
+	ApprovalState     *string    `json:"approval_state"`
+	ApprovalExpiresAt *time.Time `json:"approval_expires_at"`
+	Version           int64      `json:"version"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 type MutationResult struct {
@@ -92,8 +102,13 @@ type PageRequest struct {
 	Limit           int32
 	AccommodationID uuid.UUID
 	Status          Status
-	ArrivalFrom     string
-	ArrivalTo       string
+	// The approval queue is GET /stays?accommodation_id=…&approval_state=pending.
+	// No new listing endpoint: cursor, limit, ordering and membership isolation
+	// stay the ones the Fase 2 already proved.
+	ApprovalState ApprovalState
+	Provenance    Provenance
+	ArrivalFrom   string
+	ArrivalTo     string
 }
 
 type Page struct {
@@ -201,6 +216,23 @@ type Repository interface {
 	Transition(context.Context, TransitionCommand) (MutationResult, bool, error)
 	GetInvite(context.Context, InviteRequest) (InviteContext, error)
 	SubmitInviteGroup(context.Context, InviteGroupCommand) (SubmissionAccepted, bool, error)
+	CreateAccommodationInvite(
+		context.Context, AccommodationInviteCommand,
+	) (AccommodationInviteCreated, bool, error)
+	GetAccommodationInvite(
+		context.Context, access.Principal, uuid.UUID,
+	) (AccommodationInviteStatus, error)
+	RevokeAccommodationInvite(
+		context.Context, AccommodationInviteRevokeCommand,
+	) (AccommodationInviteStatus, bool, error)
+	GetAccommodationInviteContext(
+		context.Context, InviteRequest,
+	) (AccommodationInviteContext, error)
+	SubmitSelfRegistration(
+		context.Context, SelfRegistrationCommand,
+	) (SelfRegistrationAccepted, bool, error)
+	Approve(context.Context, ApprovalCommand) (MutationResult, bool, error)
+	Reject(context.Context, RejectionCommand) (MutationResult, bool, error)
 }
 
 type Service struct {
@@ -287,6 +319,80 @@ func (s *Service) SubmitInviteGroup(
 	return s.repository.SubmitInviteGroup(ctx, command)
 }
 
+func (s *Service) CreateAccommodationInvite(
+	ctx context.Context,
+	command AccommodationInviteCommand,
+) (AccommodationInviteCreated, bool, error) {
+	if err := ValidateAccommodationInvite(command); err != nil {
+		return AccommodationInviteCreated{}, false, err
+	}
+	return s.repository.CreateAccommodationInvite(ctx, command)
+}
+
+func (s *Service) GetAccommodationInvite(
+	ctx context.Context,
+	actor access.Principal,
+	accommodationID uuid.UUID,
+) (AccommodationInviteStatus, error) {
+	if !validActor(actor) || accommodationID == uuid.Nil {
+		return AccommodationInviteStatus{}, ErrInvalidInput
+	}
+	return s.repository.GetAccommodationInvite(ctx, actor, accommodationID)
+}
+
+func (s *Service) RevokeAccommodationInvite(
+	ctx context.Context,
+	command AccommodationInviteRevokeCommand,
+) (AccommodationInviteStatus, bool, error) {
+	if err := ValidateAccommodationInviteRevoke(command); err != nil {
+		return AccommodationInviteStatus{}, false, err
+	}
+	return s.repository.RevokeAccommodationInvite(ctx, command)
+}
+
+// A malformed capability answers not-found, never invalid-input: the open
+// channel must not tell a probe whether the token was the wrong shape or simply
+// unknown.
+func (s *Service) GetAccommodationInviteContext(
+	ctx context.Context,
+	request InviteRequest,
+) (AccommodationInviteContext, error) {
+	if !validCapabilityRequest(request.Token, request.RateSubject) {
+		return AccommodationInviteContext{}, ErrNotFound
+	}
+	return s.repository.GetAccommodationInviteContext(ctx, request)
+}
+
+func (s *Service) SubmitSelfRegistration(
+	ctx context.Context,
+	command SelfRegistrationCommand,
+) (SelfRegistrationAccepted, bool, error) {
+	if err := ValidateSelfRegistration(command); err != nil {
+		return SelfRegistrationAccepted{}, false, err
+	}
+	return s.repository.SubmitSelfRegistration(ctx, command)
+}
+
+func (s *Service) Approve(
+	ctx context.Context,
+	command ApprovalCommand,
+) (MutationResult, bool, error) {
+	if err := ValidateApproval(command); err != nil {
+		return MutationResult{}, false, err
+	}
+	return s.repository.Approve(ctx, command)
+}
+
+func (s *Service) Reject(
+	ctx context.Context,
+	command RejectionCommand,
+) (MutationResult, bool, error) {
+	if err := ValidateRejection(command); err != nil {
+		return MutationResult{}, false, err
+	}
+	return s.repository.Reject(ctx, command)
+}
+
 func validActor(actor access.Principal) bool {
 	return actor.Issuer != "" && actor.Subject != ""
 }
@@ -324,7 +430,19 @@ func validCursor(page PageRequest) bool {
 }
 
 func validPageFilter(page PageRequest) bool {
-	return page.Status == "" || validStatus(page.Status)
+	return optionalFilter(page.Status == "", validStatus(page.Status)) &&
+		optionalFilter(page.ApprovalState == "", validApprovalFilter(page.ApprovalState)) &&
+		optionalFilter(page.Provenance == "", page.Provenance.Valid())
+}
+
+func optionalFilter(absent, valid bool) bool {
+	return absent || valid
+}
+
+// ApprovalNotRequired has no column value, so it is not a filter: asking for it
+// would silently return everything.
+func validApprovalFilter(state ApprovalState) bool {
+	return state != ApprovalNotRequired && state.Valid()
 }
 
 func validPage(page PageRequest) bool {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuthSession } from "../../shared/auth/AuthSession";
+import { AccommodationAccessPanel } from "../accommodation/AccommodationAccessPanel";
+import { ApprovalQueue } from "../approval/ApprovalQueue";
 import { AccommodationOnboarding } from "./AccommodationOnboarding";
 import { AccommodationPicker } from "./AccommodationPicker";
 import { StayBoard } from "./StayBoard";
@@ -19,6 +21,35 @@ function LoadFailure({ operation }: { operation: { message: string; tone: string
     <p className="operation-status tone-failed" role="alert">
       {operation.message}
     </p>
+  );
+}
+
+/**
+ * O servidor não registra rota alguma da Fase 7 quando `PHASE7_ENABLED` é falso
+ * — e o default é falso —, mas o contrato não expõe nenhum campo de capacidade:
+ * `HealthStatus` e `ReadinessStatus` são `additionalProperties: false` com valor
+ * `const`, logo não há onde ler a flag sem mudar o contrato, que é lane do
+ * platform.
+ *
+ * O canal que já existe é o escopo da sessão, o mesmo que `App.tsx` usa para as
+ * Fases 3 e 4. `stays:approve` serve porque é concedido **exclusivamente** pelo
+ * caminho de ativação da Fase 7, e nenhuma conta semeada o carrega; ele vem do
+ * servidor a cada login, então a mesma imagem atende runtime com a fase ligada
+ * e desligada. Devolver `null` antes de montar é o que importa: painel não
+ * montado não dispara efeito, e efeito não disparado não gera `404`.
+ */
+const SELF_SERVICE_SCOPE = "stays:approve";
+
+function SelfServicePanels({ accommodation }: { accommodation: Accommodation }) {
+  const { hasScope } = useAuthSession();
+  if (!hasScope(SELF_SERVICE_SCOPE)) {
+    return null;
+  }
+  return (
+    <>
+      <ApprovalQueue accommodation={accommodation} />
+      <AccommodationAccessPanel accommodation={accommodation} />
+    </>
   );
 }
 
@@ -84,7 +115,12 @@ export function OperatorWorkspace() {
         ) : null}
       </section>
 
-      {selected === null ? null : <StayBoard accommodation={selected} />}
+      {selected === null ? null : (
+        <>
+          <StayBoard accommodation={selected} />
+          <SelfServicePanels accommodation={selected} />
+        </>
+      )}
     </div>
   );
 }

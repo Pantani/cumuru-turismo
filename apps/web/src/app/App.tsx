@@ -17,11 +17,17 @@ import { useLocale } from "../shared/i18n/LocaleProvider";
 import { LocaleSwitcher } from "../shared/i18n/LocaleSwitcher";
 import type { MessageKey, Translate } from "../shared/i18n/translate";
 import { CAPABILITY_CHANGE_EVENT } from "../shared/security/capability-events";
+import { peekActivationCapability } from "../shared/security/activation-capability";
 import { peekInviteCapability } from "../shared/security/invite-capability";
+import { peekSelfServiceCapability } from "../shared/security/self-service-capability";
 import { peekSurveyCapability } from "../shared/security/survey-capability";
 
 const PublicFoundationPage = lazy(() => import("../pages/PublicFoundationPage"));
 const RegistrationPage = lazy(() => import("../pages/RegistrationPage"));
+const SelfRegistrationPage = lazy(
+  () => import("../pages/SelfRegistrationPage"),
+);
+const ActivationPage = lazy(() => import("../pages/ActivationPage"));
 const AuthenticatedPage = lazy(() => import("../pages/AuthenticatedPage"));
 const SurveyPage = lazy(() => import("../pages/SurveyPage"));
 const QuestionnaireAdminPage = lazy(
@@ -33,6 +39,8 @@ const NotFoundPage = lazy(() => import("../pages/NotFoundPage"));
 const routePages: Record<AppPath, ComponentType> = {
   "/": PublicFoundationPage,
   "/registro": RegistrationPage,
+  "/i": SelfRegistrationPage,
+  "/ativacao": ActivationPage,
   "/pesquisa": SurveyPage,
   "/acesso": AuthenticatedPage,
   "/questionarios": QuestionnaireAdminPage,
@@ -42,6 +50,8 @@ const routePages: Record<AppPath, ComponentType> = {
 const routeTitles: Record<AppPath, MessageKey> = {
   "/": "app.title.public",
   "/registro": "app.title.registration",
+  "/i": "app.title.selfRegistration",
+  "/ativacao": "app.title.activation",
   "/pesquisa": "app.title.survey",
   "/acesso": "app.title.workspace",
   "/questionarios": "app.title.questionnaires",
@@ -204,6 +214,16 @@ function navigationEntries(
       href: "/registro",
       label: "app.nav.registration",
       visible: peekInviteCapability() !== null,
+    },
+    {
+      href: "/i",
+      label: "app.nav.selfRegistration",
+      visible: peekSelfServiceCapability() !== null,
+    },
+    {
+      href: "/ativacao",
+      label: "app.nav.activation",
+      visible: peekActivationCapability() !== null,
     },
     {
       href: "/pesquisa",

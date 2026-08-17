@@ -118,3 +118,100 @@ WHERE account_id = sqlc.arg(account_id)
 -- name: DeleteExpiredAuthSessions :exec
 DELETE FROM auth.sessions
 WHERE absolute_expires_at < sqlc.arg(cutoff);
+
+-- name: CreateActivationAccount :one
+-- Conta pendente: nasce sem hash, com password_must_change false, sem
+-- tentativas e sem bloqueio, exatamente o que accounts_credential_state_valid
+-- exige do estado pending_activation (ADR-041).
+INSERT INTO auth.accounts (
+  id,
+  email,
+  display_name,
+  scopes,
+  status
+)
+VALUES (
+  sqlc.arg(account_id),
+  sqlc.arg(email),
+  sqlc.arg(display_name),
+  sqlc.arg(scopes),
+  'pending_activation'
+)
+RETURNING id, email, display_name, scopes, status, created_at;
+
+-- name: RevokeOpenActivationCapabilities :execrows
+-- A reemissão revoga a capability anterior na mesma transação: o índice parcial
+-- activation_capabilities_open_idx garante no máximo uma aberta por conta.
+UPDATE auth.activation_capabilities AS c
+SET revoked_at = sqlc.arg(revoked_at)
+WHERE c.account_id = sqlc.arg(account_id)
+  AND c.consumed_at IS NULL
+  AND c.revoked_at IS NULL;
+
+-- name: CreateActivationCapability :one
+INSERT INTO auth.activation_capabilities (
+  id,
+  account_id,
+  accommodation_id,
+  token_hmac,
+  token_key_version,
+  purpose,
+  expires_at
+)
+VALUES (
+  sqlc.arg(capability_id),
+  sqlc.arg(account_id),
+  sqlc.arg(accommodation_id),
+  sqlc.arg(token_hmac),
+  sqlc.arg(token_key_version),
+  'accommodation_activation',
+  sqlc.arg(expires_at)
+)
+RETURNING id, account_id, accommodation_id, token_key_version, expires_at, created_at;
+
+-- name: GetActivationCapability :one
+-- O e-mail NÃO é projetado: a capability não é prova de titularidade do
+-- endereço, então o contexto público não pode devolvê-lo.
+SELECT
+  c.id,
+  c.account_id,
+  c.accommodation_id,
+  c.token_hmac,
+  c.token_key_version,
+  c.expires_at,
+  c.consumed_at,
+  c.revoked_at,
+  a.name AS accommodation_name,
+  a.status AS accommodation_status,
+  account.display_name,
+  account.status AS account_status
+FROM auth.activation_capabilities AS c
+JOIN core.accommodations AS a
+  ON a.id = c.accommodation_id
+JOIN auth.accounts AS account
+  ON account.id = c.account_id
+WHERE c.id = sqlc.arg(capability_id);
+
+-- name: ConsumeActivationCapability :one
+-- Uso único, atômico com a escrita do hash pelo chamador. Zero linhas é o mesmo
+-- 404 uniforme de token ausente, errado, expirado, consumido ou revogado.
+UPDATE auth.activation_capabilities AS c
+SET consumed_at = sqlc.arg(consumed_at)
+WHERE c.token_hmac = sqlc.arg(token_hmac)
+  AND c.consumed_at IS NULL
+  AND c.revoked_at IS NULL
+  AND c.expires_at > sqlc.arg(consumed_at)
+RETURNING id, account_id, accommodation_id;
+
+-- name: ActivateAccountPassword :execrows
+-- Condicionado ao estado pendente: repetir a ativação não reescreve a senha de
+-- uma conta já ativa.
+UPDATE auth.accounts
+SET
+  password_hash = sqlc.arg(password_hash),
+  password_changed_at = sqlc.arg(changed_at),
+  status = 'active',
+  updated_at = sqlc.arg(changed_at)
+WHERE id = sqlc.arg(account_id)
+  AND status = 'pending_activation'
+  AND password_hash IS NULL;

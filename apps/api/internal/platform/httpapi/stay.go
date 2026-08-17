@@ -388,11 +388,16 @@ func (d Dependencies) stayPageRequest(request *http.Request) (stay.PageRequest, 
 			return stay.PageRequest{}, errInvalidCursor
 		}
 	}
+	query := request.URL.Query()
 	return stay.PageRequest{
 		CursorCreatedAt: cursor.CreatedAt, CursorID: cursor.ID, Limit: limit,
-		AccommodationID: accommodationID, Status: stay.Status(request.URL.Query().Get("status")),
-		ArrivalFrom: request.URL.Query().Get("arrival_from"),
-		ArrivalTo:   request.URL.Query().Get("arrival_to"),
+		AccommodationID: accommodationID, Status: stay.Status(query.Get("status")),
+		// The approval queue is this listing with a filter, not a new endpoint:
+		// cursor, limit, ordering and membership isolation stay the proven ones.
+		ApprovalState: stay.ApprovalState(query.Get("approval_state")),
+		Provenance:    stay.Provenance(query.Get("provenance")),
+		ArrivalFrom:   query.Get("arrival_from"),
+		ArrivalTo:     query.Get("arrival_to"),
 	}, nil
 }
 

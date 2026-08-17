@@ -20,7 +20,12 @@ type PresenceDay struct {
 }
 
 type Stay struct {
-	Status           Status
+	Status Status
+	// Approval has no usable zero value on purpose. A query that forgets to
+	// project approval_state cannot silently publish a stay nobody approved: it
+	// fails here instead. A filter in a query is forgettable by the next query;
+	// a mandatory field is not.
+	Approval         ApprovalState
 	PlannedArrival   CivilDate
 	PlannedDeparture CivilDate
 	CheckedInAt      *time.Time
@@ -28,6 +33,16 @@ type Stay struct {
 }
 
 func PresenceDays(value Stay) ([]PresenceDay, error) {
+	if !value.Approval.Valid() {
+		return nil, ErrInvalidPresence
+	}
+	if !value.Approval.Countable() {
+		return []PresenceDay{}, nil
+	}
+	return presenceDaysForStatus(value)
+}
+
+func presenceDaysForStatus(value Stay) ([]PresenceDay, error) {
 	switch value.Status {
 	case StatusPreRegistered:
 		return presenceRange(value.PlannedArrival, value.PlannedDeparture, PresenceForecast)
@@ -43,7 +58,7 @@ func PresenceDays(value Stay) ([]PresenceDay, error) {
 }
 
 func PresenceDaysAt(value Stay, asOf CivilDate) ([]PresenceDay, error) {
-	if value.Status != StatusCheckedIn {
+	if value.Status != StatusCheckedIn || !value.Approval.Countable() {
 		return PresenceDays(value)
 	}
 	if value.CheckedInAt == nil {

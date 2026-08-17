@@ -988,6 +988,7 @@ SELECT
   stay.planned_departure_on,
   stay.checked_in_at,
   stay.checked_out_at,
+  stay.approval_state,
   stay.version AS expected_version,
   stay.updated_at
 FROM core.stays AS stay
@@ -1008,10 +1009,16 @@ type ListPresenceReconciliationStaysRow struct {
 	PlannedDepartureOn pgtype.Date        `json:"planned_departure_on"`
 	CheckedInAt        pgtype.Timestamptz `json:"checked_in_at"`
 	CheckedOutAt       pgtype.Timestamptz `json:"checked_out_at"`
+	ApprovalState      *string            `json:"approval_state"`
 	ExpectedVersion    int64              `json:"expected_version"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+// O WHERE não muda de propósito. A elegibilidade por aprovação é decidida em
+// presenceEligible(), no Go, sobre esta projeção. Filtrar aqui deixaria os
+// fatos já materializados de uma estadia rejeitada órfãos: a cláusula EXISTS
+// abaixo precisa continuar trazendo a estadia agora inelegível justamente para
+// que o diff apague o que existia.
 func (q *Queries) ListPresenceReconciliationStays(ctx context.Context) ([]ListPresenceReconciliationStaysRow, error) {
 	rows, err := q.db.Query(ctx, listPresenceReconciliationStays)
 	if err != nil {
@@ -1029,6 +1036,7 @@ func (q *Queries) ListPresenceReconciliationStays(ctx context.Context) ([]ListPr
 			&i.PlannedDepartureOn,
 			&i.CheckedInAt,
 			&i.CheckedOutAt,
+			&i.ApprovalState,
 			&i.ExpectedVersion,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1051,6 +1059,7 @@ SELECT
   planned_departure_on,
   checked_in_at,
   checked_out_at,
+  approval_state,
   version,
   updated_at
 FROM core.stays
@@ -1066,6 +1075,7 @@ type ListPresenceSourceStaysRow struct {
 	PlannedDepartureOn pgtype.Date        `json:"planned_departure_on"`
 	CheckedInAt        pgtype.Timestamptz `json:"checked_in_at"`
 	CheckedOutAt       pgtype.Timestamptz `json:"checked_out_at"`
+	ApprovalState      *string            `json:"approval_state"`
 	Version            int64              `json:"version"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
@@ -1087,6 +1097,7 @@ func (q *Queries) ListPresenceSourceStays(ctx context.Context) ([]ListPresenceSo
 			&i.PlannedDepartureOn,
 			&i.CheckedInAt,
 			&i.CheckedOutAt,
+			&i.ApprovalState,
 			&i.Version,
 			&i.UpdatedAt,
 		); err != nil {

@@ -83,7 +83,7 @@ type InsertSeedAccountParams struct {
 	ID                 pgtype.UUID `json:"id"`
 	Email              string      `json:"email"`
 	DisplayName        string      `json:"display_name"`
-	PasswordHash       string      `json:"password_hash"`
+	PasswordHash       *string     `json:"password_hash"`
 	Scopes             []string    `json:"scopes"`
 	PasswordMustChange bool        `json:"password_must_change"`
 }

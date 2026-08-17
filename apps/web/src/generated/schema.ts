@@ -464,6 +464,190 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/accommodations/{accommodation_id}/activation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Emitir capability de ativação da conta da acomodação
+         * @description Cria uma conta sem credencial em pending_activation, vincula-a como manager e emite uma capability de uso único. A URL só aparece nesta criação e no replay idempotente exato. Não há envio de e-mail: o link e o QR são exibidos na própria tela.
+         */
+        post: operations["createAccommodationActivation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/activation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar contexto da ativação identificada pela capability
+         * @description O e-mail não é devolvido: a capability não é prova de titularidade do endereço. Token ausente, incorreto, expirado, consumido ou revogado produz o mesmo 404, sem distinção.
+         */
+        get: operations["getAccommodationActivation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/activation/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Definir a senha e ativar a conta
+         * @description Responde 204 sem corpo pelo mesmo motivo de POST /auth/password: nenhuma resposta pode ecoar o segredo. Não emite sessão — o operador vai a POST /auth/login depois, para que a capability não vire credencial de longa duração. Sem Idempotency-Key: a capability é o token de uso único e repetir a chamada devolve 404, intencionalmente.
+         */
+        post: operations["activateAccommodationAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accommodations/{accommodation_id}/invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar o convite reutilizável ativo
+         * @description Sem url: a URL do convite só existe na criação e no replay idempotente exato (ADR-019). 404 quando não houver convite ativo.
+         */
+        get: operations["getAccommodationInvite"];
+        put?: never;
+        /**
+         * Emitir ou rotacionar o convite reutilizável da acomodação
+         * @description A rotação revoga o convite ativo anterior na mesma transação e emite outro invite_id, portanto outro token: o cartaz anterior deixa de funcionar imediatamente. A URL carrega o token no fragmento (/i#token) e só aparece nesta criação e no replay idempotente exato.
+         */
+        post: operations["createAccommodationInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accommodations/{accommodation_id}/invite/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revogar o convite reutilizável da acomodação
+         * @description Comando POST no padrão da ADR-018, e não DELETE, para admitir Idempotency-Key. Revogar convite já revogado é 200, porque a operação é idempotente por natureza.
+         */
+        post: operations["revokeAccommodationInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accommodation-invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar o contexto do cartaz e receber o desafio de trabalho
+         * @description O token viaja no cabeçalho X-Cumuru-Invite-Token, lido do fragmento da URL pelo cliente (ADR-039). O cabeçalho customizado força preflight CORS e mantém o token fora da linha de requisição que servidores registram. A resposta traz o desafio de proof-of-work, cuja dificuldade é derivada do contador do balde de rate limit desta rota.
+         */
+        get: operations["getAccommodationInviteContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accommodation-invite/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enviar autocadastro generalizado pelo cartaz da acomodação
+         * @description Canal aberto e sem operador. Coleta somente dados generalizados: nome, documento, e-mail e telefone são rejeitados (ADR-040). role='minor' é recusado com 422, porque não há como verificar responsável num formulário anônimo. expected_guest_count não vem no corpo: é o tamanho de visitors, o que remove qualquer divergência entre declarado e submetido. A estadia nasce pendente de aprovação e não alcança presença nem publicação enquanto não for aprovada.
+         */
+        post: operations["submitAccommodationSelfRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stays/{stay_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprovar estadia autocadastrada
+         * @description Exige o escopo próprio stays:approve; operador com stays:write recebe 403, e a SQL exige adicionalmente role='manager'. O status da estadia não muda: muda approval_state e a versão. Estadia assistida, sem approval_state, responde 422.
+         */
+        post: operations["approveStay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stays/{stay_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rejeitar estadia autocadastrada
+         * @description Motivo obrigatório e de lista fechada, no precedente de questionnaire_change_reason_valid: texto livre em platform.audit_events, que é append-only, viraria dado pessoal permanente. A rejeição elimina os visitantes generalizados, cancela a estadia e preserva apenas o fato auditável.
+         */
+        post: operations["rejectStay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/questionnaires": {
         parameters: {
             query?: never;
@@ -886,6 +1070,11 @@ export interface components {
             cancellation_reason_code?: "guest_request" | "accommodation_request" | "duplicate" | "correction" | null;
             /** @enum {string|null} */
             no_show_reason_code?: "guest_absent" | "accommodation_report" | null;
+            provenance: components["schemas"]["StayProvenance"];
+            /** @description Nulo para estadia assistida. */
+            approval_state: components["schemas"]["StayApprovalState"] | null;
+            /** Format: date-time */
+            approval_expires_at: string | null;
             /** Format: int64 */
             version: number;
             /** Format: date-time */
@@ -983,6 +1172,127 @@ export interface components {
             status: "accepted";
             /** @constant */
             stay_status: "pre_registered";
+        };
+        CreateAccommodationActivationRequest: {
+            /** Format: email */
+            email: string;
+            display_name: string;
+        };
+        AccommodationActivationCreated: {
+            /** Format: uuid */
+            activation_id: string;
+            /** Format: uuid */
+            account_id: string;
+            /**
+             * Format: uri
+             * @description Token no fragmento. Só aparece nesta criação e no replay idempotente exato.
+             */
+            url: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: int64 */
+            version: number;
+        };
+        AccommodationActivationContext: {
+            accommodation_name: string;
+            display_name: string;
+            /** Format: date-time */
+            expires_at: string;
+            password_policy: {
+                /** @constant */
+                min_length: 12;
+                /** @constant */
+                max_length: 256;
+            };
+        };
+        ActivateAccountRequest: {
+            password: string;
+        };
+        CreateAccommodationInviteRequest: {
+            privacy_notice_version: string;
+            /** @description Ausente ou null significa uso ilimitado. Quando presente, o invariante use_count <= max_uses continua valendo. */
+            max_uses?: number | null;
+        };
+        AccommodationInviteCreated: {
+            /** Format: uuid */
+            invite_id: string;
+            /**
+             * Format: uri
+             * @description Token no fragmento (/i#token), nunca no caminho.
+             */
+            url: string;
+            /** Format: date-time */
+            expires_at: string;
+            max_uses: number | null;
+            use_count: number;
+        };
+        AccommodationInviteStatus: {
+            /** Format: uuid */
+            invite_id: string;
+            /** Format: date-time */
+            expires_at: string;
+            max_uses: number | null;
+            use_count: number;
+            /** Format: date-time */
+            revoked_at: string | null;
+        };
+        ProofOfWorkChallenge: {
+            /** @constant */
+            algorithm: "sha256-leading-zero-bits";
+            /** @description Opaco e autenticado por MAC. Carrega dentro de si o nonce, o prazo, a dificuldade e o vínculo com o cartaz, de modo que o cliente não possa rebaixar a dificuldade nem gastar o desafio noutra acomodação. */
+            challenge: string;
+            /** @description Derivada do contador do balde de rate limit: a primeira submissão de uma rede é barata e a décima é cara. */
+            difficulty_bits: number;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        AccommodationInviteContext: {
+            accommodation_name: string;
+            privacy_notice_version: string;
+            consent_requirements?: components["schemas"]["ConsentRequirementDefinition"][];
+            proof_of_work: components["schemas"]["ProofOfWorkChallenge"];
+        };
+        /** @description Visitante do canal aberto. Somente dados generalizados; role='minor' é recusado porque não há como verificar responsável num formulário anônimo e não autenticado (ADR-040). */
+        SelfServiceVisitorInput: components["schemas"]["VisitorInput"] & {
+            /** @enum {string} */
+            role?: "responsible" | "companion";
+        };
+        SelfRegistrationRequest: {
+            /**
+             * Format: uuid
+             * @description UUIDv7 no formato canônico hifenizado.
+             */
+            client_submission_id: string;
+            privacy_notice_version: string;
+            /** Format: date */
+            planned_arrival_on: string;
+            /** Format: date */
+            planned_departure_on: string;
+            visitors: components["schemas"]["SelfServiceVisitorInput"][];
+            proof_of_work: {
+                challenge: string;
+                solution: string;
+            };
+        };
+        SelfRegistrationAccepted: {
+            /** Format: uuid */
+            submission_id: string;
+            /** Format: uuid */
+            stay_id: string;
+            /** @constant */
+            status: "accepted";
+            /** @constant */
+            stay_status: "pre_registered";
+            /** @constant */
+            approval_state: "pending";
+        };
+        /** @enum {string} */
+        StayApprovalState: "pending" | "approved" | "rejected" | "expired";
+        /** @enum {string} */
+        StayProvenance: "assisted" | "self_service";
+        RejectStayRequest: {
+            /** @enum {string} */
+            reason_code: "identity_not_verified" | "not_a_guest" | "duplicate" | "data_incorrect" | "other";
         };
         /** @enum {string} */
         QuestionnaireVersionStatus: "draft" | "privacy_review" | "approved" | "published" | "retired";
@@ -1551,6 +1861,10 @@ export interface components {
         QuestionnaireId: string;
         QuestionnaireVersionId: string;
         QuestionnaireStableKey: string;
+        /** @description Token do cartaz, lido pelo cliente do fragmento da URL (/i#token). O fragmento nunca é enviado ao servidor, então o token não alcança linha de requisição, access log, WAF nem CDN. O cabeçalho customizado força preflight CORS, a mesma propriedade que Idempotency-Key já explora para impedir POST de formulário simples (ADR-039). */
+        InviteTokenHeader: string;
+        /** @description Capability de ativação, lida do fragmento da URL. Cabeçalho distinto do convite de propósito: purposes separados são domínios criptográficos separados, e o Verify confere o purpose (ADR-039, ADR-041). */
+        ActivationTokenHeader: string;
         /** @description Capability opaca e purpose-bound exclusiva da submissão. */
         SurveyCapability: string;
     };
@@ -2182,6 +2496,9 @@ export interface operations {
                 limit?: components["parameters"]["PageLimit"];
                 accommodation_id?: string;
                 status?: components["schemas"]["StayStatus"];
+                /** @description Fila de aprovação por acomodação. Nenhum endpoint novo de listagem: cursor, limite, ordenação e isolamento por membership são os da Fase 2. */
+                approval_state?: components["schemas"]["StayApprovalState"];
+                provenance?: components["schemas"]["StayProvenance"];
                 arrival_from?: string;
                 arrival_to?: string;
             };
@@ -2622,6 +2939,356 @@ export interface operations {
             409: components["responses"]["ProblemWithRetry"];
             422: components["responses"]["Problem"];
             429: components["responses"]["RateLimitedProblem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createAccommodationActivation: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                accommodation_id: components["parameters"]["AccommodationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAccommodationActivationRequest"];
+            };
+        };
+        responses: {
+            /** @description Capability criada; a URL só aparece aqui e em replay exato. */
+            201: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    Location: components["headers"]["Location"];
+                    ETag: components["headers"]["EntityTag"];
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccommodationActivationCreated"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            429: components["responses"]["RateLimitedProblem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccommodationActivation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Capability de ativação, lida do fragmento da URL. Cabeçalho distinto do convite de propósito: purposes separados são domínios criptográficos separados, e o Verify confere o purpose (ADR-039, ADR-041). */
+                "X-Cumuru-Activation-Token": components["parameters"]["ActivationTokenHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contexto mínimo da ativação. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccommodationActivationContext"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            429: components["responses"]["RateLimitedProblem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    activateAccommodationAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Capability de ativação, lida do fragmento da URL. Cabeçalho distinto do convite de propósito: purposes separados são domínios criptográficos separados, e o Verify confere o purpose (ADR-039, ADR-041). */
+                "X-Cumuru-Activation-Token": components["parameters"]["ActivationTokenHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivateAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Conta ativada; nenhum corpo e nenhuma sessão emitida. */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["RateLimitedProblem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccommodationInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accommodation_id: components["parameters"]["AccommodationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado do convite ativo, sem token e sem URL. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccommodationInviteStatus"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createAccommodationInvite: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                accommodation_id: components["parameters"]["AccommodationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAccommodationInviteRequest"];
+            };
+        };
+        responses: {
+            /** @description Convite criado; a URL só aparece aqui e em replay exato. */
+            201: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    Location: components["headers"]["Location"];
+                    ETag: components["headers"]["EntityTag"];
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccommodationInviteCreated"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    revokeAccommodationInvite: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                accommodation_id: components["parameters"]["AccommodationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["EmptyObject"];
+        responses: {
+            /** @description Convite revogado ou já revogado. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    ETag: components["headers"]["EntityTag"];
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccommodationInviteStatus"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccommodationInviteContext: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token do cartaz, lido pelo cliente do fragmento da URL (/i#token). O fragmento nunca é enviado ao servidor, então o token não alcança linha de requisição, access log, WAF nem CDN. O cabeçalho customizado força preflight CORS, a mesma propriedade que Idempotency-Key já explora para impedir POST de formulário simples (ADR-039). */
+                "X-Cumuru-Invite-Token": components["parameters"]["InviteTokenHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contexto mínimo do cartaz e desafio de trabalho. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccommodationInviteContext"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            429: components["responses"]["RateLimitedProblem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    submitAccommodationSelfRegistration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token do cartaz, lido pelo cliente do fragmento da URL (/i#token). O fragmento nunca é enviado ao servidor, então o token não alcança linha de requisição, access log, WAF nem CDN. O cabeçalho customizado força preflight CORS, a mesma propriedade que Idempotency-Key já explora para impedir POST de formulário simples (ADR-039). */
+                "X-Cumuru-Invite-Token": components["parameters"]["InviteTokenHeader"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelfRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description Autocadastro aceito e pendente de aprovação. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    ETag: components["headers"]["EntityTag"];
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    "Survey-Capability": components["headers"]["SurveyCapability"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfRegistrationAccepted"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["RateLimitedProblem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    approveStay: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                stay_id: components["parameters"]["StayId"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["EmptyObject"];
+        responses: {
+            200: components["responses"]["StayCommandSucceeded"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    rejectStay: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                stay_id: components["parameters"]["StayId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectStayRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["StayCommandSucceeded"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
             500: components["responses"]["InternalServerProblem"];
             503: components["responses"]["Problem"];
         };

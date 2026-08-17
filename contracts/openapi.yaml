@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: API do Observatório Turístico de Cumuruxatiba
-  version: 0.6.0
+  version: 0.7.0
   license:
     name: Licença a definir pelo Município de Prado
     identifier: LicenseRef-Proprietary
@@ -773,6 +773,18 @@ paths:
           in: query
           schema:
             $ref: "#/components/schemas/StayStatus"
+        - name: approval_state
+          in: query
+          description: >
+            Fila de aprovação por acomodação. Nenhum endpoint novo de listagem:
+            cursor, limite, ordenação e isolamento por membership são os da
+            Fase 2.
+          schema:
+            $ref: "#/components/schemas/StayApprovalState"
+        - name: provenance
+          in: query
+          schema:
+            $ref: "#/components/schemas/StayProvenance"
         - name: arrival_from
           in: query
           schema:
@@ -1273,6 +1285,480 @@ paths:
           $ref: "#/components/responses/Problem"
         "429":
           $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /accommodations/{accommodation_id}/activation:
+    post:
+      summary: Emitir capability de ativação da conta da acomodação
+      description: >
+        Cria uma conta sem credencial em pending_activation, vincula-a como
+        manager e emite uma capability de uso único. A URL só aparece nesta
+        criação e no replay idempotente exato. Não há envio de e-mail: o link e
+        o QR são exibidos na própria tela.
+      tags: [accommodations]
+      operationId: createAccommodationActivation
+      x-cumuru-implementation-phase: 7
+      security:
+        - oidc: ["accommodations:manage"]
+      parameters:
+        - $ref: "#/components/parameters/AccommodationId"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccommodationActivationRequest"
+      responses:
+        "201":
+          description: Capability criada; a URL só aparece aqui e em replay exato.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/EntityTag"
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccommodationActivationCreated"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "412":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "428":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /activation:
+    get:
+      summary: Consultar contexto da ativação identificada pela capability
+      description: >
+        O e-mail não é devolvido: a capability não é prova de titularidade do
+        endereço. Token ausente, incorreto, expirado, consumido ou revogado
+        produz o mesmo 404, sem distinção.
+      tags: [auth]
+      operationId: getAccommodationActivation
+      x-cumuru-implementation-phase: 7
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ActivationTokenHeader"
+      responses:
+        "200":
+          description: Contexto mínimo da ativação.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccommodationActivationContext"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /activation/complete:
+    post:
+      summary: Definir a senha e ativar a conta
+      description: >
+        Responde 204 sem corpo pelo mesmo motivo de POST /auth/password:
+        nenhuma resposta pode ecoar o segredo. Não emite sessão — o operador vai
+        a POST /auth/login depois, para que a capability não vire credencial de
+        longa duração. Sem Idempotency-Key: a capability é o token de uso único
+        e repetir a chamada devolve 404, intencionalmente.
+      tags: [auth]
+      operationId: activateAccommodationAccount
+      x-cumuru-implementation-phase: 7
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ActivationTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivateAccountRequest"
+      responses:
+        "204":
+          description: Conta ativada; nenhum corpo e nenhuma sessão emitida.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /accommodations/{accommodation_id}/invite:
+    post:
+      summary: Emitir ou rotacionar o convite reutilizável da acomodação
+      description: >
+        A rotação revoga o convite ativo anterior na mesma transação e emite
+        outro invite_id, portanto outro token: o cartaz anterior deixa de
+        funcionar imediatamente. A URL carrega o token no fragmento
+        (/i#token) e só aparece nesta criação e no replay idempotente exato.
+      tags: [accommodations]
+      operationId: createAccommodationInvite
+      x-cumuru-implementation-phase: 7
+      security:
+        - oidc: ["accommodations:manage"]
+      parameters:
+        - $ref: "#/components/parameters/AccommodationId"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccommodationInviteRequest"
+      responses:
+        "201":
+          description: Convite criado; a URL só aparece aqui e em replay exato.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/EntityTag"
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccommodationInviteCreated"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "412":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "428":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+    get:
+      summary: Consultar o convite reutilizável ativo
+      description: >
+        Sem url: a URL do convite só existe na criação e no replay idempotente
+        exato (ADR-019). 404 quando não houver convite ativo.
+      tags: [accommodations]
+      operationId: getAccommodationInvite
+      x-cumuru-implementation-phase: 7
+      security:
+        - oidc: ["accommodations:manage"]
+      parameters:
+        - $ref: "#/components/parameters/AccommodationId"
+      responses:
+        "200":
+          description: Estado do convite ativo, sem token e sem URL.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccommodationInviteStatus"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /accommodations/{accommodation_id}/invite/revoke:
+    post:
+      summary: Revogar o convite reutilizável da acomodação
+      description: >
+        Comando POST no padrão da ADR-018, e não DELETE, para admitir
+        Idempotency-Key. Revogar convite já revogado é 200, porque a operação é
+        idempotente por natureza.
+      tags: [accommodations]
+      operationId: revokeAccommodationInvite
+      x-cumuru-implementation-phase: 7
+      security:
+        - oidc: ["accommodations:manage"]
+      parameters:
+        - $ref: "#/components/parameters/AccommodationId"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/EmptyObject"
+      responses:
+        "200":
+          description: Convite revogado ou já revogado.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            ETag:
+              $ref: "#/components/headers/EntityTag"
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccommodationInviteStatus"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "412":
+          $ref: "#/components/responses/Problem"
+        "428":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /accommodation-invite:
+    get:
+      summary: Consultar o contexto do cartaz e receber o desafio de trabalho
+      description: >
+        O token viaja no cabeçalho X-Cumuru-Invite-Token, lido do fragmento da
+        URL pelo cliente (ADR-039). O cabeçalho customizado força preflight CORS
+        e mantém o token fora da linha de requisição que servidores registram.
+        A resposta traz o desafio de proof-of-work, cuja dificuldade é derivada
+        do contador do balde de rate limit desta rota.
+      tags: [invites]
+      operationId: getAccommodationInviteContext
+      x-cumuru-implementation-phase: 7
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/InviteTokenHeader"
+      responses:
+        "200":
+          description: Contexto mínimo do cartaz e desafio de trabalho.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccommodationInviteContext"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /accommodation-invite/submit:
+    post:
+      summary: Enviar autocadastro generalizado pelo cartaz da acomodação
+      description: >
+        Canal aberto e sem operador. Coleta somente dados generalizados: nome,
+        documento, e-mail e telefone são rejeitados (ADR-040). role='minor' é
+        recusado com 422, porque não há como verificar responsável num
+        formulário anônimo. expected_guest_count não vem no corpo: é o tamanho
+        de visitors, o que remove qualquer divergência entre declarado e
+        submetido. A estadia nasce pendente de aprovação e não alcança presença
+        nem publicação enquanto não for aprovada.
+      tags: [invites]
+      operationId: submitAccommodationSelfRegistration
+      x-cumuru-implementation-phase: 7
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/InviteTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SelfRegistrationRequest"
+      responses:
+        "200":
+          description: Autocadastro aceito e pendente de aprovação.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            ETag:
+              $ref: "#/components/headers/EntityTag"
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+            Survey-Capability:
+              $ref: "#/components/headers/SurveyCapability"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SelfRegistrationAccepted"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /stays/{stay_id}/approve:
+    post:
+      summary: Aprovar estadia autocadastrada
+      description: >
+        Exige o escopo próprio stays:approve; operador com stays:write recebe
+        403, e a SQL exige adicionalmente role='manager'. O status da estadia
+        não muda: muda approval_state e a versão. Estadia assistida, sem
+        approval_state, responde 422.
+      tags: [stays]
+      operationId: approveStay
+      x-cumuru-implementation-phase: 7
+      security:
+        - oidc: ["stays:approve"]
+      parameters:
+        - $ref: "#/components/parameters/StayId"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/EmptyObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/StayCommandSucceeded"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "412":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "428":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /stays/{stay_id}/reject:
+    post:
+      summary: Rejeitar estadia autocadastrada
+      description: >
+        Motivo obrigatório e de lista fechada, no precedente de
+        questionnaire_change_reason_valid: texto livre em platform.audit_events,
+        que é append-only, viraria dado pessoal permanente. A rejeição elimina
+        os visitantes generalizados, cancela a estadia e preserva apenas o fato
+        auditável.
+      tags: [stays]
+      operationId: rejectStay
+      x-cumuru-implementation-phase: 7
+      security:
+        - oidc: ["stays:approve"]
+      parameters:
+        - $ref: "#/components/parameters/StayId"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectStayRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/StayCommandSucceeded"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "412":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "428":
+          $ref: "#/components/responses/Problem"
         "503":
           $ref: "#/components/responses/Problem"
         "500":
@@ -1959,6 +2445,34 @@ components:
         minLength: 3
         maxLength: 64
         pattern: "^[a-z][a-z0-9_]*$"
+    InviteTokenHeader:
+      name: X-Cumuru-Invite-Token
+      in: header
+      required: true
+      description: >
+        Token do cartaz, lido pelo cliente do fragmento da URL (/i#token). O
+        fragmento nunca é enviado ao servidor, então o token não alcança linha
+        de requisição, access log, WAF nem CDN. O cabeçalho customizado força
+        preflight CORS, a mesma propriedade que Idempotency-Key já explora para
+        impedir POST de formulário simples (ADR-039).
+      schema:
+        type: string
+        minLength: 64
+        maxLength: 128
+        pattern: "^[A-Za-z0-9_-]+$"
+    ActivationTokenHeader:
+      name: X-Cumuru-Activation-Token
+      in: header
+      required: true
+      description: >
+        Capability de ativação, lida do fragmento da URL. Cabeçalho distinto do
+        convite de propósito: purposes separados são domínios criptográficos
+        separados, e o Verify confere o purpose (ADR-039, ADR-041).
+      schema:
+        type: string
+        minLength: 64
+        maxLength: 128
+        pattern: "^[A-Za-z0-9_-]+$"
     SurveyCapability:
       name: Survey-Capability
       in: header
@@ -2633,6 +3147,9 @@ components:
         - planned_departure_on
         - expected_guest_count
         - visitor_count
+        - provenance
+        - approval_state
+        - approval_expires_at
         - version
         - created_at
         - updated_at
@@ -2686,6 +3203,16 @@ components:
             - guest_absent
             - accommodation_report
             - null
+        provenance:
+          $ref: "#/components/schemas/StayProvenance"
+        approval_state:
+          oneOf:
+            - $ref: "#/components/schemas/StayApprovalState"
+            - type: "null"
+          description: Nulo para estadia assistida.
+        approval_expires_at:
+          type: [string, "null"]
+          format: date-time
         version:
           type: integer
           format: int64
@@ -2931,6 +3458,285 @@ components:
         stay_status:
           type: string
           const: pre_registered
+    CreateAccommodationActivationRequest:
+      type: object
+      required: [email, display_name]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 254
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+    AccommodationActivationCreated:
+      type: object
+      required: [activation_id, account_id, url, expires_at, version]
+      additionalProperties: false
+      properties:
+        activation_id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+          description: >
+            Token no fragmento. Só aparece nesta criação e no replay
+            idempotente exato.
+        expires_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    AccommodationActivationContext:
+      type: object
+      required: [accommodation_name, display_name, expires_at, password_policy]
+      additionalProperties: false
+      properties:
+        accommodation_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        expires_at:
+          type: string
+          format: date-time
+        password_policy:
+          type: object
+          required: [min_length, max_length]
+          additionalProperties: false
+          properties:
+            min_length:
+              type: integer
+              const: 12
+            max_length:
+              type: integer
+              const: 256
+    ActivateAccountRequest:
+      type: object
+      required: [password]
+      additionalProperties: false
+      properties:
+        password:
+          type: string
+          minLength: 12
+          maxLength: 256
+    CreateAccommodationInviteRequest:
+      type: object
+      required: [privacy_notice_version]
+      additionalProperties: false
+      properties:
+        privacy_notice_version:
+          type: string
+          minLength: 1
+          maxLength: 100
+        max_uses:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 100000
+          description: >
+            Ausente ou null significa uso ilimitado. Quando presente, o
+            invariante use_count <= max_uses continua valendo.
+    AccommodationInviteCreated:
+      type: object
+      required: [invite_id, url, expires_at, max_uses, use_count]
+      additionalProperties: false
+      properties:
+        invite_id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+          description: Token no fragmento (/i#token), nunca no caminho.
+        expires_at:
+          type: string
+          format: date-time
+        max_uses:
+          type: [integer, "null"]
+          minimum: 1
+        use_count:
+          type: integer
+          minimum: 0
+    AccommodationInviteStatus:
+      type: object
+      required: [invite_id, expires_at, max_uses, use_count, revoked_at]
+      additionalProperties: false
+      properties:
+        invite_id:
+          type: string
+          format: uuid
+        expires_at:
+          type: string
+          format: date-time
+        max_uses:
+          type: [integer, "null"]
+          minimum: 1
+        use_count:
+          type: integer
+          minimum: 0
+        revoked_at:
+          type: [string, "null"]
+          format: date-time
+    ProofOfWorkChallenge:
+      type: object
+      required: [algorithm, challenge, difficulty_bits, expires_at]
+      additionalProperties: false
+      properties:
+        algorithm:
+          type: string
+          const: sha256-leading-zero-bits
+        challenge:
+          type: string
+          minLength: 32
+          maxLength: 256
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: >
+            Opaco e autenticado por MAC. Carrega dentro de si o nonce, o prazo,
+            a dificuldade e o vínculo com o cartaz, de modo que o cliente não
+            possa rebaixar a dificuldade nem gastar o desafio noutra acomodação.
+        difficulty_bits:
+          type: integer
+          minimum: 1
+          maximum: 32
+          description: >
+            Derivada do contador do balde de rate limit: a primeira submissão de
+            uma rede é barata e a décima é cara.
+        expires_at:
+          type: string
+          format: date-time
+    AccommodationInviteContext:
+      type: object
+      required:
+        - accommodation_name
+        - privacy_notice_version
+        - proof_of_work
+      additionalProperties: false
+      properties:
+        accommodation_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        privacy_notice_version:
+          type: string
+          minLength: 1
+          maxLength: 100
+        consent_requirements:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/ConsentRequirementDefinition"
+        proof_of_work:
+          $ref: "#/components/schemas/ProofOfWorkChallenge"
+    SelfServiceVisitorInput:
+      description: >
+        Visitante do canal aberto. Somente dados generalizados; role='minor' é
+        recusado porque não há como verificar responsável num formulário
+        anônimo e não autenticado (ADR-040).
+      allOf:
+        - $ref: "#/components/schemas/VisitorInput"
+        - type: object
+          properties:
+            role:
+              type: string
+              enum: [responsible, companion]
+    SelfRegistrationRequest:
+      type: object
+      required:
+        - client_submission_id
+        - privacy_notice_version
+        - planned_arrival_on
+        - planned_departure_on
+        - visitors
+        - proof_of_work
+      additionalProperties: false
+      properties:
+        client_submission_id:
+          type: string
+          format: uuid
+          pattern: "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-7[0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$"
+          description: UUIDv7 no formato canônico hifenizado.
+        privacy_notice_version:
+          type: string
+          minLength: 1
+          maxLength: 100
+        planned_arrival_on:
+          type: string
+          format: date
+        planned_departure_on:
+          type: string
+          format: date
+        visitors:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/SelfServiceVisitorInput"
+        proof_of_work:
+          type: object
+          required: [challenge, solution]
+          additionalProperties: false
+          properties:
+            challenge:
+              type: string
+              minLength: 32
+              maxLength: 256
+              pattern: "^[A-Za-z0-9_-]+$"
+            solution:
+              type: string
+              minLength: 1
+              maxLength: 64
+              pattern: "^[A-Za-z0-9_-]+$"
+    SelfRegistrationAccepted:
+      type: object
+      required: [submission_id, stay_id, status, stay_status, approval_state]
+      additionalProperties: false
+      properties:
+        submission_id:
+          type: string
+          format: uuid
+        stay_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          const: accepted
+        stay_status:
+          type: string
+          const: pre_registered
+        approval_state:
+          type: string
+          const: pending
+    StayApprovalState:
+      type: string
+      enum: [pending, approved, rejected, expired]
+    StayProvenance:
+      type: string
+      enum: [assisted, self_service]
+    RejectStayRequest:
+      type: object
+      required: [reason_code]
+      additionalProperties: false
+      properties:
+        reason_code:
+          type: string
+          enum:
+            - identity_not_verified
+            - not_a_guest
+            - duplicate
+            - data_incorrect
+            - other
     QuestionnaireVersionStatus:
       type: string
       enum: [draft, privacy_review, approved, published, retired]

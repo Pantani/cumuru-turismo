@@ -74,6 +74,13 @@ const (
 	ActionStayCheckedOut         Action = "stay.checked_out"
 	ActionStayCancelled          Action = "stay.cancelled"
 	ActionStayNoShow             Action = "stay.no_show"
+	ActionStayApproved           Action = "stay.approved"
+	ActionStayRejected           Action = "stay.rejected"
+	ActionStayApprovalExpired    Action = "stay.approval_expired"
+	ActionAccommodationInvited   Action = "accommodation.invited"
+	ActionAccommodationRevoked   Action = "accommodation.invite_revoked"
+	ActionActivationIssued       Action = "accommodation.activation_issued"
+	ActionActivationCompleted    Action = "accommodation.activation_completed"
 	ActionQuestionnaireCreated   Action = "questionnaire.created"
 	ActionQuestionnaireCloned    Action = "questionnaire.cloned"
 	ActionQuestionnaireUpdated   Action = "questionnaire.updated"
@@ -108,6 +115,13 @@ var actionEntities = map[Action]EntityType{
 	ActionStayCheckedIn:          EntityStay,
 	ActionStayCheckedOut:         EntityStay,
 	ActionStayCancelled:          EntityStay,
+	ActionStayApproved:           EntityStay,
+	ActionStayRejected:           EntityStay,
+	ActionStayApprovalExpired:    EntityStay,
+	ActionAccommodationInvited:   EntityAccommodation,
+	ActionAccommodationRevoked:   EntityAccommodation,
+	ActionActivationIssued:       EntityAccommodation,
+	ActionActivationCompleted:    EntityAccommodation,
 	ActionStayNoShow:             EntityStay,
 	ActionQuestionnaireCreated:   EntityQuestionnaire,
 	ActionQuestionnaireCloned:    EntityQuestionnaireVersion,

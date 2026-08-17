@@ -259,6 +259,7 @@ func TestReconciliationFingerprintIgnoresVisitorOrder(t *testing.T) {
 	secondID := uuid.MustParse("019f0000-0000-7000-8000-000000000002")
 	source := reconciliationSource{presence: analytics.PresenceSource{
 		StayID: firstID, Status: "pre_registered",
+		Approval:         stay.ApprovalNotRequired,
 		PlannedArrival:   stay.MustCivilDate("2026-07-28"),
 		PlannedDeparture: stay.MustCivilDate("2026-07-29"),
 		Version:          1, VisitorIDs: []uuid.UUID{firstID, secondID},
@@ -658,4 +659,38 @@ func observedAggregate(visitors, accommodations int) factAggregate {
 		result.accommodations[id] = struct{}{}
 	}
 	return result
+}
+
+// Second of the three mandatory filter points. The projection in
+// ListPresenceReconciliationStays deliberately leaves the WHERE alone, so a
+// rejected stay still arrives here and the diff can erase what it had already
+// materialized; the decision is taken in Go, and the status alone cannot take
+// it because a pending self-registration is pre_registered like any other.
+func TestPresenceEligibilityRequiresApprovalAndStatus(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		status   stay.Status
+		approval stay.ApprovalState
+		want     bool
+	}{
+		"assisted pre-registered":           {stay.StatusPreRegistered, stay.ApprovalNotRequired, true},
+		"approved self-registration":        {stay.StatusPreRegistered, stay.ApprovalApproved, true},
+		"pending self-registration":         {stay.StatusPreRegistered, stay.ApprovalPending, false},
+		"rejected self-registration":        {stay.StatusPreRegistered, stay.ApprovalRejected, false},
+		"expired self-registration":         {stay.StatusPreRegistered, stay.ApprovalExpired, false},
+		"approved but still a draft":        {stay.StatusDraft, stay.ApprovalApproved, false},
+		"undecided approval on a live stay": {stay.StatusCheckedIn, stay.ApprovalUnset, false},
+		"approved and checked out":          {stay.StatusCheckedOut, stay.ApprovalApproved, true},
+		"cancelled after an approval stamp": {stay.StatusCancelled, stay.ApprovalApproved, false},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got := presenceEligible(test.status, test.approval); got != test.want {
+				t.Fatalf("presenceEligible(%s, %s) = %t, want %t",
+					test.status, test.approval, got, test.want)
+			}
+		})
+	}
 }

@@ -5,6 +5,8 @@ export const messagesEn: Messages = {
   // ---------------------------------------------------------------- Navegação
   "app.nav.public": "Public dashboard",
   "app.nav.registration": "Registration",
+  "app.nav.selfRegistration": "Self-registration",
+  "app.nav.activation": "Activation",
   "app.nav.survey": "Survey",
   "app.nav.workspace": "Lodging area",
   "app.nav.questionnaires": "Questionnaires",
@@ -29,6 +31,8 @@ export const messagesEn: Messages = {
 
   "app.title.public": "Public tourism dashboard",
   "app.title.registration": "Visitor registration",
+  "app.title.selfRegistration": "Self-registration by poster",
+  "app.title.activation": "Account activation",
   "app.title.survey": "Visitor survey",
   "app.title.workspace": "Lodging area",
   "app.title.questionnaires": "Questionnaires",

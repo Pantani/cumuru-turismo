@@ -203,3 +203,28 @@ func assertCurrentFixtureKeys(
 		}
 	}
 }
+
+// The client gates the phase 7 panels on stays:approve. Without it in the demo
+// operator's set, local-demo-e2e walks a journey that never opens the approval
+// queue or the poster panel and passes by absence of error — the failure mode
+// D-01 already showed one layer down.
+//
+// The two vetoed scopes stay vetoed: they belong to other roles.
+func TestDemoOperatorCanReachThePhase7Panels(t *testing.T) {
+	t.Parallel()
+
+	account, err := accountFixture(func(string) (string, bool) {
+		return "senha-fictícia-do-demo", true
+	})
+	if err != nil {
+		t.Fatalf("accountFixture() error = %v", err)
+	}
+	granted := strings.Join(account.Scopes, " ")
+	for _, required := range []string{
+		"accommodations:manage", "stays:read:own", "stays:write", "stays:approve",
+	} {
+		if !strings.Contains(granted, required) {
+			t.Fatalf("the demo operator lacks %s: %q", required, granted)
+		}
+	}
+}
