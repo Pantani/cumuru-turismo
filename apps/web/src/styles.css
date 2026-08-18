@@ -187,6 +187,14 @@ summary:focus-visible,
   border-bottom: 1px solid var(--line);
 }
 
+/* O cabeçalho fica colado no topo, então o link de pular para o conteúdo
+   precisa parar a altura dele antes do `main`: sem isso o navegador encosta o
+   `main` na borda da janela e o cabeçalho cobre a primeira linha justamente de
+   quem usou o atalho para não ter de passar por ele. */
+.site-shell > main {
+  scroll-margin-top: var(--header-h);
+}
+
 .local-session-banner {
   width: var(--shell);
   margin: 0.75rem auto 0;
@@ -2450,6 +2458,11 @@ button.quiet-action:disabled {
 
   .site-header {
     position: static;
+  }
+
+  /* ...e sem cabeçalho colado não há o que descontar. */
+  .site-shell > main {
+    scroll-margin-top: 0;
   }
 }
 

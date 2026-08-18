@@ -190,7 +190,14 @@ NODE
 
 "${COMPOSE[@]}" up --detach --wait postgres
 "${COMPOSE[@]}" run --rm --no-deps migrate
-"${COMPOSE[@]}" up --build --detach --wait local-demo api worker web
+# local-demo está fora do perfil padrão (perfil test) e é one-shot
+# (restart: "no"): `up --wait` não serve, porque o container sai assim que
+# termina. `run --rm` roda e bloqueia até o binário concluir, mesmo padrão de
+# migrate/seed. Listado antes de api/worker/web para que as fixtures existam
+# quando eles sobem — api não depende mais dele, só do bootstrap incondicional
+# do administrador.
+"${COMPOSE[@]}" run --build --rm --no-deps local-demo
+"${COMPOSE[@]}" up --build --detach --wait api worker web
 for service in postgres api worker web; do
   require_running "${service}"
 done

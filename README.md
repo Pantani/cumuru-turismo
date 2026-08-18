@@ -164,25 +164,35 @@ Pré-requisitos: Go, Node/npm e Docker com o daemon ativo.
 cp .env.example .env
 make setup
 make up
+make seed-test-fixtures
 ```
 
-`make up` constrói e inicia PostgreSQL, migrations, API, worker e web. Ele usa
-`compose.local.yaml` para executar o comando Go `/app/local-demo`, que aplica
-fixtures fictícias idempotentes pelos serviços de domínio, semeia a conta local
-de demonstração e espera a primeira publicação anônima. Nenhum arquivo SQL de
-fixtures é montado ou executado.
+`make up` constrói e inicia PostgreSQL, migrations, API, worker e web, e semeia
+o administrador incondicionalmente, com `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`
+do `.env` — hoje `administracao@cumuru.local`. Uma stack recém-subida sempre tem
+por onde entrar.
+
+As fixtures fictícias — operador, acomodações, estadias e respostas de pesquisa
+— ficam fora desse fluxo, no perfil `test` do Compose, e entram com
+`make seed-test-fixtures`. Esse alvo executa o comando Go `/app/local-demo`,
+que aplica as fixtures de forma idempotente pelos serviços de domínio, semeia a
+conta local de demonstração e espera a primeira publicação anônima. Nenhum
+arquivo SQL de fixtures é montado ou executado. Sem ele o painel público sobe
+vazio e `make smoke` falha por ausência de dado, não por bug.
 
 Depois abra:
 
 - `http://127.0.0.1:4173/` — painel público com dados fictícios;
 - `http://127.0.0.1:4173/acesso` — jornada do operador da hospedagem.
 
-O bundle não carrega credencial: a entrada é por e-mail e senha. A conta
-fictícia é `operador@cumuru.local`, com a senha definida em
-`LOCAL_DEMO_ACCOUNT_PASSWORD` (o Compose local usa `demonstracao-local-2026`).
-A sessão vive apenas na memória da aba — recarregar a página exige entrar de
-novo, por construção — e nada é gravado em `localStorage`, `sessionStorage` ou
-cache do service worker.
+O bundle não carrega credencial: a entrada é por e-mail e senha. O
+administrador é `administracao@cumuru.local`, com a senha de
+`SEED_ADMIN_PASSWORD` (o `.env.example` usa `administracao-local-2026`); a
+conta fictícia de operador é `operador@cumuru.local`, criada por
+`make seed-test-fixtures`, com a senha de `LOCAL_DEMO_ACCOUNT_PASSWORD` (o
+Compose local usa `demonstracao-local-2026`). A sessão vive apenas na memória
+da aba — recarregar a página exige entrar de novo, por construção — e nada é
+gravado em `localStorage`, `sessionStorage` ou cache do service worker.
 
 Na área da hospedagem, escolha uma hospedagem, crie uma estadia informando
 chegada, saída e número de pessoas, e use as ações oferecidas pelo próprio
@@ -204,7 +214,9 @@ Outros modos de execução:
 | `make dev` | Alias de `make up`; stack Compose comprovada, sem hot reload |
 | `make docker-dev` | Stack com hot reload em `http://127.0.0.1:5173`, projeto `cumuru-dev` |
 | `make dev-web` | Só o Vite; pressupõe uma API local respondendo em `127.0.0.1:8080` |
-| `make seed` | Semeia administrador e catálogo; idempotente, não repõe senha trocada |
+| `make seed` | Reaplica administrador e catálogo numa stack de pé; idempotente, não repõe senha trocada |
+| `make seed-test-fixtures` | Aplica as fixtures fictícias do operador (perfil `test`); idempotente |
+| `make docker-dev-seed-test-fixtures` | O mesmo, contra a stack de hot reload |
 | `make docker-status` / `make docker-logs` | Estado e logs da stack local |
 | `make docker-rm` | **Destrutivo:** derruba as stacks e apaga volumes, banco incluído |
 | `make help` | Lista todos os targets públicos com descrição |

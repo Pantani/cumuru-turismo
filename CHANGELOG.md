@@ -114,6 +114,27 @@ arquivo.
 
 ### Corrigido
 
+- `POST /accommodations` descrito no contrato como onboarding "com OIDC fake",
+  trilho que a [ADR-037](docs/decisoes/ADR-037-autenticacao-local-por-email-e-senha.md)
+  substituiu: `NewChainVerifier(session, federated)` aceita a sessão local de
+  e-mail e senha, então a rota passa a declarar também o esquema `session`;
+- capa prometendo o que o produto não faz: o passo 1 e a FAQ pediam CPF ou CNPJ
+  quando o cadastro não coleta documento nenhum; o passo 3 dizia que o QR do
+  balcão leva o visitante ao próprio registro, quando o canal aberto recusa
+  nome, documento, e-mail e telefone e a estadia sempre nasce pendente de
+  aprovação ([ADR-040](docs/decisoes/ADR-040-autocadastro-generalizado-e-aprovacao.md));
+  o cartão de cadastro prometia acesso "no mesmo dia" e mandava para uma tela de
+  login sem criação de conta, e a seção de privacidade anunciava um fluxo de
+  direitos do titular que segue `deferred` no contrato. A capa passa a descrever
+  o caminho real — conversa com a equipe, link de ativação, e-mail do encarregado
+  — e saem o depoimento fictício marcado como exemplo e o horário de atendimento
+  presencial inexistente;
+- âncoras da capa parando atrás do cabeçalho de rotas e do índice de seções: as
+  duas barras ficam coladas no topo e nenhum alvo descontava a altura delas, então
+  clicar em "Números" ou usar "Pular para o conteúdo" deixava a primeira linha da
+  seção escondida sob as barras. O índice não tem altura fixa — quebra em duas
+  linhas em espanhol e abaixo de 50rem —, então a altura é medida no navegador e
+  publicada como `--lp-nav-h` para o `scroll-margin-top`;
 - navegação para `/registro` depois de "Abrir registro neste navegador": a
   guarda de rota comparava com a URL que `captureInviteCapability` já havia
   reescrito, o que anulava o clique e deixava o fluxo do convite sem saída;
