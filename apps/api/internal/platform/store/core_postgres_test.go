@@ -1148,12 +1148,21 @@ func assertRuntimeCannotReadAppendOnlyTables(
 	pool *pgxpool.Pool,
 ) {
 	t.Helper()
-	for _, table := range []string{"platform.audit_events", "platform.outbox_events"} {
-		var value int
-		err := pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&value)
+	// app_runtime holds SELECT (id) on both tables, scoped to INSERT ...
+	// RETURNING id (000005_audit_outbox_returning_grants). Any other column
+	// must still be denied.
+	for _, probe := range []struct {
+		table  string
+		column string
+	}{
+		{"platform.audit_events", "occurred_at"},
+		{"platform.outbox_events", "event_type"},
+	} {
+		var value any
+		err := pool.QueryRow(ctx, "SELECT "+probe.column+" FROM "+probe.table+" LIMIT 1").Scan(&value)
 		var postgresError *pgconn.PgError
 		if !errors.As(err, &postgresError) || postgresError.Code != "42501" {
-			t.Errorf("runtime SELECT %s error = %v, want insufficient_privilege", table, err)
+			t.Errorf("runtime SELECT %s.%s error = %v, want insufficient_privilege", probe.table, probe.column, err)
 		}
 	}
 }
