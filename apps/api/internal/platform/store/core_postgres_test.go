@@ -536,7 +536,7 @@ func TestCorePostgreSQLTenantReplayRollbackAndLastManager(t *testing.T) {
 	assertExternalSubmissionID(t, ctx, stayService, fixture)
 	assertInviteReplayAndRateIdentity(t, ctx, runtimePool, stayService, fixture)
 	assertConcurrentInviteConsumption(t, ctx, runtimePool, subject, fixture)
-	assertRuntimeCannotReadAppendOnlyTables(t, ctx, runtimePool)
+	assertRuntimeAppendOnlyTablePrivileges(t, ctx, runtimePool)
 }
 
 func TestExpiredOperationalCleanupUsesWorkerRole(t *testing.T) {
@@ -1142,15 +1142,15 @@ func assertRateBucketsArePseudonymous(
 	}
 }
 
-func assertRuntimeCannotReadAppendOnlyTables(
+func assertRuntimeAppendOnlyTablePrivileges(
 	t *testing.T,
 	ctx context.Context,
 	pool *pgxpool.Pool,
 ) {
 	t.Helper()
 	// app_runtime holds SELECT (id) on both tables, scoped to INSERT ...
-	// RETURNING id (000005_audit_outbox_returning_grants). Any other column
-	// must still be denied.
+	// RETURNING id (000005_audit_outbox_returning_grants, folded into the
+	// consolidated 000001 baseline). Any other column must still be denied.
 	for _, probe := range []struct {
 		table  string
 		column string
