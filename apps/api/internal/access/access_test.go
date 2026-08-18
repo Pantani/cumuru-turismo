@@ -143,3 +143,41 @@ func TestDevelopmentFakeAnalyticsTokenHasOnlyInternalQualityScope(t *testing.T) 
 		}
 	}
 }
+
+// The static development token used to answer with the same subject as the
+// local demo operator persona, which made both indistinguishable in the audit
+// trail. The subject must stay a dedicated probe identity, unique among the
+// fixture credentials.
+func TestDevelopmentFakePlatformTokenHasItsOwnSubject(t *testing.T) {
+	t.Parallel()
+
+	verifier, err := access.NewDevelopmentFake("test", "https://oidc.invalid/local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]string{}
+	for _, token := range []string{
+		access.DevelopmentPlatformToken,
+		access.DevelopmentQuestionnaireEditorToken,
+		access.DevelopmentQuestionnaireReviewToken,
+		access.DevelopmentAnalyticsQualityToken,
+	} {
+		principal, err := verifier.Verify(context.Background(), token)
+		if err != nil {
+			t.Fatalf("Verify(%q) error = %v", token, err)
+		}
+		if other, ok := seen[principal.Subject]; ok {
+			t.Fatalf("%q and %q share subject %q", token, other, principal.Subject)
+		}
+		seen[principal.Subject] = token
+	}
+	// The literal is pinned, not just the constant: deploy/scripts/test-local-demo.sh
+	// counts core.memberships by this exact oidc_subject, so renaming the value
+	// silently would leave the seeded fixtures unreachable by the probe.
+	if seen["fixture-platform-probe"] != access.DevelopmentPlatformToken {
+		t.Fatalf("platform token subject = %v", seen)
+	}
+	if access.DevelopmentPlatformSubject != "fixture-platform-probe" {
+		t.Fatalf("DevelopmentPlatformSubject = %q", access.DevelopmentPlatformSubject)
+	}
+}

@@ -15,6 +15,16 @@ const (
 	DevelopmentAnalyticsQualityToken    = "cumuru-local-analytics-quality"
 )
 
+// DevelopmentPlatformSubject is the identity the static development token
+// carries. It is deliberately distinct from the fictional operator persona of
+// the local demo: both reach the API through the same fake OIDC issuer, so a
+// shared subject would make every audit event indistinguishable between a
+// machine probe and the human track. The local-demo seeder binds the fixture
+// memberships to this subject, because the probe is the only caller that
+// authenticates through the fake issuer — the demo operator signs in through
+// the local session issuer instead.
+const DevelopmentPlatformSubject = "fixture-platform-probe"
+
 type Principal struct {
 	Issuer  string
 	Subject string
@@ -81,7 +91,7 @@ func (f *developmentFake) IsFixtureCredential(token string) bool {
 func developmentFixture(token string) (string, []string, bool) {
 	switch token {
 	case DevelopmentPlatformToken:
-		return "fixture-operator", []string{
+		return DevelopmentPlatformSubject, []string{
 			"platform:read",
 			"accommodations:onboard",
 			"accommodations:manage",

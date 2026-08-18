@@ -15,7 +15,6 @@ import (
 
 const (
 	issuer               = "https://oidc.invalid/local"
-	operatorSubject      = "fixture-operator"
 	privacyNoticeVersion = "prototype-v1"
 	firstVisitMetricCode = "first_visit_share"
 
@@ -53,7 +52,12 @@ func foundationFixture() store.LocalDemoFoundation {
 		OrganizationID:   organizationID,
 		OrganizationName: "Organização fictícia Cumuru",
 		OIDCIssuer:       issuer,
-		OIDCSubject:      operatorSubject,
+		// The fake OIDC track is reached only by the static development token,
+		// so its memberships belong to that probe subject. The human demo
+		// operator authenticates through the local session issuer and gets its
+		// own memberships in EnsureAccount; keeping the two subjects apart is
+		// what lets the audit trail tell the probe from the operator.
+		OIDCSubject: access.DevelopmentPlatformSubject,
 		Accommodations: []store.LocalDemoAccommodation{
 			localAccommodation(1, "Pousada Farol Fictícia", "formal_lodging", 24, &fakeCadastur),
 			localAccommodation(2, "Hospedaria Rio Fictícia", "formal_lodging", 18, nil),
