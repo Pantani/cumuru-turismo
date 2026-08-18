@@ -11,8 +11,10 @@ import { describe, expect, it } from "vitest";
  * `.lp-section-coral` já resolve o mesmo tipo de conflito (acento sobre fundo
  * da própria cor) trocando a cor do acento para `var(--lp-ink)` — o token de
  * tinta que a própria seção já usa para o título. Este teste prova a mesma
- * troca para as duas seções claras que a herdam sem override: `sand`
- * (`HowItWorksSection`, `PrivacySection`) e `clay` (`HostsSection`).
+ * troca para as três seções que herdam `.lp-accent`/`.lp-index-number` sem
+ * override: `sand` (`HowItWorksSection`, `PrivacySection`), `clay`
+ * (`HostsSection`) e `coral` (`CommerceSection`, cujo próprio fundo já é
+ * `--coral`).
  *
  * Cálculo de razão de contraste feito sobre os tokens, sem depender de layout
  * renderizado, pela mesma razão de `status-contrast.test.ts`: jsdom não
@@ -133,6 +135,7 @@ describe("contraste dos acentos coral sobre fundos claros da landing", () => {
   const onAccent = parseHex(tokenValue("--on-accent"));
   const cream = parseHex(tokenValue("--ink"));
   const sand2 = parseHex(tokenValue("--sand-2"));
+  const coral = parseHex(tokenValue("--coral"));
 
   it("a seção sand define --lp-ink: var(--on-accent) e background: var(--ink)", () => {
     assertSectionInkAndBackground("sand", "var(--ink)");
@@ -142,11 +145,17 @@ describe("contraste dos acentos coral sobre fundos claros da landing", () => {
     assertSectionInkAndBackground("clay", "var(--sand-2)");
   });
 
+  it("a seção coral define --lp-ink: var(--on-accent) e background: var(--coral)", () => {
+    assertSectionInkAndBackground("coral", "var(--coral)");
+  });
+
   it.each([
     ["sand", "lp-accent", cream],
     ["sand", "lp-index-number", cream],
     ["sand", "lp-step-number", cream],
     ["clay", "lp-index-number", sand2],
+    ["coral", "lp-accent", coral],
+    ["coral", "lp-index-number", coral],
   ])("%s .%s atinge 4.5:1 contra o fundo da seção", (section, accentClass, background) => {
     assertOverridesToLpInk(section as string, accentClass as string);
     expect(contrastRatio(onAccent, background as Rgb)).toBeGreaterThanOrEqual(MINIMUM_RATIO);
