@@ -20,7 +20,7 @@ import (
 // The submission helper of this suite always plans 2026-12-10 → 2026-12-12, so
 // a pre_registered stay accrues forecast days on the 10th and the 11th. asOf is
 // the day before, which puts both inside the next_30_days window (leads 1 and 2)
-// and outside the recent_30_days one.
+// and outside the published observed history.
 const (
 	selfServicePresenceAsOf   = "2026-12-09"
 	selfServiceFirstNightOn   = "2026-12-10"

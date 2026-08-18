@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   centralValue,
+  forecastTotals,
   isWeekend,
   movingAverage,
   percentFromAverage,
@@ -117,5 +118,75 @@ describe("estatísticas da série de presença", () => {
     expect(percentFromAverage(120, 100)).toBe(20);
     expect(percentFromAverage(120, 0)).toBeNull();
     expect(percentFromAverage(120, null)).toBeNull();
+  });
+});
+
+describe("indicadores derivados da janela", () => {
+  const observed = (date: string, value: number) =>
+    ({ date, kind: "observed", status: "published", value }) as const;
+
+  it("separa o dia comum da média quando um dia atípico puxa a série", () => {
+    // 2026-07-20 é segunda; o sábado 25 carrega o feriado de 900.
+    const stats = seriesStats([
+      observed("2026-07-20", 100),
+      observed("2026-07-21", 100),
+      observed("2026-07-22", 120),
+      observed("2026-07-23", 100),
+      observed("2026-07-24", 100),
+      observed("2026-07-25", 900),
+    ]);
+
+    expect(stats.median).toBe(100);
+    expect(Math.round(stats.average ?? 0)).toBe(237);
+  });
+
+  it("mede o peso do fim de semana e a variabilidade da janela", () => {
+    // Sábado 25 e domingo 26 a 200; as quatro segundas a sextas a 100.
+    const stats = seriesStats([
+      observed("2026-07-20", 100),
+      observed("2026-07-21", 100),
+      observed("2026-07-22", 100),
+      observed("2026-07-23", 100),
+      observed("2026-07-25", 200),
+      observed("2026-07-26", 200),
+    ]);
+
+    expect(stats.weekendLiftPercent).toBe(100);
+    expect(Math.round(stats.variationPercent ?? 0)).toBe(35);
+  });
+
+  it("não inventa comparação sem os dois lados da semana", () => {
+    const stats = seriesStats([
+      observed("2026-07-20", 100),
+      observed("2026-07-21", 120),
+    ]);
+
+    expect(stats.weekendLiftPercent).toBeNull();
+    expect(stats.median).toBe(110);
+  });
+
+  it("soma a previsão publicada e ignora o dia protegido", () => {
+    const totals = forecastTotals([
+      {
+        date: "2026-08-01",
+        kind: "forecast",
+        status: "published",
+        lower: 90,
+        central: 100,
+        upper: 110,
+      },
+      { date: "2026-08-02", kind: "forecast", status: "protected" },
+      {
+        date: "2026-08-03",
+        kind: "forecast",
+        status: "published",
+        lower: 100,
+        central: 120,
+        upper: 140,
+      },
+    ]);
+
+    expect(totals).toEqual({ days: 2, lower: 190, central: 220, upper: 250 });
+    expect(forecastTotals([])).toBeNull();
   });
 });

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Pantani/cumuru/apps/api/internal/access"
+	"github.com/Pantani/cumuru/apps/api/internal/accessrequest"
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
 	"github.com/Pantani/cumuru/apps/api/internal/activation"
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
@@ -102,10 +103,14 @@ func apiHandlers(
 	if err != nil {
 		return nil, nil, errors.New("activation repository initialization failed")
 	}
+	accessRequests, err := accessRequestService(platformStore, cfg)
+	if err != nil {
+		return nil, nil, errors.New("access request repository initialization failed")
+	}
 	return httpapi.New(apiDependencies(
 		cfg, build, logger, tracing, verifier,
 		platformStore, accommodationService, stayService, questionnaireService,
-		publicAnalytics, analyticsQuality, activations,
+		publicAnalytics, analyticsQuality, activations, accessRequests,
 	))
 }
 
@@ -160,6 +165,7 @@ func apiDependencies(
 	publicAnalytics analytics.PublicReader,
 	analyticsQuality analytics.QualityReader,
 	activationService *activation.Service,
+	accessRequestService *accessrequest.Service,
 ) httpapi.Dependencies {
 	return httpapi.Dependencies{
 		Readiness:                      platformStore,
@@ -170,6 +176,7 @@ func apiDependencies(
 		AccommodationOnboardingEnabled: cfg.Core.AccommodationOnboardingEnabled,
 		Stays:                          stayService,
 		SelfServiceEnabled:             cfg.SelfService.Enabled,
+		AccessRequests:                 accessRequestService,
 		Activation:                     activationService,
 		Questionnaires:                 questionnaireService,
 		PublicAnalytics:                publicAnalytics,
@@ -231,6 +238,23 @@ func activationService(
 		return nil, err
 	}
 	return activation.NewService(repository), nil
+}
+
+// accessRequestService follows the same rule: nil when the feature is off, and
+// the five routes simply do not exist instead of existing without a usable
+// proof-of-work key.
+func accessRequestService(
+	platformStore *store.Store,
+	cfg config.Config,
+) (*accessrequest.Service, error) {
+	if !cfg.SelfService.Enabled {
+		return nil, nil
+	}
+	repository, err := store.NewAccessRequestRepository(platformStore)
+	if err != nil {
+		return nil, err
+	}
+	return accessrequest.NewService(repository), nil
 }
 
 func openServices(

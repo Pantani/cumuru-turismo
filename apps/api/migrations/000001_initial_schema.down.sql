@@ -1,5 +1,31 @@
 -- Consolidated from 000005_audit_outbox_returning_grants.down.sql through 000001_initial_schema.down.sql (third pre-launch wave, reverse order). See ADR-032.
 
+-- Os baldes precisam sair antes da constraint voltar: o CHECK anterior não
+-- conhece os dois escopos do pedido, e uma linha remanescente impediria o
+-- ADD CONSTRAINT. São dados operacionais com prazo, não trilha.
+DELETE FROM platform.rate_limit_buckets
+  WHERE scope IN (
+    'accommodation_access_request_context',
+    'accommodation_access_request_submit'
+  );
+
+ALTER TABLE platform.rate_limit_buckets DROP CONSTRAINT rate_limit_scope_valid;
+ALTER TABLE platform.rate_limit_buckets
+  ADD CONSTRAINT rate_limit_scope_valid
+    CHECK (scope IN (
+      'invite_context', 'invite_submit', 'survey_submit',
+      'accommodation_invite_context', 'accommodation_invite_submit',
+      'activation_context', 'activation_submit'
+    ));
+
+DROP INDEX core.accommodation_access_requests_expiry_idx;
+DROP INDEX core.accommodation_access_requests_pending_email_idx;
+DROP INDEX core.accommodation_access_requests_pending_idx;
+DROP TABLE core.accommodation_access_requests;
+
+COMMIT;
+BEGIN;
+
 REVOKE SELECT (id) ON TABLE platform.outbox_events FROM app_runtime;
 REVOKE SELECT (id) ON TABLE platform.audit_events FROM app_runtime;
 

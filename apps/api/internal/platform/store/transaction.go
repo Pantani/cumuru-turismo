@@ -446,7 +446,7 @@ func (s *Store) newAuditEvent(spec eventSpec) (audit.Event, error) {
 	}
 	purpose := spec.purpose
 	if purpose == "" {
-		purpose = audit.PurposeStayOperation
+		purpose = audit.PurposeFor(spec.entityType)
 	}
 	event := audit.Event{
 		ID: id, Actor: actor, ActorType: spec.actorType,

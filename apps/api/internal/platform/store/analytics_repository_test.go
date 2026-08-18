@@ -72,7 +72,8 @@ func (f *metricCatalogQueries) ListActiveMetricCatalog(
 	return []generated.AnalyticsMetricCatalog{
 		{
 			PrivacyPolicyVersion: "prototype-v1", MetricCode: "presence",
-			PeriodSelector: "recent_30_days", DimensionCode: "none", Unit: "person_day",
+			PeriodSelector: analytics.PresenceObservedSelector, DimensionCode: "none",
+			Unit:              "person_day",
 			MinimumPublicCell: 10, MinimumReportingAccommodations: 3, Active: true,
 		},
 		{
@@ -692,5 +693,94 @@ func TestPresenceEligibilityRequiresApprovalAndStatus(t *testing.T) {
 					test.status, test.approval, got, test.want)
 			}
 		})
+	}
+}
+
+// Uma instalação recém-provisionada não tem questionário mapeado e, portanto,
+// não tem de onde tirar a proporção de primeira visita. A presença, que não
+// depende do questionário, continua publicável: derrubar a publicação inteira
+// deixava a capa em 503 sem retentativa até o próximo ciclo completo.
+func TestPublicationSurvivesAbsentPreferenceSource(t *testing.T) {
+	t.Parallel()
+
+	repository := &AnalyticsRepository{analytics: analyticsFixtureConfig()}
+	asOf, err := stay.ParseCivilDate("2026-08-18")
+	if err != nil {
+		t.Fatalf("ParseCivilDate() error = %v", err)
+	}
+
+	cells, err := repository.buildPreferenceCells(asOf, nil)
+	if err != nil {
+		t.Fatalf("buildPreferenceCells(no source) error = %v", err)
+	}
+	if len(cells) != 2 {
+		t.Fatalf("buildPreferenceCells(no source) = %d cells", len(cells))
+	}
+	for _, cell := range cells {
+		if cell.Status != analytics.CellUnavailable {
+			t.Fatalf("cell %s status = %q", cell.CategoryCode, cell.Status)
+		}
+		if cell.PublishedValue != nil || cell.ExactValue != nil {
+			t.Fatalf("cell %s carries a value while unavailable", cell.CategoryCode)
+		}
+	}
+}
+
+// Metade do mapeamento não forma proporção: a categoria ausente não pode ser
+// lida como zero, ou a presente apareceria com cem por cento. A tolerância a
+// fonte ausente vale para a ausência inteira, nunca para a parcial.
+func TestPublicationRefusesHalfMappedPreferenceSource(t *testing.T) {
+	t.Parallel()
+
+	repository := &AnalyticsRepository{analytics: analyticsFixtureConfig()}
+	asOf, err := stay.ParseCivilDate("2026-08-18")
+	if err != nil {
+		t.Fatalf("ParseCivilDate() error = %v", err)
+	}
+
+	if _, err := repository.buildPreferenceCells(
+		asOf,
+		[]generated.ListEligiblePreferenceCountsRow{{
+			PrivacyPolicyVersion: "prototype-v1", MetricCode: "first_visit_share",
+			CategoryCode: "first_visit", SampleSize: 40, AccommodationCount: 4,
+			MinimumPublicCell: 10,
+		}},
+	); err == nil {
+		t.Fatal("buildPreferenceCells(half source) error = nil")
+	}
+}
+
+// Um mínimo mais fraco que o configurado continua sendo recusa: a fonte existe
+// e contradiz a política, o que é corrupção e não ausência.
+func TestPublicationRefusesWeakerPreferenceThreshold(t *testing.T) {
+	t.Parallel()
+
+	repository := &AnalyticsRepository{analytics: analyticsFixtureConfig()}
+	asOf, err := stay.ParseCivilDate("2026-08-18")
+	if err != nil {
+		t.Fatalf("ParseCivilDate() error = %v", err)
+	}
+
+	rows := make([]generated.ListEligiblePreferenceCountsRow, 0, 2)
+	for _, category := range []string{"first_visit", "returning"} {
+		rows = append(rows, generated.ListEligiblePreferenceCountsRow{
+			PrivacyPolicyVersion: "prototype-v1", MetricCode: "first_visit_share",
+			CategoryCode: category, SampleSize: 40, AccommodationCount: 4,
+			MinimumPublicCell: 5,
+		})
+	}
+	if _, err := repository.buildPreferenceCells(asOf, rows); err == nil {
+		t.Fatal("buildPreferenceCells(weaker threshold) error = nil")
+	}
+}
+
+func analyticsFixtureConfig() config.AnalyticsConfig {
+	return config.AnalyticsConfig{
+		PrivacyPolicyVersion:           "prototype-v1",
+		MethodologyVersion:             "explainable-baseline-v1",
+		PrimaryCellThreshold:           10,
+		MinimumReportingAccommodations: 3,
+		RoundingBase:                   10,
+		PreRegisteredWeight:            0.8,
 	}
 }

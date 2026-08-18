@@ -279,6 +279,7 @@ paths:
       x-cumuru-feature: analytics
       parameters:
         - $ref: "#/components/parameters/PresenceWindow"
+        - $ref: "#/components/parameters/PresenceMonth"
         - $ref: "#/components/parameters/IfNoneMatch"
       responses:
         "200":
@@ -1676,6 +1677,210 @@ paths:
           $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/InternalServerProblem"
+  /accommodation-access-requests/context:
+    get:
+      summary: Consultar o contexto do pedido de convite e receber o desafio
+      description: >
+        Canal aberto e sem convite prévio: quem chega aqui ainda não tem conta,
+        e por isso não há token nenhum a apresentar. A resposta traz o desafio
+        de proof-of-work, cuja dificuldade é derivada do contador do balde de
+        rate limit desta rota, e a versão do aviso de privacidade que o
+        formulário deve exibir antes de coletar o contato.
+      tags: [accommodations]
+      operationId: getAccommodationAccessRequestContext
+      x-cumuru-feature: self-service
+      security: []
+      responses:
+        "200":
+          description: Aviso de privacidade vigente e desafio de trabalho.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccommodationAccessRequestContext"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /accommodation-access-requests:
+    post:
+      summary: Pedir acesso para a própria hospedagem
+      description: >
+        Canal público e nominal, ao contrário do autocadastro do visitante
+        (ADR-040): sem nome da acomodação não há o que aprovar, e sem e-mail não
+        há a quem devolver o acesso depois. A resposta devolve somente id e
+        created_at, e nunca ecoa o que foi enviado, porque a rota é aberta e o
+        eco transformaria a criação em consulta de dado de contato alheio. Um
+        pedido pendente por e-mail: o reenvio colide e responde 409.
+      tags: [accommodations]
+      operationId: createAccommodationAccessRequest
+      x-cumuru-feature: self-service
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccommodationAccessRequest"
+      responses:
+        "201":
+          description: Pedido registrado ou reproduzido por replay exato.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccommodationAccessRequestCreated"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+    get:
+      summary: Listar pedidos de convite da hospedagem
+      description: >
+        Fila da administração. O item traz o contato porque é ele que a tela usa
+        para decidir e, depois de aprovar, para emitir o acesso — a emissão
+        continua sendo o passo separado de POST
+        /accommodations/{accommodation_id}/activation. Em rejected e expired o
+        contato vem nulo, porque já foi eliminado (ADR-042); expires_at diz
+        quanto resta ao pendente antes de o worker o expirar.
+      tags: [accommodations]
+      operationId: listAccommodationAccessRequests
+      x-cumuru-feature: self-service
+      security:
+        - oidc: ["accommodations:onboard"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
+        - $ref: "#/components/parameters/AccommodationAccessRequestState"
+      responses:
+        "200":
+          description: Página da fila de pedidos.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccommodationAccessRequestPage"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /accommodation-access-requests/{request_id}/approve:
+    post:
+      summary: Aprovar pedido de convite da hospedagem
+      description: >
+        Cria a acomodação e preenche accommodation_id na mesma transação, e é
+        por isso que o pedido aprovado não pode existir sem cadastro
+        correspondente. A resposta devolve o contato para que a tela encadeie a
+        emissão do acesso sem digitar de novo o que já foi declarado.
+      tags: [accommodations]
+      operationId: approveAccommodationAccessRequest
+      x-cumuru-feature: self-service
+      security:
+        - oidc: ["accommodations:onboard"]
+      parameters:
+        - $ref: "#/components/parameters/AccommodationAccessRequestId"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/EmptyObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/AccommodationAccessRequestSucceeded"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "412":
+          $ref: "#/components/responses/Problem"
+        "428":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /accommodation-access-requests/{request_id}/reject:
+    post:
+      summary: Recusar pedido de convite da hospedagem
+      description: >
+        Motivo obrigatório e de lista fechada, no mesmo precedente de
+        rejectStay: texto livre em platform.audit_events, que é append-only,
+        viraria dado pessoal permanente. A recusa elimina o contato na mesma
+        transação (ADR-042) e preserva a linha, porque ela é a prova de que a
+        recusa aconteceu — por isso a resposta devolve contato nulo.
+      tags: [accommodations]
+      operationId: rejectAccommodationAccessRequest
+      x-cumuru-feature: self-service
+      security:
+        - oidc: ["accommodations:onboard"]
+      parameters:
+        - $ref: "#/components/parameters/AccommodationAccessRequestId"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectAccommodationAccessRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/AccommodationAccessRequestSucceeded"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "412":
+          $ref: "#/components/responses/Problem"
+        "428":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
   /stays/{stay_id}/approve:
     post:
       summary: Aprovar estadia autocadastrada
@@ -2339,9 +2544,30 @@ components:
       name: window
       in: query
       required: true
+      description: |
+        Janela do documento publicado. As janelas `recent_*` recortam o
+        histórico diário observado; `month` recorta um mês civil e exige o
+        parâmetro `month`. `next_30_days` é a única janela de previsão.
       schema:
         type: string
-        enum: [recent_30_days, next_30_days]
+        enum:
+          - recent_30_days
+          - recent_90_days
+          - recent_365_days
+          - recent_730_days
+          - next_30_days
+          - month
+    PresenceMonth:
+      name: month
+      in: query
+      required: false
+      description: |
+        Mês civil consultado, obrigatório quando `window=month` e recusado em
+        qualquer outra janela. Fora do histórico publicado o documento não
+        existe e a resposta é 503.
+      schema:
+        type: string
+        pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
     PreferencePeriod:
       name: period
       in: query
@@ -2401,6 +2627,19 @@ components:
       schema:
         type: string
         format: uuid
+    AccommodationAccessRequestId:
+      name: request_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AccommodationAccessRequestState:
+      name: approval_state
+      in: query
+      description: Recorte da fila; ausente devolve todos os estados.
+      schema:
+        $ref: "#/components/schemas/AccommodationAccessRequestApprovalState"
     MembershipId:
       name: membership_id
       in: path
@@ -2627,6 +2866,21 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StayMutationResult"
+    AccommodationAccessRequestSucceeded:
+      description: Decisão aplicada ou reproduzida por replay idempotente.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        ETag:
+          $ref: "#/components/headers/EntityTag"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccommodationAccessRequest"
     QuestionnaireCreated:
       description: Questionário e primeira versão draft criados ou reproduzidos.
       headers:
@@ -2959,6 +3213,227 @@ components:
         public_area_code:
           type: [string, "null"]
           maxLength: 100
+    AccommodationAccessRequestApprovalState:
+      type: string
+      description: >
+        expired é o pedido que ninguém leu dentro do prazo, e não uma decisão:
+        não tem decisor nem motivo. Vale igualmente para o recurso e para o
+        filtro da fila, de propósito — um estado que a listagem não sabe pedir
+        vira registro que a tela não sabe explicar.
+      enum: [pending, approved, rejected, expired]
+    AccommodationAccessRequestRejectionReason:
+      type: string
+      description: >
+        Lista fechada pelo mesmo motivo de RejectStayRequest: o motivo vai para
+        trilha append-only e texto livre viraria dado pessoal permanente.
+      enum:
+        - duplicate_request
+        - not_a_lodging
+        - insufficient_information
+        - abuse
+    AccommodationAccessRequestContext:
+      type: object
+      required: [proof_of_work, privacy_notice_version]
+      additionalProperties: false
+      properties:
+        proof_of_work:
+          $ref: "#/components/schemas/ProofOfWorkChallenge"
+        privacy_notice_version:
+          type: string
+          minLength: 1
+          maxLength: 100
+    CreateAccommodationAccessRequest:
+      type: object
+      required:
+        - client_submission_id
+        - accommodation_name
+        - category
+        - capacity
+        - contact_name
+        - contact_email
+        - city_label
+        - state_code
+        - privacy_notice_version
+        - proof_of_work
+      additionalProperties: false
+      properties:
+        client_submission_id:
+          type: string
+          format: uuid
+          pattern: "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-7[0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$"
+          description: UUIDv7 canônico gerado pelo cliente para repetição segura.
+        accommodation_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        category:
+          $ref: "#/components/schemas/AccommodationInputCategory"
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        contact_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        contact_email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 254
+        contact_phone:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 40
+        city_label:
+          type: string
+          minLength: 1
+          maxLength: 120
+        state_code:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        privacy_notice_version:
+          type: string
+          minLength: 1
+          maxLength: 100
+        proof_of_work:
+          type: object
+          required: [challenge, solution]
+          additionalProperties: false
+          properties:
+            challenge:
+              type: string
+              minLength: 32
+              maxLength: 256
+              pattern: "^[A-Za-z0-9_-]+$"
+            solution:
+              type: string
+              minLength: 1
+              maxLength: 64
+              pattern: "^[A-Za-z0-9_-]+$"
+    AccommodationAccessRequestCreated:
+      description: >
+        Recibo mínimo. Nenhum campo enviado é devolvido: a rota é aberta e o eco
+        transformaria a criação em consulta de dado de contato alheio.
+      type: object
+      required: [id, created_at]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+    AccommodationAccessRequest:
+      type: object
+      required:
+        - id
+        - accommodation_name
+        - category
+        - capacity
+        - contact_name
+        - contact_email
+        - contact_phone
+        - city_label
+        - state_code
+        - approval_state
+        - expires_at
+        - accommodation_id
+        - rejection_reason_code
+        - version
+        - created_at
+        - updated_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        accommodation_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        category:
+          $ref: "#/components/schemas/AccommodationInputCategory"
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        contact_name:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 120
+          description: >
+            Nulo depois de rejected ou expired: a ADR-042 elimina o dado pessoal
+            do canal aberto e preserva só o fato, o motivo e o instante.
+        contact_email:
+          type: [string, "null"]
+          format: email
+          minLength: 3
+          maxLength: 254
+          description: >
+            Nulo depois de rejected ou expired, pelo mesmo motivo de
+            contact_name. Presente apenas em pending e approved.
+        contact_phone:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 40
+          description: >
+            Opcional no envio e nulo depois de rejected ou expired.
+        city_label:
+          type: string
+          minLength: 1
+          maxLength: 120
+        state_code:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        approval_state:
+          $ref: "#/components/schemas/AccommodationAccessRequestApprovalState"
+        expires_at:
+          type: string
+          format: date-time
+          description: >
+            Prazo do pedido pendente, para a fila mostrar quanto tempo resta.
+            Vencido, o contato é eliminado e o estado vira expired.
+        accommodation_id:
+          oneOf:
+            - type: string
+              format: uuid
+            - type: "null"
+          description: Acomodação criada na aprovação; nula nos demais estados.
+        rejection_reason_code:
+          oneOf:
+            - $ref: "#/components/schemas/AccommodationAccessRequestRejectionReason"
+            - type: "null"
+          description: Preenchido somente quando approval_state é rejected.
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AccommodationAccessRequestPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccommodationAccessRequest"
+        next_cursor:
+          type: [string, "null"]
+    RejectAccommodationAccessRequest:
+      type: object
+      required: [reason_code]
+      additionalProperties: false
+      properties:
+        reason_code:
+          $ref: "#/components/schemas/AccommodationAccessRequestRejectionReason"
     MembershipRole:
       type: string
       enum: [operator, manager]
@@ -4524,10 +4999,18 @@ components:
           $ref: "#/components/schemas/PublicMetadata"
         window:
           type: string
-          const: recent_30_days
+          enum:
+            - recent_30_days
+            - recent_90_days
+            - recent_365_days
+            - recent_730_days
+            - month
+        month:
+          type: string
+          pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
         series:
           type: array
-          maxItems: 30
+          maxItems: 730
           items:
             $ref: "#/components/schemas/ObservedPresencePoint"
     ForecastPublicPresence:
@@ -4680,6 +5163,7 @@ components:
         - complementary_suppression
         - rounding_base
         - rounding_mode
+        - presence_history_days
         - allowed_presence_windows
         - allowed_preference_periods
       additionalProperties: false
@@ -4731,13 +5215,25 @@ components:
         rounding_mode:
           type: string
           const: stable-half-up
+        presence_history_days:
+          type: integer
+          const: 730
+          description: |
+            Dias civis de histórico observado que a release corrente publica,
+            contados a partir do dia de referência da publicação.
         allowed_presence_windows:
           type: array
-          minItems: 2
-          maxItems: 2
+          minItems: 6
+          maxItems: 6
           items:
             type: string
-            enum: [recent_30_days, next_30_days]
+            enum:
+              - recent_30_days
+              - recent_90_days
+              - recent_365_days
+              - recent_730_days
+              - next_30_days
+              - month
         allowed_preference_periods:
           type: array
           minItems: 1

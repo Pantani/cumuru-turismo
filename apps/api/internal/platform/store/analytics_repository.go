@@ -1051,7 +1051,7 @@ func (r *AnalyticsRepository) validateMetricCatalog(
 
 func expectedMetricShapes() map[string]string {
 	return map[string]string{
-		"presence|recent_30_days":               "none|person_day",
+		"presence|observed_daily":               "none|person_day",
 		"presence|next_30_days":                 "none|person_day",
 		"first_visit_share|last_complete_month": "visit_profile|survey_response",
 	}
@@ -1132,8 +1132,14 @@ func (r *AnalyticsRepository) readPublicationWindows(
 	facts, err := queries.ListPresenceFactsForWindow(
 		ctx,
 		generated.ListPresenceFactsForWindowParams{
-			WindowStart: dateToPG(asOf.AddDays(-56).String()),
-			WindowEnd:   dateToPG(asOf.AddDays(31).String()),
+			// O histórico publicado é o piso da leitura; as oito semanas que a
+			// baseline do forecast consulta já cabem dentro dele.
+			WindowStart: dateToPG(
+				asOf.AddDays(-(analytics.PresenceHistoryDays - 1)).String(),
+			),
+			WindowEnd: dateToPG(
+				asOf.AddDays(analytics.PresenceForecastDays + 1).String(),
+			),
 		},
 	)
 	if err != nil {
@@ -1285,17 +1291,22 @@ func aggregateKey(date, kind string) string {
 	return date + "|" + kind
 }
 
+// A série observada é publicada inteira, não recortada: a janela é escolha de
+// quem lê. Cada dia atravessa a mesma proteção por célula, então um histórico
+// longo não afrouxa nada — apenas deixa de esconder o que já era publicável.
 func (r *AnalyticsRepository) buildObservedCells(
 	asOf stay.CivilDate,
 	aggregates map[string]*factAggregate,
 ) ([]analytics.PublicationCell, error) {
-	source := make([]analytics.Cell, 0, 30)
-	dates := make([]stay.CivilDate, 0, 30)
-	for offset := -29; offset <= 0; offset++ {
+	source := make([]analytics.Cell, 0, analytics.PresenceHistoryDays)
+	dates := make([]stay.CivilDate, 0, analytics.PresenceHistoryDays)
+	for offset := -(analytics.PresenceHistoryDays - 1); offset <= 0; offset++ {
 		date := asOf.AddDays(offset)
 		dates = append(dates, date)
 		aggregate := aggregateOrEmpty(aggregates, date, "observed")
-		source = append(source, protectionCell(date.String(), "recent_30_days", aggregate))
+		source = append(source, protectionCell(
+			date.String(), analytics.PresenceObservedSelector, aggregate,
+		))
 	}
 	protected, err := analytics.ProtectCells(source, r.presencePolicy())
 	if err != nil {
@@ -1318,10 +1329,10 @@ func (r *AnalyticsRepository) buildForecastCells(
 	asOf stay.CivilDate,
 	aggregates map[string]*factAggregate,
 ) ([]analytics.PublicationCell, error) {
-	source := make([]analytics.Cell, 0, 30)
-	values := make([]analytics.Forecast, 0, 30)
-	dates := make([]stay.CivilDate, 0, 30)
-	for lead := 1; lead <= 30; lead++ {
+	source := make([]analytics.Cell, 0, analytics.PresenceForecastDays)
+	values := make([]analytics.Forecast, 0, analytics.PresenceForecastDays)
+	dates := make([]stay.CivilDate, 0, analytics.PresenceForecastDays)
+	for lead := 1; lead <= analytics.PresenceForecastDays; lead++ {
 		date := asOf.AddDays(lead)
 		aggregate := aggregateOrEmpty(aggregates, date, "forecast")
 		forecast, err := analytics.ExplainableBaseline(
@@ -1334,7 +1345,9 @@ func (r *AnalyticsRepository) buildForecastCells(
 		}
 		dates = append(dates, date)
 		values = append(values, forecast)
-		cell := protectionCell(date.String(), "next_30_days", aggregate)
+		cell := protectionCell(
+			date.String(), analytics.PresenceForecastSelector, aggregate,
+		)
 		cell.RawValue = forecast.Central
 		source = append(source, cell)
 	}
@@ -1375,7 +1388,8 @@ func (r *AnalyticsRepository) forecastPublicationCell(
 	status analytics.CellStatus,
 ) (analytics.PublicationCell, error) {
 	cell := basePublicationCell(
-		date, "next_30_days", "presence", "person_day", "none", "none", "forecast",
+		date, analytics.PresenceForecastSelector, "presence", "person_day",
+		"none", "none", "forecast",
 		status, source,
 	)
 	if status != analytics.CellPublished {
@@ -1403,7 +1417,8 @@ func observedPublicationCell(
 	published *int,
 ) analytics.PublicationCell {
 	cell := basePublicationCell(
-		date, "recent_30_days", "presence", "person_day", "none", "none", "observed",
+		date, analytics.PresenceObservedSelector, "presence", "person_day",
+		"none", "none", "observed",
 		status, source,
 	)
 	if status == analytics.CellPublished && published != nil {
@@ -1494,11 +1509,30 @@ func (r *AnalyticsRepository) buildPreferenceCells(
 	if err != nil {
 		return nil, err
 	}
+	categories := []string{"first_visit", "returning"}
+	start, end := lastCompleteMonth(asOf)
+	// Fonte inteiramente ausente não é fonte corrompida. Sem o mapeamento da
+	// pergunta a preferência não tem o que medir, e derrubar a publicação
+	// levaria junto a série de presença, que está completa e não depende do
+	// questionário. A categoria é publicada como indisponível — o mesmo que um
+	// dia de presença sem dado. Fonte pela metade continua sendo erro: uma
+	// categoria sozinha não forma proporção, e lê-la como zero publicaria a
+	// outra com cem por cento.
+	if !anyPreferenceSource(counts, categories) {
+		return unavailablePreferenceCells(start, end, categories), nil
+	}
+	return r.protectedPreferenceCells(counts, categories, start, end)
+}
+
+func (r *AnalyticsRepository) protectedPreferenceCells(
+	counts map[string]preferenceCount,
+	categories []string,
+	start, end stay.CivilDate,
+) ([]analytics.PublicationCell, error) {
 	threshold, err := r.effectivePreferenceThreshold(counts)
 	if err != nil {
 		return nil, err
 	}
-	categories := []string{"first_visit", "returning"}
 	source := preferenceSourceCells(counts, categories)
 	protected, err := analytics.ProtectCells(source, analytics.Policy{
 		PrimaryThreshold:               threshold,
@@ -1508,16 +1542,44 @@ func (r *AnalyticsRepository) buildPreferenceCells(
 	if err != nil {
 		return nil, ErrUnavailable
 	}
-	start, end := lastCompleteMonth(asOf)
 	result := make([]analytics.PublicationCell, 0, len(categories))
 	for index, category := range categories {
-		status := protected[index].Status
-		cell := preferencePublicationCell(
-			start, end, category, source[index], status, protected[index].PublishedValue,
-		)
-		result = append(result, cell)
+		result = append(result, preferencePublicationCell(
+			start, end, category, source[index],
+			protected[index].Status, protected[index].PublishedValue,
+		))
 	}
 	return result, nil
+}
+
+// Distingue "não há fonte" de "a fonte está incompleta": só a primeira é um
+// estado legítimo de instalação nova.
+func anyPreferenceSource(
+	counts map[string]preferenceCount,
+	categories []string,
+) bool {
+	for _, category := range categories {
+		if counts[category].present {
+			return true
+		}
+	}
+	return false
+}
+
+func unavailablePreferenceCells(
+	start, end stay.CivilDate,
+	categories []string,
+) []analytics.PublicationCell {
+	result := make([]analytics.PublicationCell, 0, len(categories))
+	for _, category := range categories {
+		result = append(result, preferencePublicationCell(
+			start, end, category, analytics.Cell{
+				Key: category, Family: "first_visit_share",
+			},
+			analytics.CellUnavailable, nil,
+		))
+	}
+	return result
 }
 
 type preferenceCount struct {

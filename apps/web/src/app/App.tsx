@@ -27,6 +27,7 @@ const RegistrationPage = lazy(() => import("../pages/RegistrationPage"));
 const SelfRegistrationPage = lazy(
   () => import("../pages/SelfRegistrationPage"),
 );
+const InviteRequestPage = lazy(() => import("../pages/InviteRequestPage"));
 const ActivationPage = lazy(() => import("../pages/ActivationPage"));
 const AuthenticatedPage = lazy(() => import("../pages/AuthenticatedPage"));
 const SurveyPage = lazy(() => import("../pages/SurveyPage"));
@@ -40,6 +41,7 @@ const routePages: Record<AppPath, ComponentType> = {
   "/": PublicFoundationPage,
   "/registro": RegistrationPage,
   "/i": SelfRegistrationPage,
+  "/convite": InviteRequestPage,
   "/ativacao": ActivationPage,
   "/pesquisa": SurveyPage,
   "/acesso": AuthenticatedPage,
@@ -51,6 +53,7 @@ const routeTitles: Record<AppPath, MessageKey> = {
   "/": "app.title.public",
   "/registro": "app.title.registration",
   "/i": "app.title.selfRegistration",
+  "/convite": "app.title.inviteRequest",
   "/ativacao": "app.title.activation",
   "/pesquisa": "app.title.survey",
   "/acesso": "app.title.workspace",

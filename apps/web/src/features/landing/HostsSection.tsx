@@ -1,17 +1,16 @@
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import { ImageSlot } from "./ImageSlot";
-import {
-  CONTACT_EMAIL,
-  HAMMOCK_PHOTO,
-  HOST_BENEFITS,
-} from "./landing-content";
+import { HAMMOCK_PHOTO, HOST_BENEFITS } from "./landing-content";
 import { SectionIndex } from "./SectionIndex";
 
 /**
- * O cartão abre conversa com a equipe em vez de mandar para `/acesso`: hoje não
- * existe autocadastro de hospedagem — a conta nasce de um link de ativação que
- * a equipe emite —, então um botão para a tela de login deixaria quem ainda não
- * tem conta num beco sem saída. O link de entrar fica embaixo, para quem já tem.
+ * O cartão leva a `/convite`, que é onde o pedido de acesso passa a ser escrito
+ * de fato. Ele já apontou para `/acesso`, a tela de login, e depois para um
+ * `mailto:` da equipe: os dois eram contorno para a mesma ausência, porque não
+ * existia autocadastro de hospedagem e quem chega pela capa ainda não tem conta.
+ * Agora existe — `/convite` grava o pedido na fila de aprovação (ADR-042), e a
+ * conta continua nascendo do link de ativação que a administração emite depois
+ * da análise. O link de entrar fica embaixo, para quem já tem conta.
  */
 function RegisterCard() {
   const { t } = useLocale();
@@ -19,7 +18,7 @@ function RegisterCard() {
     <div className="lp-register" id="cadastro">
       <h3>{t("landing.register.title")}</h3>
       <p>{t("landing.register.body")}</p>
-      <a className="lp-button-dark" href={`mailto:${CONTACT_EMAIL}`}>
+      <a className="lp-button-dark" href="/convite">
         {t("landing.register.action")}
       </a>
       <p className="lp-register-footnote">

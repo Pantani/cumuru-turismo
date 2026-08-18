@@ -18,6 +18,10 @@ type Querier interface {
 	// uma conta já ativa.
 	ActivateAccountPassword(ctx context.Context, arg ActivateAccountPasswordParams) (int64, error)
 	ApplyStayTransition(ctx context.Context, arg ApplyStayTransitionParams) (ApplyStayTransitionRow, error)
+	// accommodation_id chega preenchido porque a acomodação foi criada na mesma
+	// transação: a constraint de decisão recusa aprovado sem cadastro. Zero linhas
+	// significa que a linha mudou entre a trava e a escrita, o que é conflito.
+	ApproveAccommodationAccessRequest(ctx context.Context, arg ApproveAccommodationAccessRequestParams) (ApproveAccommodationAccessRequestRow, error)
 	ApproveQuestionnaireVersion(ctx context.Context, arg ApproveQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	// Exige manager ativa e acomodação ativa. O status da estadia NÃO muda: a
 	// espera de aprovação é proveniência mais carimbo, nunca um estado novo da
@@ -36,6 +40,10 @@ type Querier interface {
 	ConsumeActivationCapability(ctx context.Context, arg ConsumeActivationCapabilityParams) (ConsumeActivationCapabilityRow, error)
 	ConsumeInvite(ctx context.Context, arg ConsumeInviteParams) (ConsumeInviteRow, error)
 	ConsumeSurveyCapability(ctx context.Context, arg ConsumeSurveyCapabilityParams) (SurveyCapability, error)
+	// A resposta devolve só id e created_at porque a rota é aberta: ecoar o que foi
+	// gravado transformaria a criação em consulta de contato alheio. approval_state
+	// e version ficam no DEFAULT da tabela, que é a única fonte do estado inicial.
+	CreateAccommodationAccessRequest(ctx context.Context, arg CreateAccommodationAccessRequestParams) (CreateAccommodationAccessRequestRow, error)
 	// Cartaz reutilizável da acomodação (ADR-039). max_uses nulo significa uso
 	// ilimitado; stay_id fica nulo e invites_target_valid garante a exclusividade.
 	CreateAccommodationInvite(ctx context.Context, arg CreateAccommodationInviteParams) (CreateAccommodationInviteRow, error)
@@ -78,6 +86,14 @@ type Querier interface {
 	DeleteSelfServiceStayVisitors(ctx context.Context, stayID pgtype.UUID) (int64, error)
 	DeleteStagedMetricCellsForRun(ctx context.Context, publicationRunID pgtype.UUID) (int64, error)
 	EraseExpiredSurveyFreeText(ctx context.Context, cutoff pgtype.Timestamptz) (int32, error)
+	// A varredura do worker lê e escreve exatamente o que o grant permite: enxerga
+	// id, approval_state e expires_at para achar o vencido, escreve o estado, os
+	// três campos de contato e updated_at, e devolve apenas o id.
+	//
+	// version não é incrementada de propósito. O worker não tem SELECT na coluna, e
+	// incrementar exige lê-la; expired é terminal e nenhuma escrita com If-Match o
+	// segue, então a versão parada não abre janela para escrita perdida.
+	ExpireAccommodationAccessRequests(ctx context.Context, arg ExpireAccommodationAccessRequestsParams) ([]pgtype.UUID, error)
 	// Varredura do worker. Eliminar somente na rejeição permitiria retenção
 	// indefinida por inação, então a expiração carimba e o chamador executa a mesma
 	// purga de visitantes (ADR-040). Não há membership decisora: o ramo 'expired'
@@ -161,6 +177,9 @@ type Querier interface {
 	InsertSurveyResponse(ctx context.Context, arg InsertSurveyResponseParams) error
 	ListAccessibleAccommodations(ctx context.Context, arg ListAccessibleAccommodationsParams) ([]ListAccessibleAccommodationsRow, error)
 	ListAccessibleStays(ctx context.Context, arg ListAccessibleStaysParams) ([]ListAccessibleStaysRow, error)
+	// O cursor é (created_at, id), o mesmo par da listagem de acomodações, e o
+	// filtro ausente devolve todos os estados.
+	ListAccommodationAccessRequests(ctx context.Context, arg ListAccommodationAccessRequestsParams) ([]ListAccommodationAccessRequestsRow, error)
 	ListAccommodationMemberships(ctx context.Context, arg ListAccommodationMembershipsParams) ([]ListAccommodationMembershipsRow, error)
 	ListAccommodationOnboardingOrganizations(ctx context.Context, arg ListAccommodationOnboardingOrganizationsParams) ([]ListAccommodationOnboardingOrganizationsRow, error)
 	ListActiveAccommodationCoverage(ctx context.Context, arg ListActiveAccommodationCoverageParams) ([]ListActiveAccommodationCoverageRow, error)
@@ -169,6 +188,11 @@ type Querier interface {
 	ListConsentRequirementsForVersion(ctx context.Context, questionnaireVersionID pgtype.UUID) ([]SurveyConsentRequirement, error)
 	ListCurrentPreferenceCells(ctx context.Context, periodSelector string) ([]PublicDataCurrentPreference, error)
 	ListCurrentPresenceCells(ctx context.Context, periodSelector string) ([]PublicDataCurrentPresence, error)
+	// A janela recente é medida contra o `as_of_on` da própria publicação: um
+	// intervalo calculado no cliente e enviado pronto passaria a depender do
+	// relógio de quem consulta, não da release publicada.
+	ListCurrentPresenceCellsForRecentDays(ctx context.Context, arg ListCurrentPresenceCellsForRecentDaysParams) ([]PublicDataCurrentPresence, error)
+	ListCurrentPresenceCellsInRange(ctx context.Context, arg ListCurrentPresenceCellsInRangeParams) ([]PublicDataCurrentPresence, error)
 	ListCurrentQualityRows(ctx context.Context, windowCode string) ([]AnalyticsCurrentQuality, error)
 	ListCurrentSummaryCells(ctx context.Context) ([]PublicDataCurrentSummary, error)
 	ListEligiblePreferenceCounts(ctx context.Context, arg ListEligiblePreferenceCountsParams) ([]ListEligiblePreferenceCountsRow, error)
@@ -189,6 +213,10 @@ type Querier interface {
 	ListStagedMetricCellsForRun(ctx context.Context, publicationRunID pgtype.UUID) ([]AnalyticsStagedMetricCell, error)
 	ListStayVisitorsForPresence(ctx context.Context, stayID pgtype.UUID) ([]ListStayVisitorsForPresenceRow, error)
 	ListVisitorsForStay(ctx context.Context, arg ListVisitorsForStayParams) ([]ListVisitorsForStayRow, error)
+	// A trava vem antes da decisão para que a criação da acomodação e a escrita do
+	// estado enxerguem a mesma linha. O estado e a versão voltam para que ausente,
+	// já decidido e versão errada sejam três respostas diferentes.
+	LockAccommodationAccessRequestForDecision(ctx context.Context, requestID pgtype.UUID) (LockAccommodationAccessRequestForDecisionRow, error)
 	LockIdempotencyKey(ctx context.Context, arg LockIdempotencyKeyParams) (PlatformIdempotencyRecord, error)
 	LockMembershipSetForManager(ctx context.Context, arg LockMembershipSetForManagerParams) ([]LockMembershipSetForManagerRow, error)
 	LockQuestionnaire(ctx context.Context, id pgtype.UUID) (SurveyQuestionnaire, error)
@@ -200,6 +228,11 @@ type Querier interface {
 	PublishQuestionnaireVersion(ctx context.Context, arg PublishQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	RecordAggregationFailureQualitySnapshot(ctx context.Context, arg RecordAggregationFailureQualitySnapshotParams) (RecordAggregationFailureQualitySnapshotRow, error)
 	RegisterAuthFailure(ctx context.Context, arg RegisterAuthFailureParams) error
+	// O contato é eliminado na mesma transação que carimba a recusa, e não num
+	// passo posterior: a constraint de decisão recusa 'rejected' que ainda carregue
+	// nome, e-mail ou telefone, então a purga não depende de a aplicação lembrar de
+	// fazê-la. O fato, o motivo e o instante permanecem (ADR-042).
+	RejectAccommodationAccessRequest(ctx context.Context, arg RejectAccommodationAccessRequestParams) (RejectAccommodationAccessRequestRow, error)
 	// Aprovação e cancelamento numa única sentença: a estadia rejeitada sai da
 	// presença por dois caminhos independentes (approval_state e status).
 	RejectSelfServiceStay(ctx context.Context, arg RejectSelfServiceStayParams) (RejectSelfServiceStayRow, error)

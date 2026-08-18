@@ -42,6 +42,7 @@ SELECT
   complementary_suppression,
   rounding_base,
   rounding_mode,
+  presence_history_days,
   allowed_presence_windows,
   allowed_preference_periods
 FROM public_data.current_methodology
@@ -68,6 +69,7 @@ type GetCurrentMethodologyRow struct {
 	ComplementarySuppression       bool               `json:"complementary_suppression"`
 	RoundingBase                   int32              `json:"rounding_base"`
 	RoundingMode                   string             `json:"rounding_mode"`
+	PresenceHistoryDays            int32              `json:"presence_history_days"`
 	AllowedPresenceWindows         []string           `json:"allowed_presence_windows"`
 	AllowedPreferencePeriods       []string           `json:"allowed_preference_periods"`
 }
@@ -96,6 +98,7 @@ func (q *Queries) GetCurrentMethodology(ctx context.Context) (GetCurrentMethodol
 		&i.ComplementarySuppression,
 		&i.RoundingBase,
 		&i.RoundingMode,
+		&i.PresenceHistoryDays,
 		&i.AllowedPresenceWindows,
 		&i.AllowedPreferencePeriods,
 	)
@@ -186,6 +189,148 @@ ORDER BY period_start, kind
 
 func (q *Queries) ListCurrentPresenceCells(ctx context.Context, periodSelector string) ([]PublicDataCurrentPresence, error) {
 	rows, err := q.db.Query(ctx, listCurrentPresenceCells, periodSelector)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PublicDataCurrentPresence{}
+	for rows.Next() {
+		var i PublicDataCurrentPresence
+		if err := rows.Scan(
+			&i.PeriodSelector,
+			&i.PeriodStart,
+			&i.PeriodEnd,
+			&i.Unit,
+			&i.Kind,
+			&i.Status,
+			&i.PublishedValue,
+			&i.PublishedLower,
+			&i.PublishedCentral,
+			&i.PublishedUpper,
+			&i.AsOfOn,
+			&i.DataMode,
+			&i.PrivacyPolicyVersion,
+			&i.MethodologyVersion,
+			&i.CoverageStatus,
+			&i.CoverageRatioPercent,
+			&i.PublishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCurrentPresenceCellsForRecentDays = `-- name: ListCurrentPresenceCellsForRecentDays :many
+SELECT
+  period_selector,
+  period_start,
+  period_end,
+  unit,
+  kind,
+  status,
+  published_value,
+  published_lower,
+  published_central,
+  published_upper,
+  as_of_on,
+  data_mode,
+  privacy_policy_version,
+  methodology_version,
+  coverage_status,
+  coverage_ratio_percent,
+  published_at
+FROM public_data.current_presence
+WHERE period_selector = $1
+  AND period_start > as_of_on - $2::integer
+  AND period_start <= as_of_on
+ORDER BY period_start, kind
+`
+
+type ListCurrentPresenceCellsForRecentDaysParams struct {
+	PeriodSelector string `json:"period_selector"`
+	LookbackDays   int32  `json:"lookback_days"`
+}
+
+// A janela recente é medida contra o `as_of_on` da própria publicação: um
+// intervalo calculado no cliente e enviado pronto passaria a depender do
+// relógio de quem consulta, não da release publicada.
+func (q *Queries) ListCurrentPresenceCellsForRecentDays(ctx context.Context, arg ListCurrentPresenceCellsForRecentDaysParams) ([]PublicDataCurrentPresence, error) {
+	rows, err := q.db.Query(ctx, listCurrentPresenceCellsForRecentDays, arg.PeriodSelector, arg.LookbackDays)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PublicDataCurrentPresence{}
+	for rows.Next() {
+		var i PublicDataCurrentPresence
+		if err := rows.Scan(
+			&i.PeriodSelector,
+			&i.PeriodStart,
+			&i.PeriodEnd,
+			&i.Unit,
+			&i.Kind,
+			&i.Status,
+			&i.PublishedValue,
+			&i.PublishedLower,
+			&i.PublishedCentral,
+			&i.PublishedUpper,
+			&i.AsOfOn,
+			&i.DataMode,
+			&i.PrivacyPolicyVersion,
+			&i.MethodologyVersion,
+			&i.CoverageStatus,
+			&i.CoverageRatioPercent,
+			&i.PublishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCurrentPresenceCellsInRange = `-- name: ListCurrentPresenceCellsInRange :many
+SELECT
+  period_selector,
+  period_start,
+  period_end,
+  unit,
+  kind,
+  status,
+  published_value,
+  published_lower,
+  published_central,
+  published_upper,
+  as_of_on,
+  data_mode,
+  privacy_policy_version,
+  methodology_version,
+  coverage_status,
+  coverage_ratio_percent,
+  published_at
+FROM public_data.current_presence
+WHERE period_selector = $1
+  AND period_start >= $2
+  AND period_start < $3
+ORDER BY period_start, kind
+`
+
+type ListCurrentPresenceCellsInRangeParams struct {
+	PeriodSelector string      `json:"period_selector"`
+	StartOn        pgtype.Date `json:"start_on"`
+	EndOn          pgtype.Date `json:"end_on"`
+}
+
+func (q *Queries) ListCurrentPresenceCellsInRange(ctx context.Context, arg ListCurrentPresenceCellsInRangeParams) ([]PublicDataCurrentPresence, error) {
+	rows, err := q.db.Query(ctx, listCurrentPresenceCellsInRange, arg.PeriodSelector, arg.StartOn, arg.EndOn)
 	if err != nil {
 		return nil, err
 	}

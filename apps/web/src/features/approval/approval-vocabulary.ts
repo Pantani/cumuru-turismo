@@ -42,5 +42,5 @@ export function formatApprovalDeadline(expiresAt: string | null) {
   if (Number.isNaN(parsed.getTime())) {
     return null;
   }
-  return `Expira em ${formatCivilDate(stayCivilDateOf(parsed))}`;
+  return `Expira em ${formatCivilDate(stayCivilDateOf(expiresAt))}`;
 }

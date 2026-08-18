@@ -32,6 +32,7 @@ export const messagesEs: Messages = {
   "app.title.public": "Panel público del turismo",
   "app.title.registration": "Registro de visitantes",
   "app.title.selfRegistration": "Autorregistro por cartel",
+  "app.title.inviteRequest": "Solicitud de acceso",
   "app.title.activation": "Activación de la cuenta",
   "app.title.survey": "Encuesta al visitante",
   "app.title.workspace": "Área del alojamiento",
@@ -122,8 +123,8 @@ export const messagesEs: Messages = {
   // ---------------------------------------------------------- Landing: cadastro
   "landing.register.title": "Registre su alojamiento",
   "landing.register.body":
-    "El equipo hace el registro con usted, por correo o en la visita, y envía un enlace de activación para que elija la contraseña. El código QR del mostrador está dentro del área del alojamiento.",
-  "landing.register.action": "Hablar con el equipo",
+    "Toma cinco minutos. Cuenta cómo aloja, deja un contacto y la administración le envía por correo la invitación de acceso después de analizar la solicitud.",
+  "landing.register.action": "Solicitar mi acceso",
   "landing.register.signIn": "¿Ya tiene acceso? Ir al área del alojamiento",
   "landing.register.footnote": "Sin costo. Puede salir cuando quiera.",
 
@@ -280,17 +281,34 @@ export const messagesEs: Messages = {
   "analytics.value.observed": "{value} personas-día",
   "analytics.value.central": "Estimación central: {value} personas-día",
   "analytics.value.band": "Rango probable: {lower} a {upper}",
+  "analytics.percent.plain": "{percent}%",
+  "analytics.percent.signed": "{sign}{percent}%",
+  "analytics.summary.forecastTotal": "Total previsto en 30 días",
+  "analytics.summary.forecastTotalHint":
+    "Suma de las estimaciones centrales de los {count} días previstos publicados, en personas-día. Es el volumen del mes, no el de un día.",
+  "analytics.summary.forecastTotalNone":
+    "Ningún día del horizonte tiene previsión publicada, así que no hay volumen que sumar.",
 
   // -------------------------------------------------------- Painel: série
   "analytics.presence.kicker": "Serie en personas-día",
   "analytics.presence.title": "Presencia a lo largo del tiempo",
-  "analytics.window.label": "Ventana de presencia",
-  "analytics.window.recent": "Últimos 30 días",
-  "analytics.window.next": "Próximos 30 días",
-  "analytics.window.combined": "Últimos 30 y próximos 30 días",
-  "analytics.window.scope.recent": "últimos 30 días",
+  "analytics.updating": "Actualizando la ventana…",
+  "analytics.history.label": "Historial",
+  "analytics.history.recent30": "30 días",
+  "analytics.history.recent90": "90 días",
+  "analytics.history.recent365": "1 año",
+  "analytics.history.recent730": "2 años",
+  "analytics.history.month": "Mes",
+  "analytics.history.monthLabel": "Mes consultado",
+  "analytics.history.monthPrevious": "Mes anterior",
+  "analytics.history.monthNext": "Mes siguiente",
+  "analytics.view.label": "Mostrar",
+  "analytics.view.observed": "Observado",
+  "analytics.view.combined": "Observado y previsto",
+  "analytics.view.forecast": "Solo previsión",
+  "analytics.window.scope.recent": "días observados de la ventana",
   "analytics.window.scope.next": "próximos 30 días",
-  "analytics.window.scope.combined": "últimos 30 días observados",
+  "analytics.window.scope.combined": "días observados de la ventana",
 
   "analytics.legend.aria": "Leyenda de la serie",
   "analytics.legend.observed": "Observado",
@@ -301,6 +319,7 @@ export const messagesEs: Messages = {
   "analytics.legend.weekend": "Fin de semana",
 
   "analytics.stats.aria": "Estadísticas de los {scope}",
+  "analytics.stats.rhythmAria": "Ritmo y alcance de los {scope}",
   "analytics.tile.average": "Promedio diario",
   "analytics.tile.averageHint":
     "Promedio de los {count} días con valor publicado. La línea discontinua del gráfico marca ese nivel.",
@@ -315,9 +334,24 @@ export const messagesEs: Messages = {
     "Promedio de los {count} últimos días publicados frente a los {count} anteriores. Los días protegidos se saltan, nunca se cuentan como cero.",
   "analytics.tile.trendNone":
     "Se necesitan al menos dos días publicados para comparar períodos.",
+  "analytics.tile.median": "Día común",
+  "analytics.tile.medianHint":
+    "Mediana de los días publicados: la mitad de los días quedó por encima y la mitad por debajo. Un feriado aislado desplaza la media, no la mediana.",
+  "analytics.tile.weekend": "Fin de semana",
+  "analytics.tile.weekendHint":
+    "Cuánto pesan el sábado y el domingo por encima o por debajo de los días hábiles de la ventana. Es el número que dimensiona el equipo y el stock.",
+  "analytics.tile.weekendNone":
+    "Hace falta al menos un día publicado de cada lado para comparar fin de semana con día hábil.",
+  "analytics.tile.variation": "Variabilidad",
+  "analytics.tile.variationHint":
+    "Desviación estándar como porcentaje de la media. Cerca del 20% la demanda es previsible; por encima del 60% planificar por la media engaña.",
+  "analytics.tile.variationNone":
+    "Se necesitan al menos dos días publicados para medir la variación.",
   "analytics.tile.total": "Total acumulado",
   "analytics.tile.totalHint":
     "Suma de los días publicados. Los días protegidos quedan fuera, así que el total es un piso, no un censo.",
+  "analytics.tile.totalPartialHint":
+    "Suma parcial: {count} días de la ventana quedaron sin valor publicado y no entran en el total. El número es un piso, no un censo.",
   "analytics.tile.published": "Días publicados",
   "analytics.tile.publishedValue": "{published} de {days}",
   "analytics.withheld.none":
@@ -449,6 +483,137 @@ export const messagesEs: Messages = {
     "La verificación fue interrumpida. Envíe de nuevo cuando quiera.",
   "selfService.error.offline":
     "Sin conexión ahora. Lo que completó quedó guardado, cifrado, en este dispositivo.",
+
+  // ---------------------------------------------- Solicitud de acceso del alojamiento
+  "inviteRequest.eyebrow": "Registro de alojamiento",
+  "inviteRequest.pageTitle": "Solicite su acceso al Observatorio",
+  "inviteRequest.intro":
+    "Cuente quién es y cómo aloja. La administración analiza la solicitud y, si todo está en orden, le envía por correo la invitación para crear su acceso.",
+  "inviteRequest.loading": "Preparando el formulario…",
+  "inviteRequest.pending.title": "Formulario en preparación",
+  "inviteRequest.retry": "Intentar de nuevo",
+  "inviteRequest.formTitle": "Datos del alojamiento y del contacto",
+  "inviteRequest.privacyNote":
+    "Estos datos sirven solo para analizar la solicitud y comunicarnos con usted. Aviso de privacidad versión {version}.",
+  "inviteRequest.verifyingDevice": "Verificando este dispositivo…",
+  "inviteRequest.submit": "Enviar solicitud",
+  "inviteRequest.submitting": "Enviando…",
+
+  "inviteRequest.group.lodging": "Sobre el alojamiento",
+  "inviteRequest.group.contact": "Sobre quien responde",
+  "inviteRequest.field.name": "Nombre del alojamiento",
+  "inviteRequest.field.category": "Tipo de alojamiento",
+  "inviteRequest.field.capacity": "Cuántas personas aloja a la vez",
+  "inviteRequest.field.city": "Ciudad",
+  "inviteRequest.field.state": "Estado (dos letras)",
+  "inviteRequest.field.contactName": "Su nombre",
+  "inviteRequest.field.contactEmail": "Su correo electrónico",
+  "inviteRequest.field.contactPhone": "Su teléfono o WhatsApp (opcional)",
+
+  "inviteRequest.category.placeholder": "Elija una opción",
+  "inviteRequest.category.formalLodging": "Posada u hotel formal",
+  "inviteRequest.category.seasonalRental": "Alquiler de temporada",
+  "inviteRequest.category.familyHosting": "Alojamiento familiar",
+  "inviteRequest.category.camping": "Camping",
+  "inviteRequest.category.regularizing": "En proceso de regularización",
+  "inviteRequest.category.other": "Otro",
+
+  "inviteRequest.error.summary": "Falta corregir un campo antes de enviar.",
+  "inviteRequest.error.name":
+    "Escriba el nombre del alojamiento, con hasta 200 caracteres.",
+  "inviteRequest.error.category": "Elija un tipo de alojamiento de la lista.",
+  "inviteRequest.error.capacity":
+    "Indique cuántas personas aloja, de 1 a 10.000.",
+  "inviteRequest.error.city": "Escriba la ciudad, con hasta 120 caracteres.",
+  "inviteRequest.error.state":
+    "Escriba el estado con dos letras, como BA.",
+  "inviteRequest.error.contactName":
+    "Escriba su nombre, con hasta 120 caracteres.",
+  "inviteRequest.error.email":
+    "Escriba un correo válido, como nombre@ejemplo.com.",
+  "inviteRequest.error.phone":
+    "El teléfono puede tener como máximo 40 caracteres. Déjelo en blanco si prefiere.",
+  "inviteRequest.error.duplicate":
+    "Ya hay una solicitud en análisis para este correo. Espere la respuesta o indique otro correo.",
+  "inviteRequest.error.unprocessable":
+    "Algunos datos no fueron aceptados. Revise el formulario y envíelo de nuevo.",
+  "inviteRequest.error.rateLimited":
+    "Hubo demasiadas solicitudes desde esta red hace poco.",
+  "inviteRequest.error.proofOfWorkAborted":
+    "La verificación fue interrumpida. Envíe de nuevo cuando quiera.",
+  "inviteRequest.error.offline":
+    "Sin conexión ahora. Revise la internet y envíe de nuevo.",
+
+  "inviteRequest.completion.title": "Solicitud enviada",
+  "inviteRequest.completion.body":
+    "Recibimos su solicitud. La respuesta va a {email}.",
+  "inviteRequest.completion.review":
+    "La administración del Observatorio analiza cada solicitud, una por una.",
+  "inviteRequest.completion.noDeadline":
+    "No hay fecha fija para la respuesta: en cuanto termine el análisis, le avisamos.",
+  "inviteRequest.completion.keepEmail":
+    "Tenga ese correo a mano. Por ahí llega la invitación para crear su acceso.",
+  "inviteRequest.completion.back": "Volver a la página inicial",
+
+  // -------------------------- Cola de pedidos de acceso de la administración
+  "accessRequest.title": "Pedidos de acceso de alojamientos",
+  "accessRequest.hint":
+    "Pedidos enviados por la página pública de registro. Aprobar crea el alojamiento en el Observatorio; entregar el acceso sigue siendo un paso aparte, justo después.",
+  "accessRequest.refresh": "Actualizar la lista",
+  "accessRequest.loading": "Cargando los pedidos…",
+  "accessRequest.empty": "Ningún pedido en este momento.",
+  "accessRequest.filter.label": "Mostrar pedidos",
+  "accessRequest.state.pending": "Esperando decisión",
+  "accessRequest.state.approved": "Aprobado",
+  "accessRequest.state.rejected": "Rechazado",
+  "accessRequest.state.expired": "Vencido sin respuesta",
+  "accessRequest.field.category": "Tipo de alojamiento",
+  "accessRequest.field.capacity": "Personas alojadas a la vez",
+  "accessRequest.field.location": "Ciudad y estado",
+  "accessRequest.field.contactName": "Quién respondió",
+  "accessRequest.field.contactEmail": "Correo informado",
+  "accessRequest.field.contactPhone": "Teléfono informado",
+  "accessRequest.locationValue": "{city} ({state})",
+  "accessRequest.capacityValue.one": "1 persona",
+  "accessRequest.capacityValue.other": "{count} personas",
+  "accessRequest.waiting.now": "Llegó recién",
+  "accessRequest.waiting.hour.one": "Esperando desde hace 1 hora",
+  "accessRequest.waiting.hour.other": "Esperando desde hace {count} horas",
+  "accessRequest.waiting.day.one": "Esperando desde hace 1 día",
+  "accessRequest.waiting.day.other": "Esperando desde hace {count} días",
+  "accessRequest.expires": "Vence el {date}",
+  "accessRequest.contactErased":
+    "Los datos de contacto de este pedido ya fueron eliminados. Solo queda el registro de la decisión.",
+  "accessRequest.rejectedReason": "Motivo del rechazo: {reason}",
+  "accessRequest.approve": "Aprobar y registrar",
+  "accessRequest.reject": "Rechazar",
+  "accessRequest.rejection.title": "Motivo del rechazo",
+  "accessRequest.rejection.field": "Elija el motivo",
+  "accessRequest.rejection.warning":
+    "Al rechazar, el nombre, el correo y el teléfono de este pedido se borran de inmediato. No hay vuelta atrás: solo queda el registro de que hubo un rechazo y por qué.",
+  "accessRequest.rejection.confirm": "Confirmar el rechazo",
+  "accessRequest.rejection.cancel": "Volver",
+  "accessRequest.reason.duplicateRequest": "Pedido repetido",
+  "accessRequest.reason.notALodging": "No es un lugar de alojamiento",
+  "accessRequest.reason.insufficientInformation": "Faltan datos para decidir",
+  "accessRequest.reason.abuse": "Pedido indebido o abusivo",
+  "accessRequest.status.approving": "Aprobando el pedido…",
+  "accessRequest.status.rejecting": "Rechazando el pedido…",
+  "accessRequest.status.approved": "Pedido aprobado. El alojamiento quedó registrado.",
+  "accessRequest.status.rejected": "Pedido rechazado y datos de contacto borrados.",
+  "accessRequest.issuance.title": "Ahora entregue el acceso de {name}",
+  "accessRequest.issuance.hint":
+    "El nombre y el correo de abajo vinieron del propio pedido. Revíselos y emita el acceso.",
+  "accessRequest.issuance.unverifiedEmail":
+    "El sistema no verificó que ese correo sea de quien pidió; enviar el acceso es una decisión suya.",
+  "accessRequest.issuance.loading": "Abriendo el alojamiento recién registrado…",
+  "accessRequest.issuance.dismiss": "Emitir después",
+  "accessRequest.error.conflict":
+    "Alguien decidió sobre este pedido mientras usted trabajaba. Actualizamos la lista; revísela y repita la acción.",
+  "accessRequest.error.generic":
+    "No fue posible completar la acción. Actualice la lista e inténtelo de nuevo.",
+  "accessRequest.error.offline":
+    "No pudimos comunicarnos con el servicio. Nada se perdió: inténtelo de nuevo.",
 
   // -------------------------------------------------------- Copia de error de huésped
   "guestCopy.unexpectedFailure":

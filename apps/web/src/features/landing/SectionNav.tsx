@@ -23,6 +23,7 @@ export function SectionNav() {
           </li>
         ))}
       </ul>
+      {/* Mesma âncora da capa: o cartão de cadastro é a porta para `/convite`. */}
       <a className="lp-section-nav-cta" href="#cadastro">
         {t("landing.nav.register")}
       </a>

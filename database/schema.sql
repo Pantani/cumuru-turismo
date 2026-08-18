@@ -125,6 +125,147 @@ CREATE UNIQUE INDEX accommodations_onboarding_submission_idx
   ON core.accommodations (organization_id, onboarding_submission_id)
   WHERE onboarding_submission_id IS NOT NULL;
 
+-- Pedido de convite da hospedagem: canal público pelo qual uma acomodação que
+-- ainda não existe pede acesso, para a administração aprovar em vez de digitar
+-- o cadastro inteiro. Separada de core.accommodations de propósito: um pedido
+-- nasce de origem anônima e pode ser recusado, e mesclar os dois colocaria
+-- toda tentativa recusada dentro da tabela de cadastro real (ADR-042).
+CREATE TABLE core.accommodation_access_requests (
+  id uuid PRIMARY KEY,
+  accommodation_name text NOT NULL,
+  category text NOT NULL,
+  capacity integer NOT NULL,
+  -- O contato é nulo depois de recusado ou expirado, não em branco: a ADR-042
+  -- elimina o dado pessoal e preserva só o fato. A obrigação de existir volta
+  -- por estado, na constraint de decisão logo abaixo.
+  contact_name text,
+  contact_email text,
+  contact_phone text,
+  city_label text NOT NULL,
+  state_code text NOT NULL,
+  approval_state text NOT NULL DEFAULT 'pending',
+  expires_at timestamptz NOT NULL,
+  decided_at timestamptz,
+  decided_by_oidc_issuer text,
+  decided_by_oidc_subject text,
+  rejection_reason_code text,
+  accommodation_id uuid REFERENCES core.accommodations(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  version bigint NOT NULL DEFAULT 1,
+  CONSTRAINT accommodation_access_requests_name_not_blank
+    CHECK (btrim(accommodation_name) <> ''),
+  -- 'unclassified' fica de fora de propósito: é o valor que o cadastro usa
+  -- quando ninguém classificou, e não uma escolha que o formulário ofereça.
+  CONSTRAINT accommodation_access_requests_category_valid
+    CHECK (
+      category IN (
+        'formal_lodging',
+        'seasonal_rental',
+        'family_hosting',
+        'camping',
+        'regularizing',
+        'other'
+      )
+    ),
+  CONSTRAINT accommodation_access_requests_capacity_bounded
+    CHECK (capacity BETWEEN 1 AND 10000),
+  CONSTRAINT accommodation_access_requests_contact_name_not_blank
+    CHECK (contact_name IS NULL OR btrim(contact_name) <> ''),
+  CONSTRAINT accommodation_access_requests_email_normalized
+    CHECK (contact_email IS NULL OR contact_email = btrim(lower(contact_email))),
+  CONSTRAINT accommodation_access_requests_email_shaped
+    CHECK (
+      contact_email IS NULL
+      OR contact_email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
+    ),
+  CONSTRAINT accommodation_access_requests_phone_shaped
+    CHECK (contact_phone IS NULL OR btrim(contact_phone) <> ''),
+  CONSTRAINT accommodation_access_requests_city_not_blank
+    CHECK (btrim(city_label) <> ''),
+  CONSTRAINT accommodation_access_requests_state_shaped
+    CHECK (state_code ~ '^[A-Z]{2}$'),
+  CONSTRAINT accommodation_access_requests_approval_state_valid
+    CHECK (approval_state IN ('pending', 'approved', 'rejected', 'expired')),
+  -- Cada estado fixa o conjunto inteiro de campos da decisão, inclusive a
+  -- presença ou a ausência do contato. Sem isto, um pedido poderia ficar
+  -- aprovado sem acomodação criada, recusado sem motivo, ou recusado ainda
+  -- carregando o e-mail que a ADR-042 mandou eliminar — e a purga passaria a
+  -- depender de a aplicação lembrar de fazê-la.
+  --
+  -- 'expired' não tem decisor porque ninguém decidiu: é o pedido que ninguém
+  -- leu dentro do prazo. Carimbar um ator ali inventaria uma decisão que não
+  -- houve, que é o mesmo motivo pelo qual a ADR-040 recusou membership de
+  -- sistema para a estadia sem autora.
+  CONSTRAINT accommodation_access_requests_decision_valid
+    CHECK (
+      (
+        approval_state = 'pending'
+        AND contact_name IS NOT NULL
+        AND contact_email IS NOT NULL
+        AND decided_at IS NULL
+        AND decided_by_oidc_issuer IS NULL
+        AND decided_by_oidc_subject IS NULL
+        AND rejection_reason_code IS NULL
+        AND accommodation_id IS NULL
+      )
+      OR
+      (
+        approval_state = 'approved'
+        AND contact_name IS NOT NULL
+        AND contact_email IS NOT NULL
+        AND decided_at IS NOT NULL
+        AND decided_by_oidc_issuer IS NOT NULL
+        AND decided_by_oidc_subject IS NOT NULL
+        AND rejection_reason_code IS NULL
+        AND accommodation_id IS NOT NULL
+      )
+      OR
+      (
+        approval_state = 'rejected'
+        AND contact_name IS NULL
+        AND contact_email IS NULL
+        AND contact_phone IS NULL
+        AND decided_at IS NOT NULL
+        AND decided_by_oidc_issuer IS NOT NULL
+        AND decided_by_oidc_subject IS NOT NULL
+        AND rejection_reason_code IS NOT NULL
+        AND accommodation_id IS NULL
+      )
+      OR
+      (
+        approval_state = 'expired'
+        AND contact_name IS NULL
+        AND contact_email IS NULL
+        AND contact_phone IS NULL
+        AND decided_at IS NULL
+        AND decided_by_oidc_issuer IS NULL
+        AND decided_by_oidc_subject IS NULL
+        AND rejection_reason_code IS NULL
+        AND accommodation_id IS NULL
+      )
+    )
+);
+
+-- A fila da administração lê sempre o mesmo recorte, e o cursor de paginação
+-- do repositório é (created_at, id).
+CREATE INDEX accommodation_access_requests_pending_idx
+  ON core.accommodation_access_requests (created_at, id)
+  WHERE approval_state = 'pending';
+
+-- Um pedido pendente por e-mail. Quem clica duas vezes, ou reenvia porque
+-- não recebeu resposta, não multiplica a fila: a segunda tentativa colide e
+-- vira conflito na aplicação. A restrição é parcial de propósito — depois de
+-- decidido, o mesmo endereço pode pedir de novo.
+CREATE UNIQUE INDEX accommodation_access_requests_pending_email_idx
+  ON core.accommodation_access_requests (contact_email)
+  WHERE approval_state = 'pending';
+
+-- A varredura de expiração do worker lê exatamente este recorte.
+CREATE INDEX accommodation_access_requests_expiry_idx
+  ON core.accommodation_access_requests (expires_at)
+  WHERE approval_state = 'pending';
+
 -- Capability de uso único que transfere o acesso da acomodação a quem a opera
 -- (ADR-041). Armazenada somente por HMAC e nunca reconstruível sem o keyring.
 CREATE TABLE auth.activation_capabilities (
@@ -854,7 +995,7 @@ CREATE TABLE analytics.metric_catalog (
       (
         metric_code = 'presence'
         AND unit = 'person_day'
-        AND period_selector IN ('recent_30_days', 'next_30_days')
+        AND period_selector IN ('observed_daily', 'next_30_days')
         AND dimension_code = 'none'
       )
       OR
@@ -1155,7 +1296,7 @@ CREATE TABLE public_data.metric_cells (
     CHECK (
       (
         metric_code = 'presence'
-        AND period_selector IN ('recent_30_days', 'next_30_days')
+        AND period_selector IN ('observed_daily', 'next_30_days')
         AND unit = 'person_day'
         AND dimension_code = 'none'
         AND category_code = 'none'
@@ -1176,7 +1317,7 @@ CREATE TABLE public_data.metric_cells (
     CHECK (
       metric_code <> 'presence'
       OR (
-        period_selector = 'recent_30_days'
+        period_selector = 'observed_daily'
         AND kind = 'observed'
       )
       OR (
@@ -1327,6 +1468,8 @@ JOIN public_data.metric_cells AS cell
 WHERE current.singleton
   AND cell.metric_code = 'presence';
 
+-- O resumo é a capa: um dia observado e o horizonte previsto. Sem o recorte a
+-- view devolveria os 730 dias de histórico para responder "quantos hoje".
 CREATE VIEW public_data.current_summary
 WITH (security_barrier = true)
 AS
@@ -1348,7 +1491,9 @@ SELECT
   coverage_status,
   coverage_ratio_percent,
   published_at
-FROM public_data.current_presence;
+FROM public_data.current_presence
+WHERE kind = 'forecast'
+  OR period_start = as_of_on;
 
 CREATE VIEW public_data.current_preferences
 WITH (security_barrier = true)
@@ -1399,12 +1544,22 @@ SELECT
   true AS complementary_suppression,
   10::integer AS rounding_base,
   'stable-half-up'::text AS rounding_mode,
-  ARRAY['recent_30_days', 'next_30_days']::text[]
+  ARRAY[
+    'recent_30_days',
+    'recent_90_days',
+    'recent_365_days',
+    'recent_730_days',
+    'next_30_days',
+    'month'
+  ]::text[]
     AS allowed_presence_windows,
   ARRAY['last_complete_month']::text[]
     AS allowed_preference_periods,
   70::integer AS forecast_fallback_lower_percent,
-  130::integer AS forecast_fallback_upper_percent
+  130::integer AS forecast_fallback_upper_percent,
+  -- Coluna nova entra no fim da lista: `CREATE OR REPLACE VIEW` recusa
+  -- inserção no meio, e recriar a view custaria os grants do papel público.
+  730::integer AS presence_history_days
 FROM public_data.current_publication AS current
 JOIN public_data.publications AS publication
   ON publication.publication_version = current.publication_version
@@ -1537,7 +1692,9 @@ CREATE TABLE platform.rate_limit_buckets (
     CHECK (scope IN (
       'invite_context', 'invite_submit', 'survey_submit',
       'accommodation_invite_context', 'accommodation_invite_submit',
-      'activation_context', 'activation_submit'
+      'activation_context', 'activation_submit',
+      'accommodation_access_request_context',
+      'accommodation_access_request_submit'
     )),
   CONSTRAINT rate_limit_key_version_not_blank
     CHECK (btrim(subject_key_version) <> ''),

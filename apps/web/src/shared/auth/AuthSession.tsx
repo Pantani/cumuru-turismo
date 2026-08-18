@@ -15,6 +15,10 @@ import {
   type SessionAccount,
 } from "../api/auth-client";
 import { createCoreClient, type CoreClient } from "../api/core-client";
+import {
+  createInviteRequestClient,
+  type InviteRequestClient,
+} from "../api/invite-request-client";
 import { createQuestionnaireClient, type QuestionnaireClient } from "../api/questionnaire-client";
 import { createAnalyticsClient, type AnalyticsClient } from "../api/analytics-client";
 import { createSelfServiceClient, type SelfServiceClient } from "../api/self-service-client";
@@ -29,6 +33,7 @@ interface AuthSessionValue {
   analyticsClient: AnalyticsClient;
   authenticated: boolean;
   coreClient: CoreClient;
+  inviteRequestClient: InviteRequestClient;
   mustChangePassword: boolean;
   questionnaireClient: QuestionnaireClient;
   selfServiceClient: SelfServiceClient;
@@ -52,6 +57,9 @@ const failClosedAnalyticsClient = createAnalyticsClient({
 const failClosedSelfServiceClient = createSelfServiceClient({
   getAccessToken: () => null,
 });
+const failClosedInviteRequestClient = createInviteRequestClient({
+  getAccessToken: () => null,
+});
 
 async function clearLocalTraces() {
   clearInviteCapability();
@@ -66,6 +74,7 @@ const failClosedSession: AuthSessionValue = {
   analyticsClient: failClosedAnalyticsClient,
   authenticated: false,
   coreClient: failClosedCoreClient,
+  inviteRequestClient: failClosedInviteRequestClient,
   mustChangePassword: false,
   questionnaireClient: failClosedQuestionnaireClient,
   selfServiceClient: failClosedSelfServiceClient,
@@ -167,6 +176,7 @@ function buildClients(tokenRef: { current: string | null }) {
     questionnaireClient: createQuestionnaireClient({ getAccessToken }),
     analyticsClient: createAnalyticsClient({ getAccessToken }),
     selfServiceClient: createSelfServiceClient({ getAccessToken }),
+    inviteRequestClient: createInviteRequestClient({ getAccessToken }),
   };
 }
 

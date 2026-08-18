@@ -90,6 +90,34 @@ describe("capa pública do observatório", () => {
     }
   });
 
+  // Quem chega pela capa ainda não tem conta: um CTA de cadastro apontando
+  // para a tela de login terminava numa parede de credencial. A capa e o menu
+  // levam à seção de cadastro, e é o cartão dela que abre o pedido — o que o
+  // teste protege é que o caminho exista inteiro e não desemboque no login.
+  it("leva o convite ao cadastro até o pedido de acesso, nunca ao login", () => {
+    renderPage();
+
+    for (const name of ["Cadastrar minha hospedagem", "Cadastrar hospedagem"]) {
+      expect(screen.getByRole("link", { name })).toHaveAttribute(
+        "href",
+        "#cadastro",
+      );
+    }
+
+    expect(
+      screen.getByRole("link", { name: "Pedir meu acesso" }),
+    ).toHaveAttribute("href", "/convite");
+  });
+
+  // O login continua alcançável, mas por um link que se anuncia como tal.
+  it("oferece a entrada de quem já tem conta separada do pedido", () => {
+    renderPage();
+
+    expect(
+      screen.getByRole("link", { name: /Já tem acesso\?/ }),
+    ).toHaveAttribute("href", "/acesso");
+  });
+
   it("liga os guias aos PDFs servidos pela aplicação", () => {
     renderPage();
 
