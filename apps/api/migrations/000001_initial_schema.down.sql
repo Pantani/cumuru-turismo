@@ -1,5 +1,8 @@
 -- Consolidated from 000005_audit_outbox_returning_grants.down.sql through 000001_initial_schema.down.sql (third pre-launch wave, reverse order). See ADR-032.
 
+REVOKE SELECT (id) ON TABLE platform.outbox_events FROM app_runtime;
+REVOKE SELECT (id) ON TABLE platform.audit_events FROM app_runtime;
+
 COMMIT;
 BEGIN;
 
