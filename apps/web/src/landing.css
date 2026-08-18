@@ -162,6 +162,14 @@
   color: var(--lp-ink);
 }
 
+/* Coral sobre creme (`sand`, único caso que usa `.lp-accent` hoje) cai a
+   ~2.6:1: baixo demais para texto normal. A seção já resolve o mesmo
+   problema para o próprio título com `--lp-ink`; o acento reaproveita o
+   token em vez de uma cor nova. */
+.lp-section-sand .lp-accent {
+  color: var(--lp-ink);
+}
+
 .lp-lead {
   max-width: 52ch;
   margin: 0 0 2.5rem;
@@ -190,6 +198,14 @@
 }
 
 .lp-section-coral .lp-index-number {
+  color: var(--lp-ink);
+}
+
+/* Mesmo problema de `.lp-accent` acima, para os dois números de índice sobre
+   fundo claro (`sand`: PrivacySection/HowItWorksSection; `clay`:
+   HostsSection). */
+.lp-section-sand .lp-index-number,
+.lp-section-clay .lp-index-number {
   color: var(--lp-ink);
 }
 
@@ -540,6 +556,12 @@
   font-weight: 800;
   line-height: 0.8;
   letter-spacing: -0.05em;
+}
+
+/* HowItWorksSection é a única seção com passos e roda sob `.lp-section-sand`
+   — mesmo problema de `.lp-accent`/`.lp-index-number` acima. */
+.lp-section-sand .lp-step-number {
+  color: var(--lp-ink);
 }
 
 .lp-steps h3 {

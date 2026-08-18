@@ -368,12 +368,23 @@ expect_psql_failure \
   "public_runtime unexpectedly read a transactional table after restore" \
   "SELECT count(*) FROM core.organizations"
 
+# app_runtime holds SELECT (id) on platform.audit_events (RETURNING id needs
+# it — see the grant in the 000001 baseline), so count(*) succeeds by design:
+# PostgreSQL's privilege check for count(*) doesn't reference any column, and
+# table-level readability, which any granted column implies, is enough. This
+# drill has to reflect that boundary post-restore, not the wider "nothing is
+# readable" claim the grant intentionally narrowed — same fix already applied
+# in core_postgres_test.go and test-migrations.sh.
+psql_as "${RESTORE_DATABASE}" cumuru_app cumuru-local-app-only \
+  --command="SELECT count(*) FROM platform.audit_events" \
+  >/dev/null
+
 expect_psql_failure \
   "${RESTORE_DATABASE}" \
   cumuru_app \
   cumuru-local-app-only \
-  "app_runtime unexpectedly read platform audit history after restore" \
-  "SELECT count(*) FROM platform.audit_events"
+  "app_runtime unexpectedly read a sensitive audit column after restore" \
+  "SELECT metadata FROM platform.audit_events LIMIT 1"
 
 future_credentials_absent="$(
   psql_as "${RESTORE_DATABASE}" postgres "${ADMIN_PASSWORD}" \

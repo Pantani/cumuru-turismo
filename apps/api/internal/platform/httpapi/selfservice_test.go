@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -482,6 +483,64 @@ func TestPosterContextTelemetryNeverCarriesTheToken(t *testing.T) {
 	}
 	if !strings.Contains(metricsRecorder.Body.String(), `route="/api/v1/accommodation-invite"`) {
 		t.Fatalf("metrics lack the templated route: %s", metricsRecorder.Body)
+	}
+}
+
+// N-10, infrastructure layer. TestPosterContextTelemetryNeverCarriesTheToken
+// above proves the HTTP boundary (span attributes, metric labels); this
+// proves the application log line that observe() (httpapi.go) writes for
+// every request through d.Logger.Info("http request", ...), which is a
+// separate emitter the earlier test never exercises because it wires Logger
+// to slog.DiscardHandler.
+func TestPosterContextApplicationLogNeverCarriesTheToken(t *testing.T) {
+	t.Parallel()
+
+	var logOutput bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logOutput, nil))
+	verifier := verifierFunc(func(_ context.Context, token string) (access.Principal, error) {
+		return access.NewPrincipal("https://issuer.invalid", token, nil), nil
+	})
+	handler, _, err := httpapi.New(httpapi.Dependencies{
+		Readiness:          readinessFunc(func(context.Context) error { return nil }),
+		Verifier:           verifier,
+		Accommodations:     accommodation.NewService(accommodationRepositoryStub{}),
+		Stays:              stay.NewService(selfServiceStayStub{}),
+		SelfServiceEnabled: true,
+		CORSAllowedOrigins: []string{"https://allowed.invalid"},
+		Logger:             logger,
+		Registry:           prometheus.NewRegistry(),
+		CursorKeys: config.KeyringConfig{
+			CurrentVersion: "cursor-v1",
+			Keys: map[string][]byte{
+				"cursor-v1": []byte("cursor-test-key-is-at-least-32-bytes"),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
+
+	const tokenCanary = "invite-token-app-log-canary-0123456789abcdef0123456789abcdef0123456789ab"
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/accommodation-invite", nil)
+	request.Header.Set("X-Cumuru-Invite-Token", tokenCanary)
+	request.Header.Set("X-Request-ID", "request-000000000002")
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("poster context = %d: %s", recorder.Code, recorder.Body)
+	}
+
+	logged := logOutput.String()
+	if logged == "" {
+		t.Fatal("observe() wrote no application log line; the test proves nothing without one")
+	}
+	if strings.Contains(logged, tokenCanary) {
+		t.Fatalf("application log leaked the token: %s", logged)
+	}
+	if !strings.Contains(logged, `"route":"/api/v1/accommodation-invite"`) {
+		t.Fatalf("application log lacks the templated route: %s", logged)
 	}
 }
 

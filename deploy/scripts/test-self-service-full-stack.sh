@@ -641,6 +641,10 @@ done
 # jsonb das duas tabelas — inclusive changed_fields, purpose_code e
 # request_id, que são os únicos lugares em audit_events onde texto livre
 # poderia esconder um segredo.
+# psql only expands `:'name'` in script mode (stdin/-f), not in `-c`
+# command-string mode — `-c` sends the text verbatim and Postgres itself trips
+# on the bare `:`. Piped stdin here is what makes the bind-style substitution
+# actually bind instead of parsing as literal SQL.
 channel_leak="$(
   "${COMPOSE[@]}" exec -T -e PGPASSWORD=cumuru-local-migration-only postgres \
     psql -U cumuru_migration -d cumuru -tA \
@@ -648,8 +652,7 @@ channel_leak="$(
     --set=s2="${live_token}" \
     --set=s3="${foreign_token}" \
     --set=s4="${rotated_token}" \
-    --set=s5="${DEMO_PASSWORD}" \
-    -c "
+    --set=s5="${DEMO_PASSWORD}" <<'SQL' | tr -d '[:space:]'
       WITH secrets(value) AS (
         VALUES (:'s1'), (:'s2'), (:'s3'), (:'s4'), (:'s5')
       )
@@ -670,7 +673,7 @@ channel_leak="$(
              OR coalesce(lease_owner, '') LIKE '%' || secrets.value || '%'
              OR coalesce(last_error_code, '') LIKE '%' || secrets.value || '%'
         )
-    " | tr -d '[:space:]'
+SQL
 )"
 if test -z "${channel_leak}"; then
   fail "the audit_events/outbox_events scan produced no output; the negative assertion would pass vacuously"
@@ -679,6 +682,10 @@ fi
 # Prova de carga da varredura de canal: os dois canais têm de conter LINHAS
 # reais do fluxo que acabou de rodar, senão "zero vazamentos" pode significar
 # "zero linhas", não "linhas sem segredo".
+# PostgreSQL 17 (pinned in compose.yaml) renders an explicit boolean::text
+# cast as "true"/"false", not the "t"/"f" a bare boolean column gets over the
+# wire — confirmed against the pinned image, not assumed. The comparison
+# below matches the cast this query actually performs.
 channel_populated="$(
   "${COMPOSE[@]}" exec -T -e PGPASSWORD=cumuru-local-migration-only postgres \
     psql -U cumuru_migration -d cumuru -tA -c "
@@ -686,7 +693,7 @@ channel_populated="$(
         WHERE occurred_at >= now() - interval '5 minutes'
     "
 )"
-if test "${channel_populated}" != "t"; then
+if test "${channel_populated}" != "true"; then
   fail "platform.audit_events has no recent row; the self-service flow above wrote nothing to scan against, so the negative assertion is vacuous"
 fi
 

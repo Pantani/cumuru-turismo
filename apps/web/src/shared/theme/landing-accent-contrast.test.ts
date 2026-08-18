@@ -3,59 +3,47 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Vigia o contraste de `.lp-accent` e `.lp-index-number` dentro da seção
- * `.lp-section-coral` da landing. Essas classes usam `--coral` como cor de
- * texto por padrão; como o fundo de `.lp-section-coral` já É `--coral`, a
- * seção precisa de uma sobrescrita, e essa sobrescrita tem que resolver para
- * uma cor de contraste alto sobre o próprio fundo — não para `--ink` (creme),
- * que dá 2.58:1 e falha o WCAG AA.
+ * Vigia o contraste dos acentos coral (`.lp-accent`, `.lp-index-number`,
+ * `.lp-step-number`) contra os fundos claros da landing — o defeito que axe
+ * apontou em `deploy/e2e/local-demo.spec.ts` como pré-existente e fora do
+ * escopo do autocadastro: coral `#ff5a36` sobre creme, a ~2.6:1 e ~2.3:1.
+ *
+ * `.lp-section-coral` já resolve o mesmo tipo de conflito (acento sobre fundo
+ * da própria cor) trocando a cor do acento para `var(--lp-ink)` — o token de
+ * tinta que a própria seção já usa para o título. Este teste prova a mesma
+ * troca para as três seções que herdam `.lp-accent`/`.lp-index-number` sem
+ * override: `sand` (`HowItWorksSection`, `PrivacySection`), `clay`
+ * (`HostsSection`) e `coral` (`CommerceSection`, cujo próprio fundo já é
+ * `--coral`).
+ *
+ * Cálculo de razão de contraste feito sobre os tokens, sem depender de layout
+ * renderizado, pela mesma razão de `status-contrast.test.ts`: jsdom não
+ * resolve a cor de fundo composta através do contexto de empilhamento.
  */
 
 const MINIMUM_RATIO = 4.5;
 
-const landing = readFileSync(
-  resolve(process.cwd(), "src/landing.css"),
-  "utf8",
+const stylesheet = readFileSync(resolve(process.cwd(), "src/landing.css"), "utf8").replace(
+  /\/\*[\s\S]*?\*\//gu,
+  "",
 );
-const styles = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+const rootStylesheet = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
 function tokenValue(name: string) {
-  const matched = new RegExp(`${name}:\\s*([^;]+);`, "u").exec(styles);
+  const matched = new RegExp(`${name}:\\s*([^;]+);`, "u").exec(rootStylesheet);
   if (matched === null) {
     throw new Error(`token ${name} não existe em styles.css`);
   }
   return matched[1]!.trim();
 }
 
-function declaredColor(selector: string) {
-  const escaped = selector.replace(/[.]/gu, "\\$&");
-  const matched = new RegExp(
-    `${escaped}\\s*\\{[^}]*color:\\s*([^;]+);`,
-    "u",
-  ).exec(landing);
-  if (matched === null) {
-    throw new Error(`seletor "${selector}" não define color em landing.css`);
-  }
-  return matched[1]!.trim();
+interface Rgb {
+  b: number;
+  g: number;
+  r: number;
 }
 
-/** Resolve uma cadeia de var(--x) até chegar num token final de styles.css. */
-function resolveColor(value: string): string {
-  const varMatch = /^var\((--[\w-]+)\)$/u.exec(value);
-  if (varMatch === null) {
-    return value;
-  }
-  const name = varMatch[1]!;
-  const sectionOverride = new RegExp(
-    `\\.lp-section-coral\\s*\\{[^}]*${name}:\\s*([^;]+);`,
-    "u",
-  ).exec(landing);
-  return resolveColor(
-    sectionOverride === null ? tokenValue(name) : sectionOverride[1]!.trim(),
-  );
-}
-
-function parseHex(value: string) {
+function parseHex(value: string): Rgb {
   const matched = /^#([0-9a-f]{6})$/iu.exec(value);
   if (matched === null) {
     throw new Error(`esperava hexadecimal de 6 dígitos, veio "${value}"`);
@@ -73,28 +61,103 @@ function toLinear(channel: number) {
   return ratio <= 0.03928 ? ratio / 12.92 : ((ratio + 0.055) / 1.055) ** 2.4;
 }
 
-function luminance({ r, g, b }: { r: number; g: number; b: number }) {
+function luminance({ r, g, b }: Rgb) {
   return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
 }
 
-function contrastRatio(foregroundHex: string, backgroundHex: string) {
-  const foreground = luminance(parseHex(foregroundHex));
-  const background = luminance(parseHex(backgroundHex));
-  const [lighter, darker] = [foreground, background].sort(
+function contrastRatio(foreground: Rgb, background: Rgb) {
+  const [lighter, darker] = [luminance(foreground), luminance(background)].sort(
     (left, right) => right - left,
   );
   return (lighter! + 0.05) / (darker! + 0.05);
 }
 
-describe("contraste de .lp-accent e .lp-index-number sobre .lp-section-coral", () => {
+/**
+ * Encontra a regra cujo seletor bate exatamente com `selector` — os
+ * seletores relevantes ficam agrupados por vírgula com outras seções
+ * (`.lp-section-sand X,\n.lp-section-clay X { ... }`), então casar regex
+ * direto no texto casaria com o seletor errado do grupo.
+ */
+function findRuleDeclarations(css: string, selector: string): string {
+  const rules = css.split("}");
+  const matchingRule = rules.find((rule) => {
+    const braceIndex = rule.indexOf("{");
+    if (braceIndex === -1) {
+      return false;
+    }
+    const selectorList = rule
+      .slice(0, braceIndex)
+      .split(",")
+      .map((entry) => entry.trim());
+    return selectorList.includes(selector);
+  });
+  if (matchingRule === undefined) {
+    throw new Error(`${selector} não existe como regra`);
+  }
+  return matchingRule.slice(matchingRule.indexOf("{") + 1);
+}
+
+/**
+ * Confirma que a seção sobrescreve o acento para `var(--lp-ink)`, e não
+ * apenas que a cor de marca em si atinge 4.5:1 — sem essa checagem, o teste
+ * numérico abaixo passaria mesmo se a seleção de seletor estivesse errada
+ * (ex.: mirando uma classe que o JSX não usa).
+ */
+function assertOverridesToLpInk(section: string, accentClass: string) {
+  const selector = `.lp-section-${section} .${accentClass}`;
+  const declarations = findRuleDeclarations(stylesheet, selector);
+  if (!/color:\s*var\(--lp-ink\)\s*;/u.test(declarations)) {
+    throw new Error(`${selector} não sobrescreve color para var(--lp-ink) em landing.css`);
+  }
+}
+
+/**
+ * Confirma que a seção de fato define `--lp-ink: var(--on-accent)` e o
+ * fundo assumido pelo teste, em vez de só assumir os dois pela leitura do
+ * arquivo — sem isso, mudar `--lp-ink` ou o `background` da seção manteria
+ * este teste verde enquanto a cor renderizada já teria mudado.
+ */
+function assertSectionInkAndBackground(section: string, backgroundValue: string) {
+  const declarations = findRuleDeclarations(stylesheet, `.lp-section-${section}`);
+  if (!/--lp-ink:\s*var\(--on-accent\)\s*;/u.test(declarations)) {
+    throw new Error(`.lp-section-${section} não define --lp-ink: var(--on-accent) em landing.css`);
+  }
+  const backgroundPattern = new RegExp(
+    `background:\\s*${backgroundValue.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\s*;`,
+    "u",
+  );
+  if (!backgroundPattern.test(declarations)) {
+    throw new Error(`.lp-section-${section} não define background: ${backgroundValue} em landing.css`);
+  }
+}
+
+describe("contraste dos acentos coral sobre fundos claros da landing", () => {
+  const onAccent = parseHex(tokenValue("--on-accent"));
+  const cream = parseHex(tokenValue("--ink"));
+  const sand2 = parseHex(tokenValue("--sand-2"));
+  const coral = parseHex(tokenValue("--coral"));
+
+  it("a seção sand define --lp-ink: var(--on-accent) e background: var(--ink)", () => {
+    assertSectionInkAndBackground("sand", "var(--ink)");
+  });
+
+  it("a seção clay define --lp-ink: var(--on-accent) e background: var(--sand-2)", () => {
+    assertSectionInkAndBackground("clay", "var(--sand-2)");
+  });
+
+  it("a seção coral define --lp-ink: var(--on-accent) e background: var(--coral)", () => {
+    assertSectionInkAndBackground("coral", "var(--coral)");
+  });
+
   it.each([
-    ["lp-accent", ".lp-section-coral .lp-accent"],
-    ["lp-index-number", ".lp-section-coral .lp-index-number"],
-  ])("%s atinge 4.5:1 sobre --coral", (_label, selector) => {
-    const foreground = resolveColor(declaredColor(selector));
-    const background = resolveColor("var(--coral)");
-    expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(
-      MINIMUM_RATIO,
-    );
+    ["sand", "lp-accent", cream],
+    ["sand", "lp-index-number", cream],
+    ["sand", "lp-step-number", cream],
+    ["clay", "lp-index-number", sand2],
+    ["coral", "lp-accent", coral],
+    ["coral", "lp-index-number", coral],
+  ])("%s .%s atinge 4.5:1 contra o fundo da seção", (section, accentClass, background) => {
+    assertOverridesToLpInk(section as string, accentClass as string);
+    expect(contrastRatio(onAccent, background as Rgb)).toBeGreaterThanOrEqual(MINIMUM_RATIO);
   });
 });
