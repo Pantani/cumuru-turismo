@@ -35,14 +35,43 @@ interface Plotted {
   width: number;
 }
 
-/** Eixo horizontal: dia e mês bastam, e o ano faria os rótulos colidirem. */
-function axisDateFormatter(tag: string) {
+/**
+ * Eixo horizontal. Dentro de um ano civil, dia e mês bastam e o ano só faria os
+ * rótulos colidirem; atravessando o ano, omiti-lo faria "05/01" aparecer duas
+ * vezes na mesma série sem dizer de qual ano se trata.
+ */
+function axisDateFormatter(tag: string, spansYears: boolean) {
   const formatter = new Intl.DateTimeFormat(tag, {
-    day: "2-digit",
-    month: "2-digit",
+    ...(spansYears ? { month: "short", year: "2-digit" } : {
+      day: "2-digit",
+      month: "2-digit",
+    }),
     timeZone: "America/Bahia",
   });
   return (value: string) => formatter.format(new Date(`${value}T12:00:00-03:00`));
+}
+
+/** Uma série que atravessa o ano civil precisa nomear o ano no eixo. */
+function spansCalendarYears(series: readonly PresencePoint[]) {
+  const first = series[0]?.date.slice(0, 4);
+  const last = series[series.length - 1]?.date.slice(0, 4);
+  return first !== undefined && first !== last;
+}
+
+/**
+ * Abaixo de quatro pixels por dia a coluna vira um traço: o vão entre barras e
+ * a faixa de fim de semana deixam de separar dias e passam a texturizar o
+ * gráfico inteiro.
+ */
+const DENSE_SLOT_WIDTH = 4;
+
+/**
+ * A legenda só pode nomear o que o gráfico desenha. Numa janela longa a faixa
+ * de fim de semana some, e citá-la mandaria o leitor procurar uma marca que
+ * não existe.
+ */
+export function weekendBandsVisible(days: number): boolean {
+  return PLOT_WIDTH / Math.max(days, 1) >= DENSE_SLOT_WIDTH;
 }
 
 const NICE_STEPS = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50, 75, 100];
@@ -87,11 +116,16 @@ function scaleY(value: number, bound: number) {
 
 function plot(series: readonly PresencePoint[]): Plotted[] {
   const span = PLOT_WIDTH / Math.max(series.length, 1);
+  const gap = span < DENSE_SLOT_WIDTH ? 0 : 2;
   return series.map((point, index) => ({
     point,
     x: PADDING_LEFT + index * span,
-    width: Math.max(span - 2, 1),
+    width: Math.max(span - gap, 1),
   }));
+}
+
+function denseSlots(slots: readonly Plotted[]) {
+  return (slots[0]?.width ?? 0) < DENSE_SLOT_WIDTH;
 }
 
 function centreOf(slot: Plotted) {
@@ -100,6 +134,9 @@ function centreOf(slot: Plotted) {
 
 /** Weekends shaded behind the series: the weekly rhythm reads without a table. */
 function WeekendBands({ slots }: { slots: readonly Plotted[] }) {
+  if (denseSlots(slots)) {
+    return null;
+  }
   return (
     <g aria-hidden="true">
       {slots
@@ -177,7 +214,11 @@ function AverageLine({
 /** Roughly six labels: one tick per day would collide at any usable width. */
 function DateAxis({ slots }: { slots: readonly Plotted[] }) {
   const { tag } = useLocale();
-  const axisDate = useMemo(() => axisDateFormatter(tag), [tag]);
+  const spansYears = spansCalendarYears(slots.map((slot) => slot.point));
+  const axisDate = useMemo(
+    () => axisDateFormatter(tag, spansYears),
+    [spansYears, tag],
+  );
   const step = Math.max(Math.ceil(slots.length / AXIS_LABELS), 1);
   return (
     <g aria-hidden="true">

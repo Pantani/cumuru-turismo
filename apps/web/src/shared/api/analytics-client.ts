@@ -27,6 +27,7 @@ import {
 
 type Schemas = components["schemas"];
 type PresenceWindow = components["parameters"]["PresenceWindow"];
+type PresenceMonth = components["parameters"]["PresenceMonth"];
 type PreferencePeriod = components["parameters"]["PreferencePeriod"];
 type QualityWindow = components["parameters"]["QualityWindow"];
 
@@ -43,6 +44,18 @@ export const analyticsOperationNames = [
   "getPublicMethodology",
   "getAnalyticsQuality",
 ] as const satisfies readonly (keyof operations)[];
+
+/**
+ * `month` só acompanha `window=month`: enviado em qualquer outra janela o
+ * servidor recusa a requisição, e omiti-lo dentro dela não nomeia documento.
+ */
+function presenceQuery(window: PresenceWindow, month?: PresenceMonth) {
+  const query = new URLSearchParams({ window });
+  if (window === "month" && month !== undefined) {
+    query.set("month", month);
+  }
+  return query.toString();
+}
 
 export interface AnalyticsResult<T> {
   data: T;
@@ -200,9 +213,9 @@ export function createAnalyticsClient(options: HttpClientOptions) {
   return {
     getSummary: () =>
       published<Schemas["PublicSummary"]>("/api/v1/public/summary", isSummary),
-    getPresence: (window: PresenceWindow) =>
+    getPresence: (window: PresenceWindow, month?: PresenceMonth) =>
       published<Schemas["PublicPresence"]>(
-        `/api/v1/public/presence?window=${encodeURIComponent(window)}`,
+        `/api/v1/public/presence?${presenceQuery(window, month)}`,
         isPresence,
       ),
     getPreferences: (period: PreferencePeriod = "last_complete_month") =>

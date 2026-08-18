@@ -279,6 +279,7 @@ paths:
       x-cumuru-feature: analytics
       parameters:
         - $ref: "#/components/parameters/PresenceWindow"
+        - $ref: "#/components/parameters/PresenceMonth"
         - $ref: "#/components/parameters/IfNoneMatch"
       responses:
         "200":
@@ -2339,9 +2340,30 @@ components:
       name: window
       in: query
       required: true
+      description: |
+        Janela do documento publicado. As janelas `recent_*` recortam o
+        histórico diário observado; `month` recorta um mês civil e exige o
+        parâmetro `month`. `next_30_days` é a única janela de previsão.
       schema:
         type: string
-        enum: [recent_30_days, next_30_days]
+        enum:
+          - recent_30_days
+          - recent_90_days
+          - recent_365_days
+          - recent_730_days
+          - next_30_days
+          - month
+    PresenceMonth:
+      name: month
+      in: query
+      required: false
+      description: |
+        Mês civil consultado, obrigatório quando `window=month` e recusado em
+        qualquer outra janela. Fora do histórico publicado o documento não
+        existe e a resposta é 503.
+      schema:
+        type: string
+        pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
     PreferencePeriod:
       name: period
       in: query
@@ -4524,10 +4546,18 @@ components:
           $ref: "#/components/schemas/PublicMetadata"
         window:
           type: string
-          const: recent_30_days
+          enum:
+            - recent_30_days
+            - recent_90_days
+            - recent_365_days
+            - recent_730_days
+            - month
+        month:
+          type: string
+          pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
         series:
           type: array
-          maxItems: 30
+          maxItems: 730
           items:
             $ref: "#/components/schemas/ObservedPresencePoint"
     ForecastPublicPresence:
@@ -4680,6 +4710,7 @@ components:
         - complementary_suppression
         - rounding_base
         - rounding_mode
+        - presence_history_days
         - allowed_presence_windows
         - allowed_preference_periods
       additionalProperties: false
@@ -4731,13 +4762,25 @@ components:
         rounding_mode:
           type: string
           const: stable-half-up
+        presence_history_days:
+          type: integer
+          const: 730
+          description: |
+            Dias civis de histórico observado que a release corrente publica,
+            contados a partir do dia de referência da publicação.
         allowed_presence_windows:
           type: array
-          minItems: 2
-          maxItems: 2
+          minItems: 6
+          maxItems: 6
           items:
             type: string
-            enum: [recent_30_days, next_30_days]
+            enum:
+              - recent_30_days
+              - recent_90_days
+              - recent_365_days
+              - recent_730_days
+              - next_30_days
+              - month
         allowed_preference_periods:
           type: array
           minItems: 1

@@ -51,38 +51,69 @@ func (r *PublicAnalyticsRepository) Summary(ctx context.Context) (analytics.Publ
 
 func (r *PublicAnalyticsRepository) Presence(
 	ctx context.Context,
-	window string,
+	slice analytics.PresenceSlice,
 ) (analytics.PublicPresence, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
-	rows, err := r.queries.ListCurrentPresenceCells(ctx, window)
-	if err != nil || !presenceRowCount(len(rows)) {
+	rows, err := r.presenceRows(ctx, slice)
+	if err != nil || !presenceRowCount(len(rows), slice) {
 		return analytics.PublicPresence{}, analytics.ErrPublicUnavailable
 	}
 	metadata, err := presenceMetadata(rows)
 	if err != nil {
 		return analytics.PublicPresence{}, err
 	}
-	series, err := presenceSeries(rows, window)
+	series, err := presenceSeries(rows, slice)
 	if err != nil {
 		return analytics.PublicPresence{}, err
 	}
-	return analytics.PublicPresence{Metadata: metadata, Window: window, Series: series}, nil
+	return analytics.PublicPresence{
+		Metadata: metadata, Window: slice.Window, Month: slice.Month, Series: series,
+	}, nil
 }
 
-// The public presence window is bounded to thirty civil days by contract.
-func presenceRowCount(count int) bool {
-	return count > 0 && count <= 30
+// A previsão é publicada já no horizonte e não tem o que recortar; a série
+// observada é longa e sempre chega por um dos dois recortes.
+func (r *PublicAnalyticsRepository) presenceRows(
+	ctx context.Context,
+	slice analytics.PresenceSlice,
+) ([]generated.PublicDataCurrentPresence, error) {
+	if slice.Selector == analytics.PresenceForecastSelector {
+		return r.queries.ListCurrentPresenceCells(ctx, slice.Selector)
+	}
+	if slice.Month != "" {
+		return r.queries.ListCurrentPresenceCellsInRange(
+			ctx,
+			generated.ListCurrentPresenceCellsInRangeParams{
+				PeriodSelector: slice.Selector,
+				StartOn:        dateToPG(slice.MonthStart),
+				EndOn:          dateToPG(slice.MonthEnd),
+			},
+		)
+	}
+	return r.queries.ListCurrentPresenceCellsForRecentDays(
+		ctx,
+		generated.ListCurrentPresenceCellsForRecentDaysParams{
+			PeriodSelector: slice.Selector,
+			LookbackDays:   slice.LookbackDays,
+		},
+	)
+}
+
+// Um documento mais longo que a janela pedida é seletor corrompido, não excesso
+// a truncar: o recorte já aconteceu no banco.
+func presenceRowCount(count int, slice analytics.PresenceSlice) bool {
+	return count > 0 && count <= slice.MaxSeriesLength()
 }
 
 func presenceSeries(
 	rows []generated.PublicDataCurrentPresence,
-	window string,
+	slice analytics.PresenceSlice,
 ) ([]analytics.PresencePoint, error) {
 	series := make([]analytics.PresencePoint, 0, len(rows))
 	for _, row := range rows {
-		if row.PeriodSelector != window ||
-			!validPresenceCell(window, row.Status, row.Kind) {
+		if row.PeriodSelector != slice.Selector ||
+			!validPresenceCell(slice.Selector, row.Status, row.Kind) {
 			return nil, analytics.ErrPublicUnavailable
 		}
 		series = append(series, presencePoint(
@@ -151,6 +182,7 @@ func (r *PublicAnalyticsRepository) Methodology(
 		MinimumReportingAccommodations: row.MinimumReportingAccommodations,
 		ComplementarySuppression:       row.ComplementarySuppression,
 		RoundingBase:                   row.RoundingBase, RoundingMode: row.RoundingMode,
+		PresenceHistoryDays:      row.PresenceHistoryDays,
 		AllowedPresenceWindows:   append([]string(nil), row.AllowedPresenceWindows...),
 		AllowedPreferencePeriods: append([]string(nil), row.AllowedPreferencePeriods...),
 	}, nil
@@ -269,7 +301,8 @@ func forecastRows(
 ) []generated.PublicDataCurrentSummary {
 	forecasts := make([]generated.PublicDataCurrentSummary, 0, 30)
 	for _, row := range rows {
-		if row.Kind == "forecast" && row.PeriodSelector == "next_30_days" {
+		if row.Kind == "forecast" &&
+			row.PeriodSelector == analytics.PresenceForecastSelector {
 			forecasts = append(forecasts, row)
 		}
 	}
@@ -277,7 +310,7 @@ func forecastRows(
 }
 
 func forecastRowShape(row generated.PublicDataCurrentSummary) bool {
-	return row.PeriodSelector == "next_30_days" &&
+	return row.PeriodSelector == analytics.PresenceForecastSelector &&
 		row.Kind == "forecast" &&
 		row.Status == "published"
 }
@@ -411,11 +444,11 @@ func validPublicCell(status, kind string) bool {
 	return status == "published" || withheldStatus(status)
 }
 
-func validPresenceCell(window, status, kind string) bool {
-	if window == "recent_30_days" && kind != "observed" {
+func validPresenceCell(selector, status, kind string) bool {
+	if selector == analytics.PresenceObservedSelector && kind != "observed" {
 		return false
 	}
-	if window == "next_30_days" && kind != "forecast" {
+	if selector == analytics.PresenceForecastSelector && kind != "forecast" {
 		return false
 	}
 	return validPublicCell(status, kind)

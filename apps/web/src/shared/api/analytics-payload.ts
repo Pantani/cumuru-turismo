@@ -8,6 +8,13 @@
  * the network.
  */
 
+/**
+ * Dias civis de histórico observado publicados pela release corrente. O número
+ * é do contrato, não de uma escolha da interface: a metodologia o declara e
+ * este allowlist recusa qualquer outro.
+ */
+export const PRESENCE_HISTORY_DAYS = 730;
+
 type Validator = (value: unknown) => boolean;
 type ValidatorMap = Readonly<Record<string, Validator>>;
 
@@ -15,6 +22,7 @@ const datePattern = /^\d{4}-\d{2}-\d{2}$/u;
 const dateTimePattern =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
 const categoryCodePattern = /^[a-z][a-z0-9_]*$/u;
+const civilMonthPattern = /^\d{4}-(?:0[1-9]|1[0-2])$/u;
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -183,11 +191,26 @@ const isForecastPresencePoint = unionValidator(
   isPublishedForecastPoint,
   isProtectedForecastPoint,
 );
-const isObservedPresence = objectValidator({
-  metadata: isPublicMetadata,
-  window: literalValidator("recent_30_days"),
-  series: arrayValidator(isObservedPresencePoint, 0, 30),
-});
+const isCivilMonth: Validator = (value) =>
+  typeof value === "string" && civilMonthPattern.test(value);
+
+/** Toda janela observada recorta a mesma série diária publicada. */
+const OBSERVED_WINDOWS = [
+  "recent_30_days",
+  "recent_90_days",
+  "recent_365_days",
+  "recent_730_days",
+  "month",
+] as const;
+
+const isObservedPresence = objectValidator(
+  {
+    metadata: isPublicMetadata,
+    window: literalValidator(...OBSERVED_WINDOWS),
+    series: arrayValidator(isObservedPresencePoint, 0, PRESENCE_HISTORY_DAYS),
+  },
+  { month: isCivilMonth },
+);
 const isForecastPresence = objectValidator({
   metadata: isPublicMetadata,
   window: literalValidator("next_30_days"),
@@ -245,10 +268,11 @@ export const isMethodology = objectValidator({
   complementary_suppression: literalValidator(true),
   rounding_base: literalValidator(10),
   rounding_mode: literalValidator("stable-half-up"),
+  presence_history_days: literalValidator(PRESENCE_HISTORY_DAYS),
   allowed_presence_windows: arrayValidator(
-    literalValidator("recent_30_days", "next_30_days"),
-    2,
-    2,
+    literalValidator(...OBSERVED_WINDOWS, "next_30_days"),
+    6,
+    6,
   ),
   allowed_preference_periods: arrayValidator(
     literalValidator("last_complete_month"),

@@ -24,10 +24,10 @@ func (f analyticsReaderStub) Summary(context.Context) (analytics.PublicSummary, 
 }
 
 func (f analyticsReaderStub) Presence(
-	context.Context,
-	string,
+	_ context.Context,
+	slice analytics.PresenceSlice,
 ) (analytics.PublicPresence, error) {
-	return analytics.PublicPresence{Window: "recent_30_days"}, f.err
+	return analytics.PublicPresence{Window: slice.Window, Month: slice.Month}, f.err
 }
 
 func (f analyticsReaderStub) Preferences(
@@ -122,6 +122,36 @@ func TestPublicMethodologyEmitsFallbackForecastBounds(t *testing.T) {
 	}
 }
 
+// Cada janela é um documento próprio: dois recortes distintos não podem
+// compartilhar ETag, ou um cache intermediário serviria um mês pelo outro.
+func TestPublicPresenceGivesEveryWindowItsOwnEntityTag(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := mustNew(t, Dependencies{PublicAnalytics: analyticsReaderStub{}})
+	targets := []string{
+		"/api/v1/public/presence?window=recent_30_days",
+		"/api/v1/public/presence?window=recent_90_days",
+		"/api/v1/public/presence?window=recent_365_days",
+		"/api/v1/public/presence?window=recent_730_days",
+		"/api/v1/public/presence?window=next_30_days",
+		"/api/v1/public/presence?window=month&month=2026-05",
+		"/api/v1/public/presence?window=month&month=2026-06",
+	}
+	seen := make(map[string]string, len(targets))
+	for _, target := range targets {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("%s status = %d", target, recorder.Code)
+		}
+		etag := recorder.Header().Get("ETag")
+		if previous, repeated := seen[etag]; repeated {
+			t.Fatalf("%s and %s share ETag %s", previous, target, etag)
+		}
+		seen[etag] = target
+	}
+}
+
 func TestPublicAnalyticsRejectsOpenEndedSelectorsAndInvalidETag(t *testing.T) {
 	t.Parallel()
 
@@ -129,6 +159,13 @@ func TestPublicAnalyticsRejectsOpenEndedSelectorsAndInvalidETag(t *testing.T) {
 	cases := []string{
 		"/api/v1/public/presence?window=custom",
 		"/api/v1/public/presence?window=recent_30_days&dimension=hotel",
+		// `month` só existe dentro de `window=month`, e `window=month` sem ele
+		// não nomeia documento nenhum.
+		"/api/v1/public/presence?window=recent_30_days&month=2026-05",
+		"/api/v1/public/presence?window=month",
+		"/api/v1/public/presence?window=month&month=2026-13",
+		"/api/v1/public/presence?window=month&month=2026-5",
+		"/api/v1/public/presence?window=recent_30_days&window=recent_90_days",
 	}
 	for _, target := range cases {
 		recorder := httptest.NewRecorder()

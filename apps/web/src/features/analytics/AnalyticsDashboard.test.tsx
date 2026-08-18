@@ -127,7 +127,15 @@ const methodology: Schemas["PublicMethodology"] = {
   complementary_suppression: true,
   rounding_base: 10,
   rounding_mode: "stable-half-up",
-  allowed_presence_windows: ["recent_30_days", "next_30_days"],
+  presence_history_days: 730,
+  allowed_presence_windows: [
+    "recent_30_days",
+    "recent_90_days",
+    "recent_365_days",
+    "recent_730_days",
+    "next_30_days",
+    "month",
+  ],
   allowed_preference_periods: ["last_complete_month"],
 };
 
@@ -145,7 +153,7 @@ function client(
   return {
     getSummary: vi.fn(() => result(summary)),
     getPresence: vi.fn((window) =>
-      result(window === "recent_30_days" ? recentPresence : forecastPresence),
+      result(window === "next_30_days" ? forecastPresence : recentPresence),
     ),
     getPreferences: vi.fn(() => result(preferences)),
     getMethodology: vi.fn(() => result(methodology)),
@@ -177,7 +185,7 @@ describe("dashboard público de analytics", () => {
       await screen.findByRole("heading", { name: "Indicadores públicos" }),
     ).toBeInTheDocument();
     expect(await screen.findByText("120 pessoas-dia")).toBeInTheDocument();
-    expect(screen.getByText(/Faixa provável: 130 a 180/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Faixa provável: 130 a 180/).length).toBe(2);
     expect(screen.getAllByText("Dado protegido").length).toBeGreaterThan(0);
     expect(screen.getByText("Cobertura estimada: 65%")).toBeInTheDocument();
     expect(
@@ -210,18 +218,63 @@ describe("dashboard público de analytics", () => {
     renderDashboard(analyticsClient);
     await screen.findAllByText("110 pessoas-dia");
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Janela da presença" }),
-      "next_30_days",
-    );
+    await user.click(screen.getByRole("button", { name: "Só previsão" }));
 
     expect(
       (await screen.findAllByText("Estimativa central: 150 pessoas-dia"))
         .length,
     ).toBeGreaterThan(0);
     expect(screen.getAllByText("◇ Previsto").length).toBeGreaterThan(0);
-    expect(screen.getByText("Dado indisponível")).toBeInTheDocument();
+    expect(screen.getAllByText("Dado indisponível").length).toBeGreaterThan(0);
     expect(analyticsClient.getPresence).toHaveBeenCalledWith("next_30_days");
+  });
+
+  it("pede cada janela histórica pelo nome catalogado", async () => {
+    const user = userEvent.setup();
+    const analyticsClient = client();
+    renderDashboard(analyticsClient);
+    await screen.findAllByText("110 pessoas-dia");
+
+    for (const [label, window] of [
+      ["90 dias", "recent_90_days"],
+      ["1 ano", "recent_365_days"],
+      ["2 anos", "recent_730_days"],
+    ] as const) {
+      await user.click(screen.getByRole("button", { name: label }));
+      expect(analyticsClient.getPresence).toHaveBeenCalledWith(
+        window,
+        undefined,
+      );
+    }
+  });
+
+  // O mês civil é a consulta histórica nominal: sem data escolhida ele não
+  // nomeia documento nenhum, então o seletor abre no mês mais recente.
+  it("navega mês a mês dentro do histórico publicado", async () => {
+    const user = userEvent.setup();
+    const analyticsClient = client();
+    renderDashboard(analyticsClient);
+    await screen.findAllByText("110 pessoas-dia");
+
+    await user.click(screen.getByRole("button", { name: "Mês" }));
+    expect(analyticsClient.getPresence).toHaveBeenCalledWith(
+      "month",
+      "2026-07",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Mês anterior" }));
+    expect(analyticsClient.getPresence).toHaveBeenCalledWith(
+      "month",
+      "2026-06",
+    );
+
+    // O histórico termina no dia de referência: não há mês seguinte a pedir.
+    await user.click(screen.getByRole("button", { name: "Mês seguinte" }));
+    expect(screen.getByRole("button", { name: "Mês seguinte" })).toBeDisabled();
+    expect(analyticsClient.getPresence).not.toHaveBeenCalledWith(
+      "month",
+      "2026-08",
+    );
   });
 
   it("deriva estatísticas da janela e explica cada indicador", async () => {
@@ -230,18 +283,35 @@ describe("dashboard público de analytics", () => {
     );
 
     const tiles = await screen.findByRole("list", {
-      name: "Estatísticas dos últimos 30 dias",
+      name: "Estatísticas dos dias observados da janela",
     });
-    expect(within(tiles).getByText("120 pessoas-dia")).toBeInTheDocument();
+    const average = within(tiles).getByText("Média diária").closest("li");
+    expect(
+      within(average as HTMLElement).getByText("120 pessoas-dia"),
+    ).toBeInTheDocument();
     expect(within(tiles).getByText("160 pessoas-dia")).toBeInTheDocument();
     expect(within(tiles).getByText("80 pessoas-dia")).toBeInTheDocument();
-    expect(within(tiles).getByText("600 pessoas-dia")).toBeInTheDocument();
+    // Mediana de 100, 120, 80, 140 e 160: a média é a mesma 120, e é o valor
+    // atípico que separaria as duas se a janela tivesse um.
+    const median = within(tiles).getByText("Dia comum").closest("li");
     expect(
-      within(tiles).getByText("+50% ante os 2 dias anteriores"),
+      within(median as HTMLElement).getByText("120 pessoas-dia"),
     ).toBeInTheDocument();
-    expect(within(tiles).getByText("5 de 6")).toBeInTheDocument();
+
+    const rhythm = screen.getByRole("list", {
+      name: "Ritmo e alcance dos dias observados da janela",
+    });
+    expect(within(rhythm).getByText("600 pessoas-dia")).toBeInTheDocument();
     expect(
-      within(tiles).getByText(/Dias protegidos são pulados/),
+      within(rhythm).getByText("+50% ante os 2 dias anteriores"),
+    ).toBeInTheDocument();
+    expect(within(rhythm).getByText("5 de 6")).toBeInTheDocument();
+    expect(
+      within(rhythm).getByText(/Dias protegidos são pulados/),
+    ).toBeInTheDocument();
+    // Um dia suprimido torna o acumulado um piso, e o painel precisa dizê-lo.
+    expect(
+      within(rhythm).getByText(/Soma parcial: 1 dias da janela/),
     ).toBeInTheDocument();
   });
 
@@ -250,16 +320,13 @@ describe("dashboard público de analytics", () => {
     renderDashboard();
     await screen.findAllByText("110 pessoas-dia");
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Janela da presença" }),
-      "combined",
-    );
+    await user.click(screen.getByRole("button", { name: "Observado e previsto" }));
 
     expect(
       await screen.findByRole("img", { name: /Série de 4 dias/ }),
     ).toBeInTheDocument();
     const tiles = screen.getByRole("list", {
-      name: "Estatísticas dos últimos 30 dias observados",
+      name: "Estatísticas dos dias observados da janela",
     });
     // A média do observado é 110; se a referência escorregasse para a série
     // combinada, o previsto de 150 puxaria o valor para 130.
@@ -282,19 +349,22 @@ describe("dashboard público de analytics", () => {
     const chart = await screen.findByRole("img", {
       name: /Série de 6 dias em pessoas-dia/,
     });
+    // A leitura viva vive dentro da figura do gráfico; o painel tem outra
+    // região viva para o carregamento da janela.
+    const figure = within(chart.closest("figure") as HTMLElement);
     chart.focus();
     await user.keyboard("{ArrowRight}");
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(figure.getByRole("status")).toHaveTextContent(
       "Observado: 100 pessoas-dia. 17% abaixo da média de referência.",
     );
 
     await user.keyboard("{End}");
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(figure.getByRole("status")).toHaveTextContent(
       "Observado: 160 pessoas-dia. 33% acima da média de referência.",
     );
 
     await user.keyboard("{Escape}");
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(figure.getByRole("status")).toHaveTextContent(
       "use as setas ← → do teclado",
     );
   });

@@ -5,8 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
+
+	"github.com/Pantani/cumuru/apps/api/internal/analytics"
 )
 
 const publicAnalyticsCache = "public, max-age=300, stale-if-error=86400"
@@ -23,15 +26,38 @@ func (d Dependencies) publicSummary(writer http.ResponseWriter, request *http.Re
 }
 
 func (d Dependencies) publicPresence(writer http.ResponseWriter, request *http.Request) {
-	window, ok := analyticsSelector(
-		request, "window", "recent_30_days", "next_30_days",
-	)
+	slice, ok := presenceSlice(request)
 	if !ok || !validIfNoneMatch(request.Header.Get("If-None-Match")) {
 		writeInvalidAnalyticsRequest(writer, request)
 		return
 	}
-	value, err := d.PublicAnalytics.Presence(request.Context(), window)
-	d.writePublicAnalytics(writer, request, "presence", window, value, err)
+	value, err := d.PublicAnalytics.Presence(request.Context(), slice)
+	d.writePublicAnalytics(writer, request, "presence", slice.CacheKey(), value, err)
+}
+
+// A presença é o único documento com dois seletores, e o segundo só existe para
+// uma das janelas. O par é resolvido junto para que `month` fora de
+// `window=month` seja recusado em vez de ignorado.
+func presenceSlice(request *http.Request) (analytics.PresenceSlice, bool) {
+	window, month, ok := presenceSelectors(request.URL.Query())
+	if !ok {
+		return analytics.PresenceSlice{}, false
+	}
+	return analytics.ResolvePresenceWindow(window, month)
+}
+
+// Nada além de `window` e do `month` que a acompanha: um parâmetro inesperado é
+// recusado em vez de ignorado.
+func presenceSelectors(query url.Values) (string, string, bool) {
+	if len(query) == 0 || len(query) > 2 {
+		return "", "", false
+	}
+	window, ok := singleQueryValue(query, "window")
+	if !ok || len(query) == 1 {
+		return window, "", ok
+	}
+	month, ok := singleQueryValue(query, "month")
+	return window, month, ok
 }
 
 func (d Dependencies) publicPreferences(writer http.ResponseWriter, request *http.Request) {
@@ -114,6 +140,11 @@ func soleQueryValue(request *http.Request, name string) (string, bool) {
 	if len(query) != 1 {
 		return "", false
 	}
+	return singleQueryValue(query, name)
+}
+
+// Um seletor repetido é ambíguo, não uma lista: só a ocorrência única vale.
+func singleQueryValue(query url.Values, name string) (string, bool) {
 	values, exists := query[name]
 	if !exists || len(values) != 1 {
 		return "", false

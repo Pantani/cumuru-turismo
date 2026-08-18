@@ -93,7 +93,15 @@ const methodology: Schemas["PublicMethodology"] = {
   complementary_suppression: true,
   rounding_base: 10,
   rounding_mode: "stable-half-up",
-  allowed_presence_windows: ["recent_30_days", "next_30_days"],
+  presence_history_days: 730,
+  allowed_presence_windows: [
+    "recent_30_days",
+    "recent_90_days",
+    "recent_365_days",
+    "recent_730_days",
+    "next_30_days",
+    "month",
+  ],
   allowed_preference_periods: ["last_complete_month"],
 };
 const quality: Schemas["QualitySnapshot"] = {
