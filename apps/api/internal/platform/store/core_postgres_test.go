@@ -536,7 +536,7 @@ func TestCorePostgreSQLTenantReplayRollbackAndLastManager(t *testing.T) {
 	assertExternalSubmissionID(t, ctx, stayService, fixture)
 	assertInviteReplayAndRateIdentity(t, ctx, runtimePool, stayService, fixture)
 	assertConcurrentInviteConsumption(t, ctx, runtimePool, subject, fixture)
-	assertRuntimeCannotReadAppendOnlyTables(t, ctx, runtimePool)
+	assertRuntimeAppendOnlyTablePrivileges(t, ctx, runtimePool)
 }
 
 func TestExpiredOperationalCleanupUsesWorkerRole(t *testing.T) {
@@ -1142,7 +1142,7 @@ func assertRateBucketsArePseudonymous(
 	}
 }
 
-func assertRuntimeCannotReadAppendOnlyTables(
+func assertRuntimeAppendOnlyTablePrivileges(
 	t *testing.T,
 	ctx context.Context,
 	pool *pgxpool.Pool,

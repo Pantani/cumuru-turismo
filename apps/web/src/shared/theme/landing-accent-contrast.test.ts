@@ -71,17 +71,13 @@ function contrastRatio(foreground: Rgb, background: Rgb) {
 }
 
 /**
- * Confirma que a seção sobrescreve o acento para `var(--lp-ink)`, e não
- * apenas que a cor de marca em si atinge 4.5:1 — sem essa checagem, o teste
- * numérico abaixo passaria mesmo se a seleção de seletor estivesse errada
- * (ex.: mirando uma classe que o JSX não usa). Faz o próprio parsing de
- * regras (seletor -> declarações) em vez de casar regex direto no texto,
- * porque os seletores relevantes ficam agrupados por vírgula com outras
- * seções (`.lp-section-sand X,\n.lp-section-clay X { ... }`).
+ * Encontra a regra cujo seletor bate exatamente com `selector` — os
+ * seletores relevantes ficam agrupados por vírgula com outras seções
+ * (`.lp-section-sand X,\n.lp-section-clay X { ... }`), então casar regex
+ * direto no texto casaria com o seletor errado do grupo.
  */
-function assertOverridesToLpInk(section: string, accentClass: string) {
-  const selector = `.lp-section-${section} .${accentClass}`;
-  const rules = stylesheet.split("}");
+function findRuleDeclarations(css: string, selector: string): string {
+  const rules = css.split("}");
   const matchingRule = rules.find((rule) => {
     const braceIndex = rule.indexOf("{");
     if (braceIndex === -1) {
@@ -94,11 +90,42 @@ function assertOverridesToLpInk(section: string, accentClass: string) {
     return selectorList.includes(selector);
   });
   if (matchingRule === undefined) {
-    throw new Error(`${selector} não existe como regra em landing.css`);
+    throw new Error(`${selector} não existe como regra`);
   }
-  const declarations = matchingRule.slice(matchingRule.indexOf("{") + 1);
-  if (!/color:\s*var\(--lp-ink\)/u.test(declarations)) {
+  return matchingRule.slice(matchingRule.indexOf("{") + 1);
+}
+
+/**
+ * Confirma que a seção sobrescreve o acento para `var(--lp-ink)`, e não
+ * apenas que a cor de marca em si atinge 4.5:1 — sem essa checagem, o teste
+ * numérico abaixo passaria mesmo se a seleção de seletor estivesse errada
+ * (ex.: mirando uma classe que o JSX não usa).
+ */
+function assertOverridesToLpInk(section: string, accentClass: string) {
+  const selector = `.lp-section-${section} .${accentClass}`;
+  const declarations = findRuleDeclarations(stylesheet, selector);
+  if (!/color:\s*var\(--lp-ink\)\s*;/u.test(declarations)) {
     throw new Error(`${selector} não sobrescreve color para var(--lp-ink) em landing.css`);
+  }
+}
+
+/**
+ * Confirma que a seção de fato define `--lp-ink: var(--on-accent)` e o
+ * fundo assumido pelo teste, em vez de só assumir os dois pela leitura do
+ * arquivo — sem isso, mudar `--lp-ink` ou o `background` da seção manteria
+ * este teste verde enquanto a cor renderizada já teria mudado.
+ */
+function assertSectionInkAndBackground(section: string, backgroundValue: string) {
+  const declarations = findRuleDeclarations(stylesheet, `.lp-section-${section}`);
+  if (!/--lp-ink:\s*var\(--on-accent\)\s*;/u.test(declarations)) {
+    throw new Error(`.lp-section-${section} não define --lp-ink: var(--on-accent) em landing.css`);
+  }
+  const backgroundPattern = new RegExp(
+    `background:\\s*${backgroundValue.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\s*;`,
+    "u",
+  );
+  if (!backgroundPattern.test(declarations)) {
+    throw new Error(`.lp-section-${section} não define background: ${backgroundValue} em landing.css`);
   }
 }
 
@@ -106,6 +133,14 @@ describe("contraste dos acentos coral sobre fundos claros da landing", () => {
   const onAccent = parseHex(tokenValue("--on-accent"));
   const cream = parseHex(tokenValue("--ink"));
   const sand2 = parseHex(tokenValue("--sand-2"));
+
+  it("a seção sand define --lp-ink: var(--on-accent) e background: var(--ink)", () => {
+    assertSectionInkAndBackground("sand", "var(--ink)");
+  });
+
+  it("a seção clay define --lp-ink: var(--on-accent) e background: var(--sand-2)", () => {
+    assertSectionInkAndBackground("clay", "var(--sand-2)");
+  });
 
   it.each([
     ["sand", "lp-accent", cream],

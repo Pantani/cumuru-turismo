@@ -24,10 +24,13 @@ import { describe, expect, it } from "vitest";
 
 const MINIMUM_RATIO = 4.5;
 
-const stylesheet = readFileSync(
+const rawStylesheet = readFileSync(
   resolve(process.cwd(), "src/styles.css"),
   "utf8",
 );
+// Comments can contain commas (prose, examples), which would corrupt the
+// naive comma-split selector-list parsing in assertDeclares/assertDoesNotDeclare.
+const stylesheet = rawStylesheet.replace(/\/\*[\s\S]*?\*\//gu, "");
 
 function tokenValue(name: string) {
   const matched = new RegExp(`${name}:\\s*([^;]+);`, "u").exec(stylesheet);
@@ -95,13 +98,78 @@ function contrastRatio(foreground: Rgb, background: Rgb) {
   return (lighter! + 0.05) / (darker! + 0.05);
 }
 
+/**
+ * Confirma que a regra existe e declara exatamente a propriedade esperada,
+ * em vez de só recalcular a razão sobre os tokens. Sem isso, trocar o
+ * seletor que herda `--ink-3` para `.property-capacity`, ou trocar o fundo
+ * declarado, manteria os testes de razão verdes enquanto a cor renderizada
+ * já teria mudado.
+ */
+function assertDeclares(selector: string, property: string, value: string) {
+  const rules = stylesheet.split("}");
+  const matchingRule = rules.find((rule) => {
+    const braceIndex = rule.indexOf("{");
+    if (braceIndex === -1) {
+      return false;
+    }
+    const selectorList = rule
+      .slice(0, braceIndex)
+      .split(",")
+      .map((entry) => entry.trim());
+    return selectorList.includes(selector);
+  });
+  if (matchingRule === undefined) {
+    throw new Error(`${selector} não existe como regra em styles.css`);
+  }
+  const declarations = matchingRule.slice(matchingRule.indexOf("{") + 1);
+  const pattern = new RegExp(`${property}:\\s*${value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\s*;`, "u");
+  if (!pattern.test(declarations)) {
+    throw new Error(`${selector} não declara ${property}: ${value} em styles.css`);
+  }
+}
+
+function assertDoesNotDeclare(selector: string, property: string) {
+  const rules = stylesheet.split("}");
+  const matchingRule = rules.find((rule) => {
+    const braceIndex = rule.indexOf("{");
+    if (braceIndex === -1) {
+      return false;
+    }
+    return rule
+      .slice(0, braceIndex)
+      .split(",")
+      .map((entry) => entry.trim())
+      .includes(selector);
+  });
+  if (matchingRule === undefined) {
+    return;
+  }
+  const declarations = matchingRule.slice(matchingRule.indexOf("{") + 1);
+  if (new RegExp(`${property}:`, "u").test(declarations)) {
+    throw new Error(`${selector} declara ${property} em styles.css; a cadeia que este teste assume mudou`);
+  }
+}
+
 describe("contraste de .property-capacity no painel do operador", () => {
-  it("em repouso (fundo --surface) atinge 4.5:1", () => {
+  it("herda a cor de --ink-3 via .property-card span, não de uma regra própria", () => {
+    assertDoesNotDeclare(".property-capacity", "color");
+    assertDeclares(".property-card span", "color", "var(--ink-3)");
+  });
+
+  it("nenhum ancestral entre .property-card e <body> declara background", () => {
+    for (const ancestor of [".page", ".workspace", ".workspace-section", ".property-grid"]) {
+      assertDoesNotDeclare(ancestor, "background");
+    }
+  });
+
+  it("em repouso, .property-card declara background: var(--surface), e atinge 4.5:1", () => {
+    assertDeclares(".property-card", "background", "var(--surface)");
     const ratio = contrastRatio(parseHex(tokenValue("--ink-3")), parseHex(tokenValue("--surface")));
     expect(ratio).toBeGreaterThanOrEqual(MINIMUM_RATIO);
   });
 
-  it("selecionado (fundo --brand-wash sobre --bg) atinge 4.5:1", () => {
+  it('selecionado, .property-card[aria-pressed="true"] declara background: var(--brand-wash) sobre --bg, e atinge 4.5:1', () => {
+    assertDeclares('.property-card[aria-pressed="true"]', "background", "var(--brand-wash)");
     const wash = parseRgba(tokenValue("--brand-wash"));
     const composedBackground = compose(wash.color, wash.alpha, parseHex(tokenValue("--bg")));
     const ratio = contrastRatio(parseHex(tokenValue("--ink-3")), composedBackground);
