@@ -68,14 +68,17 @@ services:
     tmpfs: !override []
     # The inherited check targets the Nginx port and needs curl; this image has
     # neither. Going through /api/v1 proves the dev server and its proxy to the
-    # API in the same probe.
+    # API in the same probe. It probes platform/health for the same reason
+    # compose.local.yaml does: public/summary needs an analytics publication,
+    # which only exists with the local-demo fixtures (profile test), and a
+    # freshly started stack has none.
     healthcheck: !override
       test:
         - CMD
         - node
         - -e
         - >-
-          fetch('http://127.0.0.1:5173/api/v1/public/summary')
+          fetch('http://127.0.0.1:5173/api/v1/platform/health')
           .then((response) => process.exit(response.ok ? 0 : 1))
           .catch(() => process.exit(1))
       interval: 2s
