@@ -195,21 +195,40 @@ const isCivilMonth: Validator = (value) =>
   typeof value === "string" && civilMonthPattern.test(value);
 
 /** Toda janela observada recorta a mesma série diária publicada. */
-const OBSERVED_WINDOWS = [
+const RECENT_WINDOWS = [
   "recent_30_days",
   "recent_90_days",
   "recent_365_days",
   "recent_730_days",
-  "month",
 ] as const;
+const OBSERVED_WINDOWS = [...RECENT_WINDOWS, "month"] as const;
 
-const isObservedPresence = objectValidator(
-  {
-    metadata: isPublicMetadata,
-    window: literalValidator(...OBSERVED_WINDOWS),
-    series: arrayValidator(isObservedPresencePoint, 0, PRESENCE_HISTORY_DAYS),
-  },
-  { month: isCivilMonth },
+const isObservedSeries = arrayValidator(
+  isObservedPresencePoint,
+  0,
+  PRESENCE_HISTORY_DAYS,
+);
+
+/**
+ * O par `window`/`month` é exigido dos dois lados: a data só existe dentro da
+ * janela de mês, e a janela de mês sem data não nomeia documento. Aceitar
+ * `month` como campo opcional de qualquer janela deixaria o cliente cego
+ * justamente para a resposta inconsistente que ele deveria recusar.
+ */
+const isRecentWindowPresence = objectValidator({
+  metadata: isPublicMetadata,
+  window: literalValidator(...RECENT_WINDOWS),
+  series: isObservedSeries,
+});
+const isMonthWindowPresence = objectValidator({
+  metadata: isPublicMetadata,
+  window: literalValidator("month"),
+  month: isCivilMonth,
+  series: isObservedSeries,
+});
+const isObservedPresence = unionValidator(
+  isRecentWindowPresence,
+  isMonthWindowPresence,
 );
 const isForecastPresence = objectValidator({
   metadata: isPublicMetadata,

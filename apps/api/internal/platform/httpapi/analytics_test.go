@@ -166,6 +166,9 @@ func TestPublicAnalyticsRejectsOpenEndedSelectorsAndInvalidETag(t *testing.T) {
 		"/api/v1/public/presence?window=month&month=2026-13",
 		"/api/v1/public/presence?window=month&month=2026-5",
 		"/api/v1/public/presence?window=recent_30_days&window=recent_90_days",
+		// Enviado vazio, o seletor continua enviado: o par segue inconsistente.
+		"/api/v1/public/presence?window=recent_30_days&month=",
+		"/api/v1/public/presence?window=month&month=",
 	}
 	for _, target := range cases {
 		recorder := httptest.NewRecorder()

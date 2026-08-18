@@ -47,17 +47,30 @@ func presenceSlice(request *http.Request) (analytics.PresenceSlice, bool) {
 }
 
 // Nada além de `window` e do `month` que a acompanha: um parâmetro inesperado é
-// recusado em vez de ignorado.
+// recusado em vez de ignorado. Enviado vazio, `month` continua sendo um seletor
+// enviado — `?window=recent_30_days&month=` nomeia o mesmo par inconsistente que
+// a forma preenchida, e tratá-lo como ausente o deixaria passar.
 func presenceSelectors(query url.Values) (string, string, bool) {
-	if len(query) == 0 || len(query) > 2 {
+	window, ok := singleQueryValue(query, "window")
+	if !ok || len(query) > 2 {
 		return "", "", false
 	}
-	window, ok := singleQueryValue(query, "window")
-	if !ok || len(query) == 1 {
-		return window, "", ok
+	if len(query) == 1 {
+		return window, "", true
 	}
+	return presenceMonthSelector(query, window)
+}
+
+// O segundo seletor, quando existe, é `month` e só `month`.
+func presenceMonthSelector(
+	query url.Values,
+	window string,
+) (string, string, bool) {
 	month, ok := singleQueryValue(query, "month")
-	return window, month, ok
+	if !ok || month == "" {
+		return "", "", false
+	}
+	return window, month, true
 }
 
 func (d Dependencies) publicPreferences(writer http.ResponseWriter, request *http.Request) {

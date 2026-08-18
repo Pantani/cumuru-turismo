@@ -194,6 +194,23 @@ const invalidPayloads: InvalidPayloadCase[] = [
     invoke: (client) => client.getPresence("recent_30_days"),
   },
   {
+    // O par janela/mês vale nos dois sentidos: a data só existe dentro da
+    // janela de mês, e a janela de mês sem data não nomeia documento.
+    name: "mês fora da janela de mês",
+    payload: { ...presence, month: "2026-07" },
+    invoke: (client) => client.getPresence("recent_30_days"),
+  },
+  {
+    name: "janela de mês sem o mês",
+    payload: { ...presence, window: "month" },
+    invoke: (client) => client.getPresence("month", "2026-07"),
+  },
+  {
+    name: "mês fora do formato civil",
+    payload: { ...presence, window: "month", month: "2026-13" },
+    invoke: (client) => client.getPresence("month", "2026-13"),
+  },
+  {
     name: "ponto previsto na janela observada",
     payload: {
       ...presence,

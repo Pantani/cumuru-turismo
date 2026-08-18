@@ -74,6 +74,17 @@ const richPresence: Schemas["PublicPresence"] = {
     { date: "2026-07-25", kind: "observed", status: "published", value: 160 },
   ],
 };
+/** Longa o bastante para o gráfico cair abaixo de quatro pixels por dia. */
+const longPresence: Schemas["PublicPresence"] = {
+  metadata,
+  window: "recent_365_days",
+  series: Array.from({ length: 240 }, (_, index) => ({
+    date: new Date(Date.UTC(2025, 11, 1 + index)).toISOString().slice(0, 10),
+    kind: "observed" as const,
+    status: "published" as const,
+    value: 100,
+  })),
+};
 const forecastPresence: Schemas["PublicPresence"] = {
   metadata: {
     ...metadata,
@@ -338,6 +349,26 @@ describe("dashboard público de analytics", () => {
     expect(
       screen.getByRole("list", { name: "Média por dia da semana" }),
     ).toBeInTheDocument();
+  });
+
+  // A legenda não pode nomear o que o gráfico não desenha. Numa janela longa a
+  // faixa de fim de semana some — abaixo de quatro pixels por dia ela deixa de
+  // separar dias e vira textura — e a legenda tem de sumir junto.
+  it("mantém legenda e faixa de fim de semana sob o mesmo critério", async () => {
+    const { container, unmount } = renderDashboard(
+      client({ getPresence: vi.fn(() => result(richPresence)) }),
+    );
+    await screen.findByRole("img", { name: /Série de 6 dias/ });
+    const legend = () => within(screen.getByLabelText("Legenda da série"));
+    expect(legend().getByText("Fim de semana")).toBeInTheDocument();
+    expect(container.querySelectorAll(".chart-weekend").length).toBeGreaterThan(0);
+    unmount();
+    cleanup();
+
+    renderDashboard(client({ getPresence: vi.fn(() => result(longPresence)) }));
+    await screen.findByRole("img", { name: /Série de 240 dias/ });
+    expect(legend().queryByText("Fim de semana")).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".chart-weekend").length).toBe(0);
   });
 
   it("permite ler cada dia do gráfico pelo teclado", async () => {
