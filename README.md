@@ -388,9 +388,18 @@ confiável. API e Vite executados nativamente no host usam
 `TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`. Overlays de migration, integration
 e full-stack usam subnets disjuntas para não colidir com a stack local.
 
-`.env.example` inicializa TTLs, limites, CORS e os keyrings com fixtures
-públicas e independentes, exclusivamente para `local`/`test`. Elas não são
-segredos e não podem ser promovidas.
+`.env.example` inicializa TTLs, limites, CORS e os keyrings de `platform`,
+`core`, `questionnaire` e `analytics` com fixtures públicas e independentes,
+exclusivamente para `local`/`test`. Elas não são segredos e não podem ser
+promovidas.
+
+O autoatendimento é a exceção: `SELF_SERVICE_*` e `PROOF_OF_WORK_*` não estão
+em `.env.example` e vêm apenas de `compose.yaml`/`compose.local.yaml`. Quem
+sobe API e worker nativamente com esse `.env` roda com `SELF_SERVICE_ENABLED`
+no default `false` — as rotas de autocadastro e de ativação nem chegam a ser
+registradas e respondem `404`, em vez de existirem meio configuradas. Use
+`make up` para exercitar a funcionalidade, ou defina as variáveis à mão
+espelhando o Compose.
 
 ## Mapa da documentação
 
