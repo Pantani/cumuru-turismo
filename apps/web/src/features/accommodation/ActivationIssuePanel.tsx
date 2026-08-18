@@ -1,4 +1,10 @@
-import { useCallback, useId, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useId,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import { useAuthSession } from "../../shared/auth/AuthSession";
 import { OperationStatus } from "../../shared/forms/FieldFeedback";
@@ -8,6 +14,14 @@ import { useOperation } from "../operator/use-operation";
 
 interface ActivationIssuePanelProps {
   accommodationId: string;
+  /**
+   * Preenchimento inicial vindo de um pedido já aprovado. Reemitir força o
+   * formulário a voltar vazio, porque a segunda emissão pode ser para outra
+   * pessoa e herdar o endereço anterior seria a decisão errada por omissão.
+   */
+  initialDraft?: ActivationDraft | undefined;
+  /** Ressalva de quem chamou, mostrada junto do formulário. */
+  note?: ReactNode;
   onVersionChange: (version: number) => void;
   version: number;
 }
@@ -39,6 +53,8 @@ const activationPresentation: QrPresentation = {
  */
 export function ActivationIssuePanel({
   accommodationId,
+  initialDraft,
+  note,
   onVersionChange,
   version,
 }: ActivationIssuePanelProps) {
@@ -46,7 +62,7 @@ export function ActivationIssuePanel({
   const operation = useOperation();
   const { run } = operation;
   const formId = useId();
-  const [draft, setDraft] = useState(emptyDraft);
+  const [draft, setDraft] = useState(initialDraft ?? emptyDraft);
   const [activationUrl, setActivationUrl] = useState<string | null>(null);
 
   const submit = useCallback(
@@ -70,13 +86,17 @@ export function ActivationIssuePanel({
   );
 
   return (
-    <section className="activation-panel" aria-labelledby="activation-panel-title">
-      <h2 id="activation-panel-title">Acesso de quem opera a hospedagem</h2>
+    <section
+      className="activation-panel"
+      aria-labelledby={`${formId}-title`}
+    >
+      <h2 id={`${formId}-title`}>Acesso de quem opera a hospedagem</h2>
       <p className="queue-hint">
         Cria uma conta sem senha e um link de uso único para que a pessoa defina
         a própria senha. Nada é enviado por e-mail: entregue o link ou o código
         diretamente a ela.
       </p>
+      {note}
 
       <form onSubmit={(event) => void submit(event)} noValidate>
         <div className="field-grid">

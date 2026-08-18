@@ -90,6 +90,14 @@ const (
 	ActionQuestionnairePublished Action = "questionnaire.published"
 	ActionQuestionnaireRetired   Action = "questionnaire.retired"
 	ActionSurveyRecorded         Action = "survey_response.recorded"
+	// The access request has actions of its own because it is not an
+	// accommodation: it is born from an anonymous origin and may be refused.
+	// Reusing accommodation.created would put every refused attempt into the
+	// trail the rest of the system reads as a real registration (ADR-042).
+	ActionAccessRequestCreated  Action = "accommodation_access_request.created"
+	ActionAccessRequestApproved Action = "accommodation_access_request.approved"
+	ActionAccessRequestRejected Action = "accommodation_access_request.rejected"
+	ActionAccessRequestExpired  Action = "accommodation_access_request.expired"
 )
 
 type EntityType string
@@ -101,6 +109,10 @@ const (
 	EntityQuestionnaire        EntityType = "questionnaire"
 	EntityQuestionnaireVersion EntityType = "questionnaire_version"
 	EntitySurveyResponse       EntityType = "survey_response"
+	// EntityAccessRequest exists before any organization does, and a rejected or
+	// expired request never has one. That is why it joins the organization-less
+	// group of validOrganization.
+	EntityAccessRequest EntityType = "accommodation_access_request"
 )
 
 var actionEntities = map[Action]EntityType{
@@ -132,6 +144,10 @@ var actionEntities = map[Action]EntityType{
 	ActionQuestionnairePublished: EntityQuestionnaireVersion,
 	ActionQuestionnaireRetired:   EntityQuestionnaireVersion,
 	ActionSurveyRecorded:         EntitySurveyResponse,
+	ActionAccessRequestCreated:   EntityAccessRequest,
+	ActionAccessRequestApproved:  EntityAccessRequest,
+	ActionAccessRequestRejected:  EntityAccessRequest,
+	ActionAccessRequestExpired:   EntityAccessRequest,
 }
 
 type PurposeCode string
@@ -140,6 +156,12 @@ const (
 	PurposeStayOperation           PurposeCode = "stay_operation"
 	PurposeQuestionnaireGovernance PurposeCode = "questionnaire_governance"
 	PurposeTourismSurvey           PurposeCode = "tourism_survey"
+	// The access request is onboarding contact data, not stay operation. It is
+	// the first personal data the platform collects from an open channel, and
+	// ADR-042 makes the recorded purpose the thing that keeps that channel
+	// revisable: labelling it 'stay_operation' would corrupt the very record
+	// the decision rests on.
+	PurposeAccommodationOnboarding PurposeCode = "accommodation_onboarding"
 )
 
 type ChangedField string
@@ -217,19 +239,34 @@ func validActorType(actorType ActorType) bool {
 func validOrganization(entity EntityType, organizationID uuid.UUID) bool {
 	global := entity == EntityQuestionnaire ||
 		entity == EntityQuestionnaireVersion ||
-		entity == EntitySurveyResponse
+		entity == EntitySurveyResponse ||
+		entity == EntityAccessRequest
 	return global == (organizationID == uuid.Nil)
 }
 
+// The finalidade belongs to the entity, not to the call site, and it is a table
+// rather than a switch with a default: an entity type added without declaring
+// its purpose now fails closed instead of quietly inheriting the stay purpose
+// (ADR-036, ADR-042).
+var entityPurposes = map[EntityType]PurposeCode{
+	EntityAccommodation:        PurposeStayOperation,
+	EntityMembership:           PurposeStayOperation,
+	EntityStay:                 PurposeStayOperation,
+	EntityQuestionnaire:        PurposeQuestionnaireGovernance,
+	EntityQuestionnaireVersion: PurposeQuestionnaireGovernance,
+	EntitySurveyResponse:       PurposeTourismSurvey,
+	EntityAccessRequest:        PurposeAccommodationOnboarding,
+}
+
+// PurposeFor returns the finalidade recorded for an entity type, and the empty
+// code for a type that declares none — which Validate then refuses.
+func PurposeFor(entity EntityType) PurposeCode {
+	return entityPurposes[entity]
+}
+
 func validPurpose(entity EntityType, purpose PurposeCode) bool {
-	switch entity {
-	case EntityQuestionnaire, EntityQuestionnaireVersion:
-		return purpose == PurposeQuestionnaireGovernance
-	case EntitySurveyResponse:
-		return purpose == PurposeTourismSurvey
-	default:
-		return purpose == PurposeStayOperation
-	}
+	declared, known := entityPurposes[entity]
+	return known && purpose == declared
 }
 
 func fieldsValid(fields []ChangedField) bool {

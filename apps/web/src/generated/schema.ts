@@ -608,6 +608,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/accommodation-access-requests/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar o contexto do pedido de convite e receber o desafio
+         * @description Canal aberto e sem convite prévio: quem chega aqui ainda não tem conta, e por isso não há token nenhum a apresentar. A resposta traz o desafio de proof-of-work, cuja dificuldade é derivada do contador do balde de rate limit desta rota, e a versão do aviso de privacidade que o formulário deve exibir antes de coletar o contato.
+         */
+        get: operations["getAccommodationAccessRequestContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accommodation-access-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar pedidos de convite da hospedagem
+         * @description Fila da administração. O item traz o contato porque é ele que a tela usa para decidir e, depois de aprovar, para emitir o acesso — a emissão continua sendo o passo separado de POST /accommodations/{accommodation_id}/activation. Em rejected e expired o contato vem nulo, porque já foi eliminado (ADR-042); expires_at diz quanto resta ao pendente antes de o worker o expirar.
+         */
+        get: operations["listAccommodationAccessRequests"];
+        put?: never;
+        /**
+         * Pedir acesso para a própria hospedagem
+         * @description Canal público e nominal, ao contrário do autocadastro do visitante (ADR-040): sem nome da acomodação não há o que aprovar, e sem e-mail não há a quem devolver o acesso depois. A resposta devolve somente id e created_at, e nunca ecoa o que foi enviado, porque a rota é aberta e o eco transformaria a criação em consulta de dado de contato alheio. Um pedido pendente por e-mail: o reenvio colide e responde 409.
+         */
+        post: operations["createAccommodationAccessRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accommodation-access-requests/{request_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprovar pedido de convite da hospedagem
+         * @description Cria a acomodação e preenche accommodation_id na mesma transação, e é por isso que o pedido aprovado não pode existir sem cadastro correspondente. A resposta devolve o contato para que a tela encadeie a emissão do acesso sem digitar de novo o que já foi declarado.
+         */
+        post: operations["approveAccommodationAccessRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accommodation-access-requests/{request_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recusar pedido de convite da hospedagem
+         * @description Motivo obrigatório e de lista fechada, no mesmo precedente de rejectStay: texto livre em platform.audit_events, que é append-only, viraria dado pessoal permanente. A recusa elimina o contato na mesma transação (ADR-042) e preserva a linha, porque ela é a prova de que a recusa aconteceu — por isso a resposta devolve contato nulo.
+         */
+        post: operations["rejectAccommodationAccessRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stays/{stay_id}/approve": {
         parameters: {
             query?: never;
@@ -967,6 +1051,89 @@ export interface components {
             category?: components["schemas"]["AccommodationInputCategory"];
             capacity?: number | null;
             public_area_code?: string | null;
+        };
+        /**
+         * @description expired é o pedido que ninguém leu dentro do prazo, e não uma decisão: não tem decisor nem motivo. Vale igualmente para o recurso e para o filtro da fila, de propósito — um estado que a listagem não sabe pedir vira registro que a tela não sabe explicar.
+         * @enum {string}
+         */
+        AccommodationAccessRequestApprovalState: "pending" | "approved" | "rejected" | "expired";
+        /**
+         * @description Lista fechada pelo mesmo motivo de RejectStayRequest: o motivo vai para trilha append-only e texto livre viraria dado pessoal permanente.
+         * @enum {string}
+         */
+        AccommodationAccessRequestRejectionReason: "duplicate_request" | "not_a_lodging" | "insufficient_information" | "abuse";
+        AccommodationAccessRequestContext: {
+            proof_of_work: components["schemas"]["ProofOfWorkChallenge"];
+            privacy_notice_version: string;
+        };
+        CreateAccommodationAccessRequest: {
+            /**
+             * Format: uuid
+             * @description UUIDv7 canônico gerado pelo cliente para repetição segura.
+             */
+            client_submission_id: string;
+            accommodation_name: string;
+            category: components["schemas"]["AccommodationInputCategory"];
+            capacity: number;
+            contact_name: string;
+            /** Format: email */
+            contact_email: string;
+            contact_phone?: string | null;
+            city_label: string;
+            state_code: string;
+            privacy_notice_version: string;
+            proof_of_work: {
+                challenge: string;
+                solution: string;
+            };
+        };
+        /** @description Recibo mínimo. Nenhum campo enviado é devolvido: a rota é aberta e o eco transformaria a criação em consulta de dado de contato alheio. */
+        AccommodationAccessRequestCreated: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AccommodationAccessRequest: {
+            /** Format: uuid */
+            id: string;
+            accommodation_name: string;
+            category: components["schemas"]["AccommodationInputCategory"];
+            capacity: number;
+            /** @description Nulo depois de rejected ou expired: a ADR-042 elimina o dado pessoal do canal aberto e preserva só o fato, o motivo e o instante. */
+            contact_name: string | null;
+            /**
+             * Format: email
+             * @description Nulo depois de rejected ou expired, pelo mesmo motivo de contact_name. Presente apenas em pending e approved.
+             */
+            contact_email: string | null;
+            /** @description Opcional no envio e nulo depois de rejected ou expired. */
+            contact_phone: string | null;
+            city_label: string;
+            state_code: string;
+            approval_state: components["schemas"]["AccommodationAccessRequestApprovalState"];
+            /**
+             * Format: date-time
+             * @description Prazo do pedido pendente, para a fila mostrar quanto tempo resta. Vencido, o contato é eliminado e o estado vira expired.
+             */
+            expires_at: string;
+            /** @description Acomodação criada na aprovação; nula nos demais estados. */
+            accommodation_id: string | null;
+            /** @description Preenchido somente quando approval_state é rejected. */
+            rejection_reason_code: components["schemas"]["AccommodationAccessRequestRejectionReason"] | null;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AccommodationAccessRequestPage: {
+            items: components["schemas"]["AccommodationAccessRequest"][];
+            next_cursor: string | null;
+        };
+        RejectAccommodationAccessRequest: {
+            reason_code: components["schemas"]["AccommodationAccessRequestRejectionReason"];
         };
         /** @enum {string} */
         MembershipRole: "operator" | "manager";
@@ -1798,6 +1965,19 @@ export interface components {
                 "application/json": components["schemas"]["StayMutationResult"];
             };
         };
+        /** @description Decisão aplicada ou reproduzida por replay idempotente. */
+        AccommodationAccessRequestSucceeded: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                "Cache-Control": components["headers"]["NoStore"];
+                ETag: components["headers"]["EntityTag"];
+                "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AccommodationAccessRequest"];
+            };
+        };
         /** @description Questionário e primeira versão draft criados ou reproduzidos. */
         QuestionnaireCreated: {
             headers: {
@@ -1873,6 +2053,9 @@ export interface components {
         Cursor: string;
         PageLimit: number;
         AccommodationId: string;
+        AccommodationAccessRequestId: string;
+        /** @description Recorte da fila; ausente devolve todos os estados. */
+        AccommodationAccessRequestState: components["schemas"]["AccommodationAccessRequestApprovalState"];
         MembershipId: string;
         StayId: string;
         InviteToken: string;
@@ -3260,6 +3443,154 @@ export interface operations {
             409: components["responses"]["ProblemWithRetry"];
             422: components["responses"]["Problem"];
             429: components["responses"]["RateLimitedProblem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccommodationAccessRequestContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Aviso de privacidade vigente e desafio de trabalho. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccommodationAccessRequestContext"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            429: components["responses"]["RateLimitedProblem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listAccommodationAccessRequests: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Recorte da fila; ausente devolve todos os estados. */
+                approval_state?: components["parameters"]["AccommodationAccessRequestState"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página da fila de pedidos. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccommodationAccessRequestPage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createAccommodationAccessRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAccommodationAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Pedido registrado ou reproduzido por replay exato. */
+            201: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccommodationAccessRequestCreated"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            429: components["responses"]["RateLimitedProblem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    approveAccommodationAccessRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                request_id: components["parameters"]["AccommodationAccessRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["EmptyObject"];
+        responses: {
+            200: components["responses"]["AccommodationAccessRequestSucceeded"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    rejectAccommodationAccessRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                request_id: components["parameters"]["AccommodationAccessRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectAccommodationAccessRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AccommodationAccessRequestSucceeded"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
             500: components["responses"]["InternalServerProblem"];
             503: components["responses"]["Problem"];
         };

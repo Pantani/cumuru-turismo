@@ -56,6 +56,7 @@ describe("App", () => {
   it.each([
     ["/", "O turismo da nossa praia, finalmente em números."],
     ["/registro", "Registro de estadias"],
+    ["/convite", "Peça seu acesso ao Observatório"],
     ["/pesquisa", "Pesquisa turística"],
     ["/acesso", "Área da hospedagem"],
     ["/questionarios", "Questionários"],

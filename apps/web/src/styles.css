@@ -2806,6 +2806,79 @@ button.quiet-action:disabled {
   line-height: 1.55;
 }
 
+/* Fila de pedidos de acesso: cada pedido é lido antes de ser decidido, então o
+   cartão mostra os fatos em pares termo/valor em vez de uma frase corrida. */
+.access-request-card {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.access-request-facts {
+  display: grid;
+  gap: 0.35rem 1.2rem;
+  margin: 0;
+}
+
+.access-request-facts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.access-request-facts dt {
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.access-request-facts dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+
+.access-request-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+/* O estado é dito por escrito no próprio chip: a cor acompanha, nunca informa
+   sozinha (WCAG 2.2, 1.4.1). */
+.access-request-state,
+.access-request-waiting {
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--ink-2);
+  font-family: var(--font-num);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.access-request-state.state-pending {
+  color: var(--coral-strong);
+  background: var(--coral-wash);
+  border-color: color-mix(in srgb, var(--coral) 32%, transparent);
+}
+
+.access-request-erased,
+.access-request-unverified {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.access-request-issuance {
+  gap: 0.9rem;
+}
+
 /* Linha do eyebrow: rótulo da seção à esquerda, chip de protótipo à direita.
    O brandkit pede o rótulo de dado fictício visível na peça, e o cabeçalho é
    onde ele não compete com o conteúdo nem se esconde no rodapé. */

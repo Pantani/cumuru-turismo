@@ -392,6 +392,11 @@ type expiredRecordCleaner interface {
 		time.Time,
 		int32,
 	) (store.ExpiredRecordCleanupResult, error)
+	ExpireAccommodationAccessRequests(
+		context.Context,
+		time.Time,
+		int32,
+	) (int64, error)
 }
 
 type expiredCleanupMetrics struct {
@@ -496,19 +501,39 @@ func runExpiredRecordCleanup(
 	metrics expiredCleanupMetrics,
 ) {
 	started := time.Now()
-	batches := 0
-	saturated := false
-	defer func() {
-		metrics.duration.Observe(time.Since(started).Seconds())
-		metrics.batches.Observe(float64(batches))
-		metrics.saturated.Set(boolMetric(saturated))
-	}()
+	batches, saturated, completed := runExpiredCleanupBatches(
+		ctx, cleaner, cutoff.UTC(), batchSize, logger, metrics,
+	)
+	metrics.duration.Observe(time.Since(started).Seconds())
+	metrics.batches.Observe(float64(batches))
+	metrics.saturated.Set(boolMetric(saturated))
+	if !completed {
+		return
+	}
+	if ctx.Err() != nil {
+		recordExpiredCleanupCancellation(logger, metrics)
+		return
+	}
+	finishExpiredRecordCleanup(ctx, cleaner, cutoff.UTC(), batchSize, logger, metrics)
+}
+
+// The cycle is bounded so one run can never monopolise the worker, and it stops
+// as soon as the context is cancelled. A false completed means a batch failed
+// and has already reported its own failure.
+func runExpiredCleanupBatches(
+	ctx context.Context,
+	cleaner expiredRecordCleaner,
+	cutoff time.Time,
+	batchSize int32,
+	logger *slog.Logger,
+	metrics expiredCleanupMetrics,
+) (batches int, saturated bool, completed bool) {
 	for keepCleaning(ctx, batches) {
 		result, ok := runExpiredCleanupBatch(
-			ctx, cleaner, cutoff.UTC(), batchSize, logger, metrics,
+			ctx, cleaner, cutoff, batchSize, logger, metrics,
 		)
 		if !ok {
-			return
+			return batches, saturated, false
 		}
 		batches++
 		recordCleanupDeletions(metrics, result)
@@ -517,8 +542,21 @@ func runExpiredRecordCleanup(
 		}
 		saturated = batches == expiredRecordCleanupMaxBatches
 	}
-	if ctx.Err() != nil {
-		recordExpiredCleanupCancellation(logger, metrics)
+	return batches, saturated, true
+}
+
+// The cycle is only declared successful after the request expiry: that sweep is
+// personal data retention, and a "success" emitted before it would hide exactly
+// the failure that matters.
+func finishExpiredRecordCleanup(
+	ctx context.Context,
+	cleaner expiredRecordCleaner,
+	cutoff time.Time,
+	batchSize int32,
+	logger *slog.Logger,
+	metrics expiredCleanupMetrics,
+) {
+	if !expireAccessRequests(ctx, cleaner, cutoff, batchSize, logger, metrics) {
 		return
 	}
 	metrics.runs.WithLabelValues("success").Inc()
@@ -560,6 +598,39 @@ func runExpiredCleanupBatch(
 		"error_code", "expired_record_cleanup_failed",
 	)
 	return store.ExpiredRecordCleanupResult{}, false
+}
+
+// The access request sweep joins the cycle that already exists instead of
+// getting a poller of its own: it has the same shape — bounded batch, cutoff by
+// deadline — and a second clock would only add one more place where retention
+// can sit stalled without anybody noticing.
+func expireAccessRequests(
+	ctx context.Context,
+	cleaner expiredRecordCleaner,
+	cutoff time.Time,
+	batchSize int32,
+	logger *slog.Logger,
+	metrics expiredCleanupMetrics,
+) bool {
+	expired, err := cleaner.ExpireAccommodationAccessRequests(ctx, cutoff, batchSize)
+	if err == nil {
+		// The label names the contact, not the request: the sweep removes the
+		// three contact columns and leaves the row, and a counter family called
+		// "deleted" would otherwise claim rows disappeared that did not.
+		metrics.deleted.WithLabelValues("accommodation_access_request_contact").
+			Add(float64(expired))
+		return true
+	}
+	if ctx.Err() != nil {
+		recordExpiredCleanupCancellation(logger, metrics)
+		return false
+	}
+	metrics.runs.WithLabelValues("failure").Inc()
+	logger.Error(
+		"access request expiry failed",
+		"error_code", "access_request_expiry_failed",
+	)
+	return false
 }
 
 func recordExpiredCleanupCancellation(
