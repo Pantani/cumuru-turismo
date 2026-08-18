@@ -213,18 +213,41 @@ func assertCurrentFixtureKeys(
 func TestDemoOperatorCanReachTheSelfServicePanels(t *testing.T) {
 	t.Parallel()
 
+	granted := demoOperatorScopes(t)
+	for _, required := range []string{
+		"accommodations:manage", "stays:read:own", "stays:write", "stays:approve",
+	} {
+		if _, ok := granted[required]; !ok {
+			t.Fatalf("the demo operator lacks %s: %v", required, granted)
+		}
+	}
+}
+
+// accommodations:onboard is the only scope separating this fixture from the
+// seeded administrator, and nothing else in the codebase would fail if it came
+// back: the demo would simply let a lodging operator admit establishments to the
+// whole platform, because the invite queue of ADR-042 is not scoped by
+// membership. This assertion is that missing failure.
+func TestDemoOperatorCannotOnboardAccommodations(t *testing.T) {
+	t.Parallel()
+
+	if _, ok := demoOperatorScopes(t)["accommodations:onboard"]; ok {
+		t.Fatal("the demo operator must not hold accommodations:onboard")
+	}
+}
+
+func demoOperatorScopes(t *testing.T) map[string]struct{} {
+	t.Helper()
+
 	account, err := accountFixture(func(string) (string, bool) {
 		return "senha-fictícia-do-demo", true
 	})
 	if err != nil {
 		t.Fatalf("accountFixture() error = %v", err)
 	}
-	granted := strings.Join(account.Scopes, " ")
-	for _, required := range []string{
-		"accommodations:manage", "stays:read:own", "stays:write", "stays:approve",
-	} {
-		if !strings.Contains(granted, required) {
-			t.Fatalf("the demo operator lacks %s: %q", required, granted)
-		}
+	result := make(map[string]struct{}, len(account.Scopes))
+	for _, scope := range account.Scopes {
+		result[scope] = struct{}{}
 	}
+	return result
 }

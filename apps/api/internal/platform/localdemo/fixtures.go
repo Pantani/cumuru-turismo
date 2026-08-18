@@ -86,7 +86,14 @@ func accountFixture(lookup func(string) (string, bool)) (store.LocalDemoAccount,
 		PasswordHash: hash,
 		Scopes: []string{
 			"platform:read",
-			"accommodations:onboard",
+			// accommodations:onboard is absent on purpose, and its absence is what
+			// separates this fixture from the seeded administrator. The scope gates
+			// both POST /accommodations and the three decision routes of the invite
+			// queue (ADR-042), and ListAccommodationAccessRequests joins nothing
+			// against core.memberships: whoever holds it decides every request of
+			// the platform, not the ones of a single establishment. Admitting an
+			// establishment is an act of the platform administrator, so it does not
+			// belong to an account that merely operates one lodging.
 			"accommodations:manage",
 			"stays:read:own",
 			"stays:write",
