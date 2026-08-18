@@ -16,7 +16,14 @@ import (
 // date. An arrival therefore falls on the same date on every run: seeding again
 // tomorrow keeps the stays already written and only appends the days that
 // elapsed, which is what makes a sliding two-year window idempotent.
-var fixtureEpoch = time.Date(2023, time.January, 1, 0, 0, 0, 0, time.UTC)
+//
+// The anchor is resolved in the fixture location, never in UTC: a midnight
+// instant in UTC is still the previous evening in America/Bahia, so an epoch
+// declared as an instant would silently anchor the calendar one day off the
+// date it names.
+func fixtureEpoch(location *time.Location) time.Time {
+	return time.Date(2023, time.January, 1, 0, 0, 0, 0, location)
+}
 
 // currentStayHorizonDays keeps the in-progress cohort past the forecast
 // horizon, so the published forecast always has a source.
@@ -156,7 +163,7 @@ func historicalStayFixtures(
 }
 
 func chainStart(accommodation host, location *time.Location) time.Time {
-	start := civilDay(fixtureEpoch, location)
+	start := fixtureEpoch(location)
 	return start.AddDate(0, 0, variant(scheduleSeed(accommodation, start, "start"), 9))
 }
 

@@ -54,17 +54,18 @@ arquivo.
 ### Alterado
 
 - **as fixtures do perfil `test` passaram a povoar dois anos de operação, não
-  duas semanas.** O catálogo fictício foi de 4 para 16 hospedagens — pelo menos
-  três em cada categoria publicada, porque a cobertura só reporta uma categoria
-  que alcança o mínimo de estabelecimentos —, e o calendário passou a cobrir os
-  730 dias da janela publicada com estadias de vários dias, alta e baixa
-  temporada, grupos dimensionados pela capacidade, hóspedes com faixas etárias e
-  residências variadas (inclusive fora do Brasil) e respostas de pesquisa que só
-  parte dos grupos responde. Uma stack semeada abre com ~1400 estadias, ~8800
-  hóspedes e ~950 respostas, e todas as janelas da capa — 30, 90, 365 e 730 dias,
-  mês civil, previsão e preferências — têm série publicada em vez de buraco. O
-  calendário é ancorado no calendário civil, não na data da execução, então
-  semear de novo amanhã mantém o que já existe e só acrescenta o dia que passou;
+  oito semanas de estadias de uma noite.** O catálogo fictício foi de 4 para 16
+  hospedagens — pelo menos três em cada categoria publicada, porque a cobertura
+  só reporta uma categoria que alcança o mínimo de estabelecimentos —, e o
+  calendário passou a cobrir os 730 dias da janela publicada com estadias de
+  vários dias, alta e baixa temporada, grupos dimensionados pela capacidade,
+  hóspedes com faixas etárias e residências variadas (inclusive fora do Brasil)
+  e respostas de pesquisa que só parte dos grupos responde. Uma stack semeada
+  abre com ~1400 estadias, ~8800 hóspedes e ~950 respostas, e todas as janelas
+  da capa — 30, 90, 365 e 730 dias, mês civil, previsão e preferências — têm
+  série publicada em vez de buraco. O calendário é ancorado no calendário
+  civil, não na data da execução, então semear de novo amanhã mantém o que já
+  existe e só acrescenta o dia que passou;
 
 - **a reconciliação de analytics ganhou orçamento de lote onde era de
   requisição.** `DATABASE_TIMEOUT` dimensiona uma requisição, e uma

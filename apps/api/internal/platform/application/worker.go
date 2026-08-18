@@ -188,7 +188,7 @@ func workerServices(
 		store.WithSelfServiceConfig(cfg.SelfService),
 	)
 	if err != nil {
-		return nil, nil, nil, errors.New("worker repository initialization failed")
+		return nil, nil, nil, errors.New("worker analytics repository initialization failed")
 	}
 	questionnaires := questionnaire.NewService(
 		store.NewQuestionnaireRepository(platformStore),
