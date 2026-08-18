@@ -48,8 +48,10 @@ deliberadamente locais e não podem ser reutilizadas em outro ambiente.
 - `scripts/test-complexity.sh`: prova o limiar 10 em fixtures temporárias,
   incluindo `_test.go`, e mede Go e todo código web próprio com máximo 9;
 - `scripts/smoke.sh`: testa API, web, proxy e uma rota autenticada do núcleo
-  com o fake OIDC local depois de `make up`; ao invocar diretamente o perfil
-  `local-demo`, exige `LOCAL_FAKE_OIDC_TOKEN` explícito.
+  com o fake OIDC local depois de `make up` e `make seed-test-fixtures` (o
+  perfil `local-demo` exige as fixtures do operador, que ficam fora do `up`
+  padrão); ao invocar diretamente o perfil `local-demo`, exige
+  `LOCAL_FAKE_OIDC_TOKEN` explícito.
 
 O Nginx serve deep links da SPA e é a única entrada host para `/api/v1/**`; a
 API não publica porta. O proxy mantém access log desligado, descarta error log
@@ -97,7 +99,9 @@ continuam bloqueados até existirem provedor, responsáveis e evidências reais.
 Três stacks locais, todas sobre `compose.yaml`:
 
 - `make up`: stack estática comprovada em `127.0.0.1:4173`, com Nginx servindo o
-  build e as fixtures do `local-demo`. PostgreSQL publica em
+  build e o administrador semeado incondicionalmente. As fixtures fictícias do
+  `local-demo` ficam fora do `up` padrão (perfil Compose `test`) — rode
+  `make seed-test-fixtures` para trazê-las. PostgreSQL publica em
   `127.0.0.1:${POSTGRES_HOST_PORT:-5433}`;
 - `make docker-dev`: stack de hot reload em `127.0.0.1:5173`, projeto Compose
   `cumuru-dev`, subnet `172.30.8.0/24` e banco não publicado, para conviver com
@@ -129,6 +133,9 @@ governado por duas variáveis:
 - `SEED_ENABLED`: verdadeiro por padrão em `local|test`, falso em `staging|production`;
 - `SEED_PROFILE`: `admin+demo` por padrão em `local|test`, `admin` nos demais.
   `admin+demo` é recusado fora de `local|test`; `none` deixa o seeder inerte.
+  O serviço `seed` de `compose.local.yaml` fixa `admin` e ignora esta
+  variável — as fixtures fictícias entram só pelo serviço `local-demo`
+  (perfil `test`), nunca pelo bootstrap incondicional do administrador.
 
 Com um perfil ativo o seeder exige `SEED_ADMIN_EMAIL` e `SEED_ADMIN_PASSWORD` e
 falha fechado sem eles, em vez de criar conta com credencial adivinhável. Fora

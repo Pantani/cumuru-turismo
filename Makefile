@@ -478,7 +478,14 @@ docker-dev: ## Sobe a stack Docker com hot reload em 127.0.0.1:5173; projeto cum
 seed: ## Semeia administrador e catálogo na stack local; idempotente, não repõe senha trocada
 	@# Sem --no-deps: o serviço espera migrate concluir, e migrate espera o banco
 	@# saudável. Sem essa espera o Ping de três segundos falha logo após um up.
+	@# `make up`/`make docker-dev` já rodam isso sozinhos; este alvo existe para
+	@# reaplicar sob demanda ou rodar contra uma stack já de pé.
 	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) run --rm seed
+
+seed-test-fixtures: ## Aplica as fixtures fictícias do operador (perfil test); idempotente
+	@# `run --rm` alcança um serviço fora do perfil ativo sem precisar de
+	@# `--profile test`; o mesmo padrão que `seed` já usa.
+	@"$(WITH_BUILD_METADATA)" $(LOCAL_COMPOSE) run --rm local-demo
 
 prod-config-check: ## Valida RUNTIME_ENV com os loaders reais de produção; não abre socket nem banco
 	@set -eu; \
@@ -498,6 +505,9 @@ prod-config-check: ## Valida RUNTIME_ENV com os loaders reais de produção; nã
 prod-config-example: ## Valida deploy/runtime.env.example com os loaders reais de produção
 	@$(MAKE) --no-print-directory prod-config-check \
 		RUNTIME_ENV=deploy/runtime.env.example
+
+docker-dev-seed-test-fixtures: ## Aplica as fixtures fictícias do operador na stack de hot reload
+	@"$(WITH_BUILD_METADATA)" $(DEV_COMPOSE) run --rm local-demo
 
 docker-dev-down: ## Para a stack de hot reload; preserva volumes e a stack estática
 	@"$(WITH_BUILD_METADATA)" $(DEV_COMPOSE) down --remove-orphans
@@ -594,9 +604,14 @@ smoke: ## Executa o smoke da stack Compose local
 smoke-local: ## Sobe a stack local, executa o smoke e derruba a stack mesmo em falha
 	@# `up` parcial deixa container e rede de pé; por isso o teardown roda em
 	@# todo caminho de falha, e o primeiro status diferente de zero é o que sai.
+	@# smoke usa SMOKE_PROFILE=local-demo, então precisa das fixtures do
+	@# operador; `up` sozinho não traz mais isso (perfil test).
 	@set -eu; \
 	up_status=0; \
 	$(MAKE) --no-print-directory up || up_status=$$?; \
+	if test "$$up_status" -eq 0; then \
+		$(MAKE) --no-print-directory seed-test-fixtures || up_status=$$?; \
+	fi; \
 	smoke_status=0; \
 	if test "$$up_status" -eq 0; then \
 		$(MAKE) --no-print-directory smoke || smoke_status=$$?; \

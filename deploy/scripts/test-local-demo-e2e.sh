@@ -86,6 +86,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# local-demo está fora do perfil padrão (perfil test) e é one-shot
+# (restart: "no"): `up --wait` não serve, porque o container sai assim que
+# termina. `run --rm` roda e bloqueia até o binário concluir, mesmo padrão de
+# migrate/seed. A jornada do operador precisa das fixtures dele, então roda
+# explicitamente antes do web. Sem --no-deps: este script nunca sobe postgres
+# nem roda migrate à parte, então local-demo precisa da própria cadeia de
+# depends_on (postgres saudável, migrate concluído) para achar o schema.
+"${COMPOSE[@]}" run --build --rm local-demo
 "${COMPOSE[@]}" up --build --detach --wait web
 
 LOCAL_E2E_BASE_URL="http://127.0.0.1:${LOCAL_E2E_PORT}" \

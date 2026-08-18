@@ -211,14 +211,20 @@ make core-proxy-test
 make core-full-stack
 make complexity
 make up
+make seed-test-fixtures
 make smoke
 ```
 
-`make up` constrói e inicia PostgreSQL, migrations, API, worker e web. O target
-usa `compose.local.yaml` para executar o comando Go `/app/local-demo`, que
-aplica fixtures fictícias idempotentes pelos serviços de domínio, semeia a conta
-local de demonstração e espera a primeira publicação anônima. Nenhum arquivo SQL
-de fixtures é montado ou executado.
+`make up` constrói e inicia PostgreSQL, migrations, API, worker e web, e semeia
+o administrador incondicionalmente — `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`
+de `.env`, hoje `administracao@cumuru.local`. As fixtures fictícias (operador,
+acomodações, respostas de pesquisa) não fazem parte desse fluxo: elas vivem no
+perfil `test` do Compose e só entram com `make seed-test-fixtures`, que
+executa o comando Go `/app/local-demo` — idempotente pelos serviços de
+domínio, semeia a conta local de demonstração e espera a primeira publicação
+anônima. Nenhum arquivo SQL de fixtures é montado ou executado. `make smoke`
+usa `SMOKE_PROFILE=local-demo` e por isso exige essas fixtures; sem
+`make seed-test-fixtures` antes, ele falha por ausência de dado, não por bug.
 
 O bundle não carrega credencial: a entrada é por e-mail e senha em
 `/acesso`. A conta fictícia é `operador@cumuru.local`, com a senha definida em

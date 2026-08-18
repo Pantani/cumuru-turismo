@@ -104,6 +104,11 @@ done
 
 "${COMPOSE[@]}" up --detach --wait postgres
 "${COMPOSE[@]}" run --rm --no-deps migrate
+# local-demo está fora do perfil padrão (perfil test); a aprovação abaixo
+# entra como o operador fictício, então as fixtures dele precisam existir
+# antes da API subir. `run --rm` alcança o serviço sem precisar de --profile;
+# --build pelo mesmo motivo do api/web logo abaixo.
+"${COMPOSE[@]}" run --build --rm --no-deps local-demo
 # --build é obrigatório. Sem ele o gate roda contra a imagem que estiver na
 # máquina, que pode ser anterior às rotas da fase: o teste ficaria verde, ou
 # vermelho, por causa de um binário velho e não do código da árvore.
