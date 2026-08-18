@@ -1,9 +1,11 @@
 package accessrequest_test
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Pantani/cumuru/apps/api/internal/access"
 	"github.com/Pantani/cumuru/apps/api/internal/accessrequest"
@@ -214,6 +216,101 @@ func TestRejectionDemandsAReasonFromTheClosedList(t *testing.T) {
 	command.ReasonCode = accessrequest.ReasonAbuse
 	if err := accessrequest.ValidateRejection(command); err != nil {
 		t.Fatalf("ValidateRejection() error = %v", err)
+	}
+}
+
+// The stub answers nothing and only records that it was reached: what the two
+// paging tests below assert is which side of the validation the call landed on,
+// not what the queue holds.
+type listedRepository struct{ reached bool }
+
+func (r *listedRepository) Context(
+	context.Context, accessrequest.ContextRequest,
+) (accessrequest.Context, error) {
+	return accessrequest.Context{}, nil
+}
+
+func (r *listedRepository) Create(
+	context.Context, accessrequest.CreateCommand,
+) (accessrequest.Created, bool, error) {
+	return accessrequest.Created{}, false, nil
+}
+
+func (r *listedRepository) List(
+	context.Context, accessrequest.PageRequest,
+) (accessrequest.Page, error) {
+	r.reached = true
+	return accessrequest.Page{}, nil
+}
+
+func (r *listedRepository) Approve(
+	context.Context, accessrequest.ApprovalCommand,
+) (accessrequest.Request, bool, error) {
+	return accessrequest.Request{}, false, nil
+}
+
+func (r *listedRepository) Reject(
+	context.Context, accessrequest.RejectionCommand,
+) (accessrequest.Request, bool, error) {
+	return accessrequest.Request{}, false, nil
+}
+
+// The half-set cursor is the rule a caller breaks silently: the other two
+// refusals surface as an odd page, but a cursor with an id and no instant — or
+// the reverse — would reach the query and answer a page nobody asked for.
+func TestListRefusesAPageTheQueueCannotAnswer(t *testing.T) {
+	t.Parallel()
+
+	valid := accessrequest.PageRequest{Limit: 25}
+	cases := map[string]func(*accessrequest.PageRequest){
+		"limit zero":     func(p *accessrequest.PageRequest) { p.Limit = 0 },
+		"limit negative": func(p *accessrequest.PageRequest) { p.Limit = -1 },
+		"limit over 100": func(p *accessrequest.PageRequest) { p.Limit = 101 },
+		"unknown state": func(p *accessrequest.PageRequest) {
+			p.State = accessrequest.ApprovalState("cancelled")
+		},
+		"cursor id only": func(p *accessrequest.PageRequest) {
+			p.CursorID = uuid.MustParse(requestID)
+		},
+		"cursor time only": func(p *accessrequest.PageRequest) {
+			p.CursorCreatedAt = time.Unix(1, 0).UTC()
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			page := valid
+			mutate(&page)
+			repository := &listedRepository{}
+			_, err := accessrequest.NewService(repository).
+				List(context.Background(), page)
+			if !errors.Is(err, accessrequest.ErrInvalidInput) {
+				t.Fatalf("an invalid page was accepted: %v", err)
+			}
+			if repository.reached {
+				t.Fatal("an invalid page reached the query")
+			}
+		})
+	}
+}
+
+// The empty state means "every state" and the paired cursor is legitimate, so
+// neither may be refused: a nil repository proves validation let them through.
+func TestListAcceptsAnEmptyStateAndAPairedCursor(t *testing.T) {
+	t.Parallel()
+
+	page := accessrequest.PageRequest{
+		Limit:           25,
+		CursorCreatedAt: time.Unix(1, 0).UTC(),
+		CursorID:        uuid.MustParse(requestID),
+	}
+	repository := &listedRepository{}
+	if _, err := accessrequest.NewService(repository).
+		List(context.Background(), page); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if !repository.reached {
+		t.Fatal("a legitimate page never reached the query")
 	}
 }
 

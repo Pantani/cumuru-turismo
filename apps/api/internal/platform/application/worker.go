@@ -614,7 +614,10 @@ func expireAccessRequests(
 ) bool {
 	expired, err := cleaner.ExpireAccommodationAccessRequests(ctx, cutoff, batchSize)
 	if err == nil {
-		metrics.deleted.WithLabelValues("accommodation_access_request").
+		// The label names the contact, not the request: the sweep removes the
+		// three contact columns and leaves the row, and a counter family called
+		// "deleted" would otherwise claim rows disappeared that did not.
+		metrics.deleted.WithLabelValues("accommodation_access_request_contact").
 			Add(float64(expired))
 		return true
 	}

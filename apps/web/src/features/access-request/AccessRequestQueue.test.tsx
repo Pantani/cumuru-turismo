@@ -19,6 +19,8 @@ import { AccessRequestQueue } from "./AccessRequestQueue";
 const requestId = "019fae14-0000-7000-8000-0000000000e1";
 const accommodationId = "019fae14-0000-7000-8000-0000000000e2";
 const idempotencyKey = "019fae14-0000-7000-8000-0000000000ff";
+const otherRequestId = "019fae14-0000-7000-8000-0000000000f1";
+const otherAccommodationId = "019fae14-0000-7000-8000-0000000000f2";
 
 /** Uma hora atrás, para a espera ser dita e não apenas insinuada. */
 const createdAt = new Date(Date.now() - 3_600_000).toISOString();
@@ -34,20 +36,39 @@ const pendingRequest = {
   city_label: "Prado",
   state_code: "BA",
   approval_state: "pending",
-  expires_at: "2026-09-15T12:00:00Z",
+  // Instante já do dia 16 em UTC e ainda do dia 15 em America/Bahia: cortar os
+  // dez primeiros caracteres anunciaria um dia a mais de prazo.
+  expires_at: "2026-09-16T01:00:00Z",
   accommodation_id: null,
   rejection_reason_code: null,
   version: 3,
   created_at: createdAt,
   updated_at: createdAt,
-} as unknown as AccessRequest;
+} satisfies AccessRequest;
 
 const approvedRequest = {
   ...pendingRequest,
   approval_state: "approved",
   accommodation_id: accommodationId,
   version: 4,
-} as unknown as AccessRequest;
+} satisfies AccessRequest;
+
+/** Segundo pedido da mesma sessão, com contato e acomodação próprios. */
+const otherPendingRequest = {
+  ...pendingRequest,
+  id: otherRequestId,
+  accommodation_name: "Casa Fictícia da Duna",
+  contact_name: "Rita Fictícia",
+  contact_email: "rita@exemplo.invalid",
+  version: 5,
+} satisfies AccessRequest;
+
+const otherApprovedRequest = {
+  ...otherPendingRequest,
+  approval_state: "approved",
+  accommodation_id: otherAccommodationId,
+  version: 6,
+} satisfies AccessRequest;
 
 const accommodation = {
   id: accommodationId,
@@ -59,6 +80,13 @@ const accommodation = {
   version: 7,
   created_at: createdAt,
   updated_at: createdAt,
+};
+
+const otherAccommodation = {
+  ...accommodation,
+  id: otherAccommodationId,
+  name: "Casa Fictícia da Duna",
+  version: 11,
 };
 
 function apiResponse(body: unknown, init: ResponseInit = {}) {
@@ -89,10 +117,10 @@ function problem(status: number, title: string) {
   );
 }
 
-function accommodationResult() {
-  return apiResponse(accommodation, {
+function accommodationResult(body = accommodation) {
+  return apiResponse(body, {
     status: 200,
-    headers: { ETag: '"7"' },
+    headers: { ETag: `"${body.version}"` },
   });
 }
 
@@ -118,6 +146,37 @@ function activationResult() {
 
 function stubFetch() {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(queuePage());
+}
+
+/**
+ * Duas aprovações seguidas dependem de qual acomodação responde a qual GET, e
+ * uma fila de `mockResolvedValueOnce` esconde esse vínculo atrás da ordem das
+ * chamadas. O roteamento por caminho deixa a falha apontar o recurso errado.
+ */
+const accessRequestPath = "/api/v1/accommodation-access-requests";
+
+function twoApprovalRoutes(): ReadonlyMap<string, () => Response> {
+  return new Map([
+    [`${accessRequestPath}/${requestId}/approve`, () =>
+      decisionResult(approvedRequest)],
+    [`${accessRequestPath}/${otherRequestId}/approve`, () =>
+      decisionResult(otherApprovedRequest)],
+    [`/api/v1/accommodations/${accommodationId}`, () => accommodationResult()],
+    [`/api/v1/accommodations/${otherAccommodationId}`, () =>
+      accommodationResult(otherAccommodation)],
+    [`/api/v1/accommodations/${otherAccommodationId}/activation`, () =>
+      activationResult()],
+  ]);
+}
+
+function stubRoutedFetch(
+  routes: ReadonlyMap<string, () => Response>,
+  fallback: () => Response,
+) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+    const route = routes.get(new URL((input as Request).url).pathname);
+    return Promise.resolve(route === undefined ? fallback() : route());
+  });
 }
 
 async function renderQueue(fetcher = stubFetch()) {
@@ -181,6 +240,8 @@ describe("fila de pedidos de acesso de hospedagens", () => {
     expect(screen.getByText("marina@exemplo.invalid")).toBeInTheDocument();
     expect(screen.getByText("+55 73 90000-0000")).toBeInTheDocument();
     expect(screen.getByText("Esperando há 1 hora")).toBeInTheDocument();
+    // O prazo é data civil da estadia, lida em America/Bahia, não em UTC.
+    expect(screen.getByText("Vence em 15 de set. de 2026")).toBeInTheDocument();
   });
 
   it("aprova com If-Match derivado da versão e chave idempotente", async () => {
@@ -226,6 +287,54 @@ describe("fila de pedidos de acesso de hospedagens", () => {
     });
   });
 
+  /**
+   * O painel de emissão fica montado depois da primeira aprovação. Sem `key`
+   * por pedido, a segunda aprovação reaproveita a árvore: o `If-Match` sai com
+   * a versão da primeira acomodação e o rascunho continua com o contato de
+   * quem pediu antes — acesso da hospedagem errada para a pessoa errada.
+   */
+  it("recomeça a emissão a cada aprovação, sem herdar versão nem contato", async () => {
+    const user = userEvent.setup();
+    const fetcher = stubRoutedFetch(twoApprovalRoutes(), () =>
+      queuePage([pendingRequest, otherPendingRequest]),
+    );
+    await renderQueue(fetcher);
+
+    const approveButtons = await screen.findAllByRole("button", {
+      name: "Aprovar e cadastrar",
+    });
+    await user.click(approveButtons[0] as HTMLElement);
+    await screen.findByRole("heading", {
+      name: "Agora entregue o acesso de Pousada Fictícia da Barra",
+    });
+
+    await user.click(
+      (
+        await screen.findAllByRole("button", { name: "Aprovar e cadastrar" })
+      )[1] as HTMLElement,
+    );
+    await screen.findByRole("heading", {
+      name: "Agora entregue o acesso de Casa Fictícia da Duna",
+    });
+
+    expect(await screen.findByLabelText("Como chamar essa pessoa")).toHaveValue(
+      "Rita Fictícia",
+    );
+    expect(screen.getByLabelText("E-mail de acesso")).toHaveValue(
+      "rita@exemplo.invalid",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Emitir acesso" }));
+
+    await waitFor(() => {
+      const issued = requestAt(fetcher, fetcher.mock.calls.length - 1);
+      expect(new URL(issued.url).pathname).toBe(
+        `/api/v1/accommodations/${otherAccommodationId}/activation`,
+      );
+      expect(issued.headers.get("If-Match")).toBe('"11"');
+    });
+  });
+
   it("recusa somente com motivo de lista fechada, sem texto livre", async () => {
     const user = userEvent.setup();
     const fetcher = stubFetch();
@@ -235,12 +344,16 @@ describe("fila de pedidos de acesso de hospedagens", () => {
         decisionResult({
           ...pendingRequest,
           approval_state: "rejected",
-        } as unknown as AccessRequest),
+        } satisfies AccessRequest),
       )
       .mockResolvedValue(queuePage([]));
 
     await user.click(await screen.findByRole("button", { name: "Recusar" }));
     const form = screen.getByRole("group", { name: "Motivo da recusa" });
+    // O botão acionado foi desmontado; o foco vai ao motivo, não a `body`.
+    await waitFor(() =>
+      expect(within(form).getByRole("combobox")).toHaveFocus(),
+    );
     expect(within(form).getByRole("combobox")).toBeInTheDocument();
     expect(within(form).queryByRole("textbox")).not.toBeInTheDocument();
     expect(view.container.querySelector("textarea")).toBeNull();
@@ -342,9 +455,13 @@ describe("escopo da fila de pedidos de acesso", () => {
       authClient: stubAuthClient(testSession(withoutOnboard)),
     });
     await screen.findByRole("heading", { name: "Suas hospedagens" });
-    for (let tick = 0; tick < 6; tick += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    /**
+     * A ausência é asserida contra um evento observável, e não contra um número
+     * de ticks: este botão só aparece depois que a própria requisição da área
+     * de trabalho resolveu e renderizou. A fila, se montasse, buscaria no mesmo
+     * commit em que a área de trabalho montou — antes disto, portanto.
+     */
+    await screen.findByRole("button", { name: "Cadastrar minha hospedagem" });
 
     expect(
       screen.queryByRole("heading", {

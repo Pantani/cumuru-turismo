@@ -1,7 +1,8 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import type { AccessRequestRejectionReason } from "../../shared/api/invite-request-client";
 import { useLocale } from "../../shared/i18n/LocaleProvider";
+import { useDeferredFocus } from "../invite-request/invite-request-focus";
 import {
   rejectionReasonKeys,
   rejectionReasonOptions,
@@ -31,6 +32,16 @@ export function AccessRequestRejectionForm({
   const [reasonCode, setReasonCode] = useState<AccessRequestRejectionReason>(
     rejectionReasonOptions[0],
   );
+
+  /**
+   * WCAG 2.2: abrir este formulário desmonta o botão "Recusar" que a pessoa
+   * acabou de acionar, e o foco cairia em `document.body`. Quem navega por
+   * teclado teria de refazer o caminho até o cartão para chegar ao motivo.
+   */
+  const requestFocus = useDeferredFocus();
+  useEffect(() => {
+    requestFocus(fieldId);
+  }, [fieldId, requestFocus]);
 
   return (
     <div

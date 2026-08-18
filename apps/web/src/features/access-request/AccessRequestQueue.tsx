@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useId, useState } from "react";
 
 import type {
   AccessRequest,
@@ -10,7 +11,10 @@ import { useLocale } from "../../shared/i18n/LocaleProvider";
 import type { Translate } from "../../shared/i18n/translate";
 import { useDeferredFocus } from "../invite-request/invite-request-focus";
 import { entityTagFor } from "../operator/stay-lifecycle";
-import { useAccessRequestOperation } from "./access-request-operation";
+import {
+  describeAccessRequestFailure,
+  useAccessRequestOperation,
+} from "./access-request-operation";
 import {
   accessRequestStateKeys,
   accessRequestStates,
@@ -28,33 +32,40 @@ import {
  */
 export const ACCESS_REQUEST_STATUS_ID = "access-request-status";
 
+/** Raiz da chave: invalidar aqui alcança a fila de qualquer filtro. */
+const ACCESS_REQUEST_QUEUE_KEY = "access-requests";
+
+/**
+ * A lista é estado de servidor e vive no TanStack Query (AGENTS.md), não em
+ * `useState` alimentado por efeito. Além da regra, é o que dispensa o sinal
+ * manual de carregamento e faz a resposta pertencer ao filtro que a pediu: uma
+ * consulta anterior mais lenta resolve numa chave que já não está ativa e não
+ * sobrescreve mais a lista em tela.
+ */
 function useAccessRequestQueue(t: Translate) {
   const { inviteRequestClient } = useAuthSession();
-  const operation = useAccessRequestOperation(t);
-  const { run } = operation;
-  const [items, setItems] = useState<readonly AccessRequest[]>([]);
+  const queryClient = useQueryClient();
   const [approvalState, setApprovalState] =
     useState<AccessRequestState>("pending");
-  const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const result = await run(t("accessRequest.loading"), "", () =>
-      inviteRequestClient.listAccessRequests({ approvalState }),
-    );
-    setItems(result?.data.items ?? []);
-    setLoading(false);
-  }, [approvalState, inviteRequestClient, run, t]);
+  const query = useQuery({
+    queryKey: [ACCESS_REQUEST_QUEUE_KEY, approvalState],
+    queryFn: () => inviteRequestClient.listAccessRequests({ approvalState }),
+    select: (page) => page.data.items,
+  });
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const refresh = useCallback(
+    () =>
+      queryClient.invalidateQueries({ queryKey: [ACCESS_REQUEST_QUEUE_KEY] }),
+    [queryClient],
+  );
 
   return {
     approvalState,
-    items,
-    loading,
-    operation,
+    busy: query.isFetching,
+    items: query.data ?? [],
+    loading: query.isPending,
+    message: query.isError ? describeAccessRequestFailure(t, query.error) : "",
     refresh,
     setApprovalState,
   };
@@ -142,8 +153,19 @@ function IssuanceSlot({
   if (approved === null || approved.accommodation_id === null) {
     return null;
   }
+  /**
+   * A `key` por pedido separa uma aprovação da seguinte. Sem ela o React
+   * reaproveita a árvore montada, e o painel guarda estado derivado que não
+   * volta sozinho: a versão da primeira acomodação, que faria o `If-Match`
+   * seguinte falhar a precondição, e o rascunho com o nome e o e-mail de quem
+   * pediu antes, agora oferecidos para outra hospedagem. Hoje a troca de chave
+   * da consulta desmonta o formulário por tabela, mas isso vale só enquanto a
+   * acomodação nova não estiver em cache — e o cliente serve 30 s de `stale`.
+   * A remontagem explícita não depende desse acaso.
+   */
   return (
     <AccessRequestIssuance
+      key={approved.id}
       accommodationId={approved.accommodation_id}
       onDismiss={onDismiss}
       request={approved}
@@ -210,9 +232,8 @@ export function AccessRequestQueue() {
     [inviteRequestClient, refresh, requestFocus, run, t],
   );
 
-  const busy = decision.busy || queue.operation.busy;
-  const message =
-    decision.message === "" ? queue.operation.message : decision.message;
+  const busy = decision.busy || queue.busy;
+  const message = decision.message === "" ? queue.message : decision.message;
   const errorId =
     decision.tone === "failed" ? ACCESS_REQUEST_STATUS_ID : undefined;
 

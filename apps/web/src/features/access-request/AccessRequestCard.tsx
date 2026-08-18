@@ -4,7 +4,7 @@ import type {
 } from "../../shared/api/invite-request-client";
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import type { Translate } from "../../shared/i18n/translate";
-import { formatCivilDate } from "../operator/stay-lifecycle";
+import { formatCivilDate, stayCivilDateOf } from "../operator/stay-lifecycle";
 import {
   accessRequestStateKeys,
   capacityLabel,
@@ -107,7 +107,7 @@ function CardBadges({ request }: { request: AccessRequest }) {
       {request.approval_state === "pending" ? (
         <span className="approval-deadline">
           {t("accessRequest.expires", {
-            date: formatCivilDate(request.expires_at.slice(0, 10)),
+            date: formatCivilDate(stayCivilDateOf(request.expires_at)),
           })}
         </span>
       ) : null}

@@ -1,10 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useRef, useState, type FormEvent } from "react";
 
 import {
   createInviteRequestClient,
@@ -36,26 +31,28 @@ const inviteRequestClient = createInviteRequestClient({
   getAccessToken: () => null,
 });
 
+/**
+ * Estado de servidor no TanStack Query, como manda o AGENTS.md. `gcTime: 0` e
+ * `staleTime: 0` são obrigatórios aqui e não afinação: o desafio de trabalho
+ * tem `expires_at`, e um contexto servido do cache faria a pessoa gastar CPU
+ * resolvendo uma prova que o servidor já recusa. `retry: false` mantém a
+ * segunda tentativa como decisão de quem está na tela, no botão que ela vê.
+ */
 function useAccessRequestContext(t: Translate) {
-  const [context, setContext] = useState<AccessRequestContext | null>(null);
-  const [message, setMessage] = useState(t("inviteRequest.loading"));
+  const query = useQuery({
+    queryKey: ["invite-request-context"],
+    queryFn: () => inviteRequestClient.getAccessRequestContext(),
+    select: (result) => result.data,
+    gcTime: 0,
+    retry: false,
+    staleTime: 0,
+  });
 
-  const load = useCallback(async () => {
-    setMessage(t("inviteRequest.loading"));
-    try {
-      const result = await inviteRequestClient.getAccessRequestContext();
-      setContext(result.data);
-      setMessage("");
-    } catch (error) {
-      setMessage(describeInviteRequestFailure(t, error));
-    }
-  }, [t]);
+  const message = query.isError
+    ? describeInviteRequestFailure(t, query.error)
+    : t("inviteRequest.loading");
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  return { context, load, message };
+  return { context: query.data ?? null, message, refetch: query.refetch };
 }
 
 async function sendAccessRequest(
@@ -232,11 +229,11 @@ function InviteRequestPending({
 
 export function InviteRequestForm() {
   const { t } = useLocale();
-  const { context, load, message } = useAccessRequestContext(t);
+  const { context, message, refetch } = useAccessRequestContext(t);
 
   if (context === null) {
     return (
-      <InviteRequestPending message={message} onRetry={() => void load()} />
+      <InviteRequestPending message={message} onRetry={() => void refetch()} />
     );
   }
   return <LoadedInviteRequestForm context={context} />;

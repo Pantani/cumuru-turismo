@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
@@ -40,15 +41,35 @@ function problemResponse(status: number, type: string) {
   );
 }
 
-async function renderLoadedForm() {
-  const fetcher = vi
+/**
+ * `vi.spyOn` sem implementação própria cai de volta no `fetch` original assim
+ * que a fila de `…Once` acaba, e uma requisição não prevista sairia de verdade
+ * do processo de teste. A implementação padrão recusa: o teste falha na chamada
+ * inesperada, não no tempo limite.
+ */
+function stubFetch() {
+  return vi
     .spyOn(globalThis, "fetch")
-    .mockResolvedValueOnce(apiResponse(accessContext));
-  const view = render(
-    <LocaleProvider initial="pt">
-      <InviteRequestPage />
-    </LocaleProvider>,
+    .mockImplementation((input) =>
+      Promise.reject(
+        new Error(`Requisição não prevista: ${String((input as Request).url)}`),
+      ),
+    );
+}
+
+function renderPage(locale: "pt" | "en" | "es" = "pt") {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <LocaleProvider initial={locale}>
+        <InviteRequestPage />
+      </LocaleProvider>
+    </QueryClientProvider>,
   );
+}
+
+async function renderLoadedForm() {
+  const fetcher = stubFetch().mockResolvedValueOnce(apiResponse(accessContext));
+  const view = renderPage();
   await screen.findByRole("heading", {
     name: "Dados da hospedagem e do contato",
   });
@@ -223,14 +244,10 @@ describe("pedido de acesso da hospedagem", () => {
 
   it("oferece tentar de novo quando o contexto não carrega", async () => {
     const user = userEvent.setup();
-    const fetcher = vi
-      .spyOn(globalThis, "fetch")
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    render(
-      <LocaleProvider initial="pt">
-        <InviteRequestPage />
-      </LocaleProvider>,
+    const fetcher = stubFetch().mockRejectedValueOnce(
+      new TypeError("Failed to fetch"),
     );
+    renderPage();
     await screen.findByText(/Sem conexão agora/u);
 
     fetcher.mockResolvedValueOnce(apiResponse(accessContext));
@@ -306,14 +323,10 @@ describe.each([
 
   it("mostra rótulos e confirmação no idioma escolhido", async () => {
     const user = userEvent.setup();
-    const fetcher = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(apiResponse(accessContext));
-    render(
-      <LocaleProvider initial={labels.locale}>
-        <InviteRequestPage />
-      </LocaleProvider>,
+    const fetcher = stubFetch().mockResolvedValueOnce(
+      apiResponse(accessContext),
     );
+    renderPage(labels.locale);
     await screen.findByRole("heading", { name: labels.formTitle });
 
     fetcher.mockResolvedValueOnce(acceptedResponse());

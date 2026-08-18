@@ -3751,8 +3751,7 @@ GRANT UPDATE (
   contact_name,
   contact_email,
   contact_phone,
-  updated_at,
-  version
+  updated_at
 ) ON TABLE core.accommodation_access_requests
 TO worker_runtime;
 
@@ -3761,5 +3760,21 @@ TO worker_runtime;
 -- pessoal, por UPDATE para nulo, não a linha.
 REVOKE DELETE ON TABLE core.accommodation_access_requests
 FROM app_runtime, worker_runtime;
+
+-- Os dois escopos do canal aberto do pedido precisam constar da lista fechada
+-- de platform.rate_limit_buckets. Sem isso o CHECK recusa a gravação do balde,
+-- countedRateLimit traduz o erro para ErrUnavailable e as duas rotas públicas
+-- respondem 503 antes de qualquer validação — o mesmo padrão dos escopos de
+-- convite, autocadastro e ativação, que já estão na lista.
+ALTER TABLE platform.rate_limit_buckets DROP CONSTRAINT rate_limit_scope_valid;
+ALTER TABLE platform.rate_limit_buckets
+  ADD CONSTRAINT rate_limit_scope_valid
+    CHECK (scope IN (
+      'invite_context', 'invite_submit', 'survey_submit',
+      'accommodation_invite_context', 'accommodation_invite_submit',
+      'activation_context', 'activation_submit',
+      'accommodation_access_request_context',
+      'accommodation_access_request_submit'
+    ));
 
 COMMIT;

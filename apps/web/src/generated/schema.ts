@@ -3441,6 +3441,7 @@ export interface operations {
             400: components["responses"]["Problem"];
             429: components["responses"]["RateLimitedProblem"];
             500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     listAccommodationAccessRequests: {
@@ -3506,6 +3507,7 @@ export interface operations {
             409: components["responses"]["ProblemWithRetry"];
             429: components["responses"]["RateLimitedProblem"];
             500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     approveAccommodationAccessRequest: {
@@ -3531,6 +3533,7 @@ export interface operations {
             412: components["responses"]["Problem"];
             428: components["responses"]["Problem"];
             500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     rejectAccommodationAccessRequest: {
@@ -3560,6 +3563,7 @@ export interface operations {
             412: components["responses"]["Problem"];
             428: components["responses"]["Problem"];
             500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     approveStay: {

@@ -303,8 +303,12 @@ func accessRequestPage(
 	limit int32,
 ) accessrequest.Page {
 	items := make([]accessrequest.Request, 0, len(rows))
-	for index, row := range rows {
-		if int32(index) == limit {
+	for _, row := range rows {
+		// The bound is read off len(items) and demands a positive limit: the
+		// service refuses anything outside 1..100, but this helper is called
+		// directly by its own test and cannot see that refusal, and a limit of
+		// zero would otherwise match on the first row and read items[-1].
+		if limit > 0 && len(items) == int(limit) {
 			last := items[len(items)-1]
 			return accessrequest.Page{
 				Items: items,
@@ -728,7 +732,7 @@ func (r *AccessRequestRepository) countedRateLimit(
 	if err != nil {
 		return 0, accessrequest.ErrUnavailable
 	}
-	if row.RequestCount > int32(limit) {
+	if int64(row.RequestCount) > int64(limit) {
 		return row.RequestCount, accessrequest.ErrRateLimited
 	}
 	return row.RequestCount, nil

@@ -15,7 +15,10 @@ set -euo pipefail
 #   3. autocadastro generalizado pelo cartaz, com proof-of-work;
 #   4. recusa de role='minor' e de qualquer campo de identidade;
 #   5. fila de aprovação, aprovação e rejeição com motivo de lista fechada;
-#   6. a estadia pendente não produz presença nem alcança public_data.
+#   6. a estadia pendente não produz presença nem alcança public_data;
+#   7. pedido de convite da hospedagem: contexto aberto, criação sem eco do
+#      contato, conflito do pendente repetido, escopo na fila, aprovação que
+#      cria a acomodação e recusa que elimina o contato (ADR-042).
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_NAME="cumuru-self-service-full-stack-${PPID}-$$"
@@ -79,8 +82,8 @@ fail() {
 declared_operations="$(
   grep -c 'x-cumuru-feature: self-service' "${ROOT_DIR}/contracts/openapi.yaml" || true
 )"
-if test "${declared_operations}" -ne 10; then
-  fail "the contract declares ${declared_operations} self-service operations, expected 10"
+if test "${declared_operations}" -ne 15; then
+  fail "the contract declares ${declared_operations} self-service operations, expected 15"
 fi
 
 for operation in \
@@ -93,7 +96,12 @@ for operation in \
   getAccommodationInviteContext \
   submitAccommodationSelfRegistration \
   approveStay \
-  rejectStay; do
+  rejectStay \
+  getAccommodationAccessRequestContext \
+  createAccommodationAccessRequest \
+  listAccommodationAccessRequests \
+  approveAccommodationAccessRequest \
+  rejectAccommodationAccessRequest; do
   if ! grep -q "operationId: ${operation}$" "${ROOT_DIR}/contracts/openapi.yaml"; then
     fail "the contract lost operationId ${operation}"
   fi
@@ -539,6 +547,323 @@ if test "${active_posters}" != "2"; then
 fi
 
 # ---------------------------------------------------------------------------
+# Pedido de convite da hospedagem (ADR-042), pelo fio real.
+#
+# Este é o único canal aberto que coleta identidade, e a ADR-042 só abriu a
+# exceção à ADR-040 porque assumiu uma contrapartida: a recusa elimina o
+# contato na mesma transação. Declarar as cinco operações no contrato não prova
+# nenhuma delas, e a contrapartida menos ainda — por isso o fluxo inteiro é
+# exercitado aqui, na mesma disciplina do autocadastro do hóspede acima:
+# desafio emitido pelo servidor, resolvido pelo solucionador, gasto no livro de
+# nonces, e cada asserção dizendo qual operação falhou e em que ponto.
+
+# json_value distingue três respostas que json_field colapsa numa só: o valor
+# presente, o nulo e o campo ausente. A eliminação do contato tem nulo como
+# resultado ESPERADO, e um campo que sumisse do JSON passaria por eliminado sem
+# nunca ter sido gravado.
+json_value() {
+  JSON_PAYLOAD="$1" JSON_FIELD="$2" node -e '
+    const payload = JSON.parse(process.env.JSON_PAYLOAD);
+    const field = process.env.JSON_FIELD;
+    if (Object.prototype.hasOwnProperty.call(payload, field)) {
+      const value = payload[field];
+      process.stdout.write(value === null ? "null" : String(value));
+    } else {
+      process.stdout.write("absent");
+    }
+  '
+}
+
+json_key_list() {
+  JSON_PAYLOAD="$1" node -e '
+    const keys = Object.keys(JSON.parse(process.env.JSON_PAYLOAD));
+    process.stdout.write(keys.sort().join(","));
+  '
+}
+
+# O item sai da listagem administrativa, e não do banco: consultar a tabela
+# provaria a linha sem provar a rota que a tela usa para decidir.
+queue_item() {
+  JSON_PAYLOAD="$1" JSON_ID="$2" node -e '
+    const page = JSON.parse(process.env.JSON_PAYLOAD);
+    const items = page.items || [];
+    const item = items.find((entry) => entry.id === process.env.JSON_ID);
+    if (item === undefined) {
+      process.exit(3);
+    }
+    process.stdout.write(JSON.stringify(item));
+  '
+}
+
+access_request_context() {
+  web_request GET /api/v1/accommodation-access-requests/context "" ""
+}
+
+# Sem Authorization de propósito. Quem chega aqui ainda não tem conta, e um
+# contexto que exigisse sessão tornaria o canal inalcançável para exatamente
+# quem ele existe para atender.
+open_context="$(access_request_context)"
+open_notice_version="$(json_field "${open_context}" privacy_notice_version 2>/dev/null || true)"
+open_challenge="$(json_field "${open_context}" proof_of_work.challenge 2>/dev/null || true)"
+open_difficulty="$(json_field "${open_context}" proof_of_work.difficulty_bits 2>/dev/null || true)"
+if test -z "${open_challenge}" || test -z "${open_difficulty}"; then
+  fail "getAccommodationAccessRequestContext served no proof-of-work challenge without a session: ${open_context}"
+fi
+if test -z "${open_notice_version}"; then
+  fail "getAccommodationAccessRequestContext served no privacy notice version, so the form has nothing to display before collecting the contact: ${open_context}"
+fi
+
+# A versão do aviso vem do contexto e volta na submissão: é assim que o
+# servidor sabe que o aviso exibido era o aviso vigente. Fixar um literal aqui
+# faria o teste passar sobre um aviso que a tela nunca mostrou.
+access_request_body() {
+  local challenge="$1"
+  local answer="$2"
+  local suffix="$3"
+  local email="$4"
+  cat <<JSON
+{"client_submission_id":"019fae30-0000-7000-8000-0000000000${suffix}",
+"accommodation_name":"Pousada Pedido Fictícia ${suffix}",
+"category":"formal_lodging","capacity":12,
+"contact_name":"Responsável Fictícia","contact_email":"${email}",
+"contact_phone":"+55 73 90000-0000",
+"city_label":"Cumuruxatiba","state_code":"BA",
+"privacy_notice_version":"${open_notice_version}",
+"proof_of_work":{"challenge":"${challenge}","solution":"${answer}"}}
+JSON
+}
+
+# Cada submissão pede o desafio próprio. O livro de nonces gasta o anterior, e
+# reaproveitá-lo faria a recusa vir da prova de trabalho em vez de vir do que
+# está sendo testado — um verde, ou um vermelho, pelo motivo errado.
+submit_access_request() {
+  local suffix="$1"
+  local email="$2"
+  local flags="$3"
+  local context=""
+  local challenge=""
+  local difficulty=""
+  local answer=""
+  context="$(access_request_context)"
+  challenge="$(json_field "${context}" proof_of_work.challenge 2>/dev/null || true)"
+  difficulty="$(json_field "${context}" proof_of_work.difficulty_bits 2>/dev/null || true)"
+  if test -z "${challenge}" || test -z "${difficulty}"; then
+    fail "createAccommodationAccessRequest could not be exercised: the context carried no challenge for submission ${suffix}: ${context}"
+  fi
+  answer="$(node "${ROOT_DIR}/deploy/scripts/self-service-solve-pow.mjs" \
+    "${challenge}" "${difficulty}")"
+  if test -z "${answer}"; then
+    fail "the solver produced no solution for the access request context at difficulty ${difficulty}"
+  fi
+  web_request POST /api/v1/accommodation-access-requests \
+    "$(access_request_body "${challenge}" "${answer}" "${suffix}" "${email}" | tr -d '\n')" \
+    "${flags}" \
+    "Idempotency-Key: self-service-full-stack-access-request-${suffix}"
+}
+
+APPROVED_EMAIL="pousada-aprovada@exemplo.invalid"
+REJECTED_EMAIL="pousada-recusada@exemplo.invalid"
+
+# Corpo e código na mesma chamada: pedir os dois em requisições separadas faria
+# a segunda cair no replay idempotente, e a asserção falaria da réplica em vez
+# da criação.
+created_response="$(submit_access_request 01 "${APPROVED_EMAIL}" '--write-out \n%{http_code}')"
+created_status="$(printf '%s\n' "${created_response}" | tail -n 1)"
+created_body="$(printf '%s\n' "${created_response}" | head -n 1)"
+expect_status "createAccommodationAccessRequest with a solved challenge" "201" "${created_status}"
+
+# O recibo é mínimo por decisão de segurança, não por economia: a rota é
+# aberta, e ecoar o que foi gravado transformaria a criação em consulta de dado
+# de contato alheio.
+created_keys="$(json_key_list "${created_body}" 2>/dev/null || true)"
+if test "${created_keys}" != "created_at,id"; then
+  fail "the creation receipt carried the fields [${created_keys}]; ADR-042 allows only id and created_at on this open route"
+fi
+case "${created_body}" in
+  *"${APPROVED_EMAIL}"*)
+    fail "createAccommodationAccessRequest echoed the submitted e-mail back to an unauthenticated caller"
+    ;;
+esac
+approved_request_id="$(json_field "${created_body}" id 2>/dev/null || true)"
+if test -z "${approved_request_id}"; then
+  fail "the creation receipt carried no id, so the approval below cannot be addressed: ${created_body}"
+fi
+
+# Um pendente por endereço, pelo índice único parcial. Quem reenviou porque não
+# teve resposta recebe conflito, e o conflito NÃO carrega Retry-After: esperar
+# não resolve, só uma decisão tira o pedido da fila.
+duplicate_headers="$(submit_access_request 02 "${APPROVED_EMAIL}" \
+  '--output /dev/null --dump-header -')"
+case "${duplicate_headers}" in
+  *" 409 "*) ;;
+  *)
+    fail "a second access request for the same pending e-mail did not conflict; the partial unique index is not holding: ${duplicate_headers}"
+    ;;
+esac
+case "$(printf '%s' "${duplicate_headers}" | tr 'A-Z' 'a-z')" in
+  *retry-after:*)
+    fail "the duplicate-pending conflict carried Retry-After; re-sending does not resolve it, only a decision does"
+    ;;
+esac
+
+# A fila e a decisão custam o mesmo escopo que criar a acomodação à mão, porque
+# produzem o mesmo efeito. Sem sessão é 401; com sessão e sem o escopo é 403, e
+# são duas recusas diferentes: só a segunda prova que o escopo é o que barra.
+expect_status \
+  "listAccommodationAccessRequests without a session" "401" \
+  "$(request_status "access request queue without a session" GET \
+    /api/v1/accommodation-access-requests '' '')"
+
+onboard_scope_sql() {
+  "${COMPOSE[@]}" exec -T -e PGPASSWORD=cumuru-local-migration-only postgres \
+    psql -U cumuru_migration -d cumuru -tA -c "$1" >/dev/null
+}
+
+onboard_scope_sql "UPDATE auth.accounts
+   SET scopes = array_remove(scopes, 'accommodations:onboard')
+   WHERE email = '${DEMO_EMAIL}'"
+expect_status \
+  "listAccommodationAccessRequests for a session without accommodations:onboard" "403" \
+  "$(web_request GET /api/v1/accommodation-access-requests "" \
+    '--output /dev/null --write-out %{http_code}' "${authorization}")"
+onboard_scope_sql "UPDATE auth.accounts
+   SET scopes = array_append(scopes, 'accommodations:onboard')
+   WHERE email = '${DEMO_EMAIL}'
+     AND NOT ('accommodations:onboard' = ANY (scopes))"
+
+queue_page="$(web_request GET \
+  '/api/v1/accommodation-access-requests?approval_state=pending' "" "" \
+  "${authorization}")"
+approved_item="$(queue_item "${queue_page}" "${approved_request_id}" 2>/dev/null || true)"
+if test -z "${approved_item}"; then
+  fail "the pending queue does not list the request just created; listAccommodationAccessRequests is not reading the channel: ${queue_page}"
+fi
+approved_version="$(json_value "${approved_item}" version 2>/dev/null || true)"
+if test -z "${approved_version}"; then
+  fail "the queue item carried no version, so If-Match cannot be composed: ${approved_item}"
+fi
+
+# Aprovar cria a acomodação na mesma transação, e é por isso que aprovado sem
+# accommodation_id não pode existir.
+approval="$(web_request POST \
+  "/api/v1/accommodation-access-requests/${approved_request_id}/approve" '{}' "" \
+  "${authorization}" \
+  "If-Match: \"${approved_version}\"" \
+  "Idempotency-Key: self-service-full-stack-access-approve")"
+approved_state="$(json_value "${approval}" approval_state 2>/dev/null || true)"
+if test "${approved_state}" != "approved"; then
+  fail "approveAccommodationAccessRequest left the request in state [${approved_state}]: ${approval}"
+fi
+created_accommodation="$(json_value "${approval}" accommodation_id 2>/dev/null || true)"
+case "${created_accommodation}" in
+  "" | null | absent)
+    fail "approveAccommodationAccessRequest returned accommodation_id=[${created_accommodation}]; the approval did not create the record it promises: ${approval}"
+    ;;
+esac
+
+# "Existe e permite emitir ativação" não se prova lendo o status: prova-se
+# emitindo. A emissão é gated em status='active' na própria SQL, então um 201
+# aqui é a afirmação inteira — e é o passo seguinte real da ADR-041, que a
+# aprovação deliberadamente NÃO faz sozinha.
+approved_accommodation_etag="$(web_request GET \
+  "/api/v1/accommodations/${created_accommodation}" "" \
+  "--output /dev/null --dump-header -" "${authorization}" |
+  tr -d '\r' | sed -n 's/^[Ee][Tt][Aa][Gg]: //p')"
+if test -z "${approved_accommodation_etag}"; then
+  fail "the accommodation created by the approval is not readable at /accommodations/${created_accommodation}; the approved request points at nothing"
+fi
+expect_status \
+  "issuing the activation on the accommodation the approval created" "201" \
+  "$(web_request POST "/api/v1/accommodations/${created_accommodation}/activation" \
+    '{"email":"ativacao-pedida@exemplo.invalid","display_name":"Responsável Fictícia"}' \
+    '--output /dev/null --write-out %{http_code}' \
+    "${authorization}" \
+    "If-Match: ${approved_accommodation_etag}" \
+    "Idempotency-Key: self-service-full-stack-access-activation")"
+
+# A asserção mais importante do conjunto: a recusa elimina o contato. É a
+# contrapartida que a ADR-042 assumiu para justificar coletar identidade em
+# canal aberto, e sem prova de ponta a ponta a promessa não existe.
+rejected_response="$(submit_access_request 03 "${REJECTED_EMAIL}" '--write-out \n%{http_code}')"
+expect_status "createAccommodationAccessRequest for the request to be refused" "201" \
+  "$(printf '%s\n' "${rejected_response}" | tail -n 1)"
+rejected_request_id="$(json_field "$(printf '%s\n' "${rejected_response}" | head -n 1)" id 2>/dev/null || true)"
+if test -z "${rejected_request_id}"; then
+  fail "the second creation receipt carried no id, so the rejection below cannot be addressed: ${rejected_response}"
+fi
+
+rejected_queue="$(web_request GET \
+  '/api/v1/accommodation-access-requests?approval_state=pending' "" "" \
+  "${authorization}")"
+rejected_item="$(queue_item "${rejected_queue}" "${rejected_request_id}" 2>/dev/null || true)"
+if test -z "${rejected_item}"; then
+  fail "the pending queue does not list the request about to be refused: ${rejected_queue}"
+fi
+
+# Prova de carga da eliminação, ANTES de afirmá-la: se o contato nunca tivesse
+# sido gravado, o nulo depois da recusa não significaria eliminação, apenas
+# ausência. A fila mostra o contato porque é ele que a administração usa para
+# decidir.
+stored_email="$(json_value "${rejected_item}" contact_email 2>/dev/null || true)"
+if test "${stored_email}" != "${REJECTED_EMAIL}"; then
+  fail "the pending queue carries contact_email=[${stored_email}]; the erasure assertion below would pass by absence instead of by erasure"
+fi
+rejected_version="$(json_value "${rejected_item}" version 2>/dev/null || true)"
+if test -z "${rejected_version}"; then
+  fail "the queue item to be refused carried no version, so If-Match cannot be composed: ${rejected_item}"
+fi
+
+rejection="$(web_request POST \
+  "/api/v1/accommodation-access-requests/${rejected_request_id}/reject" \
+  '{"reason_code":"not_a_lodging"}' "" \
+  "${authorization}" \
+  "If-Match: \"${rejected_version}\"" \
+  "Idempotency-Key: self-service-full-stack-access-reject")"
+for field in contact_name contact_email contact_phone; do
+  erased="$(json_value "${rejection}" "${field}" 2>/dev/null || true)"
+  if test "${erased}" != "null"; then
+    fail "rejectAccommodationAccessRequest answered ${field}=[${erased}]; ADR-042 requires the contact erased in the same transaction as the decision"
+  fi
+done
+rejection_reason="$(json_value "${rejection}" rejection_reason_code 2>/dev/null || true)"
+if test "${rejection_reason}" != "not_a_lodging"; then
+  fail "the refusal did not preserve the closed-list reason, answering [${rejection_reason}]: ${rejection}"
+fi
+
+# E no banco, que é onde a retenção acontece de fato: a linha permanece, o
+# motivo e o instante da decisão permanecem, os três campos de contato não.
+rejected_shape="$(
+  "${COMPOSE[@]}" exec -T -e PGPASSWORD=cumuru-local-migration-only postgres \
+    psql -U cumuru_migration -d cumuru -tA -c \
+    "SELECT approval_state
+       || ':' || (contact_name IS NULL)::text
+       || ':' || (contact_email IS NULL)::text
+       || ':' || (contact_phone IS NULL)::text
+       || ':' || (decided_at IS NOT NULL)::text
+       || ':' || coalesce(rejection_reason_code, 'missing')
+     FROM core.accommodation_access_requests
+     WHERE id = '${rejected_request_id}'" |
+    tr -d '[:space:]'
+)"
+if test "${rejected_shape}" != "rejected:true:true:true:true:not_a_lodging"; then
+  fail "the refused access request has the wrong shape in the database: [${rejected_shape}], expected rejected:true:true:true:true:not_a_lodging"
+fi
+
+# A varredura é da tabela inteira, não da linha: o endereço recusado não pode
+# sobreviver em nenhum pedido, inclusive num que outra escrita tivesse deixado
+# para trás.
+lingering_contact="$(
+  "${COMPOSE[@]}" exec -T -e PGPASSWORD=cumuru-local-migration-only postgres \
+    psql -U cumuru_migration -d cumuru -tA -c \
+    "SELECT count(*) FROM core.accommodation_access_requests
+      WHERE contact_email = '${REJECTED_EMAIL}'" |
+    tr -d '[:space:]'
+)"
+if test "${lingering_contact}" != "0"; then
+  fail "the refused e-mail still exists in core.accommodation_access_requests in ${lingering_contact} row(s); the erasure promised by ADR-042 did not happen"
+fi
+
+# ---------------------------------------------------------------------------
 # Content-Security-Policy (N-20, metade não afirmada).
 #
 # A promessa mais forte do canal aberto — o formulário público não fala com
@@ -706,4 +1031,4 @@ if test "${channel_leak}" != "0:0"; then
   fail "a real secret from the self-service flow appeared inside platform.audit_events or platform.outbox_events (N-08/N-09/N-44): ${channel_leak}"
 fi
 
-echo "self-service full stack passed: contract surface, generated client, uniform 404 for absent capabilities, header-only capability transport, the approval queue as a listStays filter, the real proof-of-work pair over HTTP with tampered, mismatched and replayed controls, poster rotation invalidating the previous token, a Content-Security-Policy that admits no external source, and no session token, capability or password leaking into stdout, audit_events or outbox_events"
+echo "self-service full stack passed: contract surface, generated client, uniform 404 for absent capabilities, header-only capability transport, the approval queue as a listStays filter, the real proof-of-work pair over HTTP with tampered, mismatched and replayed controls, poster rotation invalidating the previous token, the lodging access request end to end — open context, receipt with no echo of the contact, 409 without Retry-After on the repeated pending e-mail, accommodations:onboard guarding the queue, approval creating an accommodation that accepts an activation, and refusal erasing the contact while preserving the reason and the instant — a Content-Security-Policy that admits no external source, and no session token, capability or password leaking into stdout, audit_events or outbox_events"

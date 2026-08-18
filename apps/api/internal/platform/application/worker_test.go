@@ -35,14 +35,18 @@ type expiredRecordCleanerStub struct {
 	accessRequests int64
 	accessErr      error
 	accessCalls    int
+	accessCutoffs  []time.Time
+	accessBatches  []int32
 }
 
 func (s *expiredRecordCleanerStub) ExpireAccommodationAccessRequests(
 	_ context.Context,
-	_ time.Time,
-	_ int32,
+	cutoff time.Time,
+	batchSize int32,
 ) (int64, error) {
 	s.accessCalls++
+	s.accessCutoffs = append(s.accessCutoffs, cutoff)
+	s.accessBatches = append(s.accessBatches, batchSize)
 	return s.accessRequests, s.accessErr
 }
 
@@ -142,6 +146,15 @@ func TestExpiredRecordCleanupReportsBoundedSuccess(t *testing.T) {
 	}
 	if !service.cutoffs[0].Equal(now.UTC()) || service.cutoffs[0].Location() != time.UTC {
 		t.Fatalf("cutoff=%s", service.cutoffs[0])
+	}
+	// The retention sweep shares the cycle, so it must share the instant and
+	// the bound: a second clock or a second batch size would be a second place
+	// where retention can drift without anybody noticing.
+	if service.accessCalls != 1 || service.accessBatches[0] != 100 {
+		t.Fatalf("access calls=%d batch=%v", service.accessCalls, service.accessBatches)
+	}
+	if !service.accessCutoffs[0].Equal(now.UTC()) {
+		t.Fatalf("access cutoff=%s", service.accessCutoffs[0])
 	}
 	assertCounterValue(t, metrics.runs.WithLabelValues("success"), 1)
 	assertCounterValue(t, metrics.runs.WithLabelValues("failure"), 0)

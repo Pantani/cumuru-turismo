@@ -406,8 +406,14 @@ func validMutationMeta(idempotencyKey, requestID string) bool {
 	return idempotencyKeyPattern.MatchString(idempotencyKey) && requestID != ""
 }
 
+// The bound counts runes, like every other text bound here, because the
+// contract declares minLength and maxLength and OpenAPI counts characters.
+// emailPattern only forbids '@' and whitespace, so a non-ASCII local part
+// reaches this check and would fail a byte count well before 254 characters.
 func validEmail(value string) bool {
-	return len(value) >= 3 && len(value) <= 254 && emailPattern.MatchString(value)
+	return utf8.RuneCountInString(value) >= 3 &&
+		validTextLength(value, 254) &&
+		emailPattern.MatchString(value)
 }
 
 func validRequiredText(value string, maximum int) bool {

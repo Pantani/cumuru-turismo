@@ -289,6 +289,13 @@ func TestPageStopsAtTheLimitAndCarriesTheCursor(t *testing.T) {
 	if accessRequestPage(rows[:2], 2).NextCursor != nil {
 		t.Fatal("a full last page issued a cursor")
 	}
+	// The service refuses a limit outside 1..100, so this input never arrives
+	// from the queue; the helper still has to answer it, because a limit of
+	// zero used to match on the first row and index an empty slice.
+	zero := accessRequestPage(rows, 0)
+	if len(zero.Items) != len(rows) || zero.NextCursor != nil {
+		t.Fatalf("page with a zero limit = %#v", zero)
+	}
 }
 
 func pageRow(id string) generated.ListAccommodationAccessRequestsRow {

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import type { AccessRequest } from "../../shared/api/invite-request-client";
 import { useAuthSession } from "../../shared/auth/AuthSession";
@@ -6,7 +7,7 @@ import { useLocale } from "../../shared/i18n/LocaleProvider";
 import type { Translate } from "../../shared/i18n/translate";
 import { ActivationIssuePanel } from "../accommodation/ActivationIssuePanel";
 import type { Accommodation } from "../operator/stay-lifecycle";
-import { useAccessRequestOperation } from "./access-request-operation";
+import { describeAccessRequestFailure } from "./access-request-operation";
 import { contactOf } from "./access-request-vocabulary";
 
 /** Alvo estável de foco: depois de aprovar, o cursor vem parar aqui. */
@@ -26,24 +27,26 @@ interface AccessRequestIssuanceProps {
  */
 function useApprovedAccommodation(accommodationId: string, t: Translate) {
   const { coreClient } = useAuthSession();
-  const operation = useAccessRequestOperation(t);
-  const { run } = operation;
-  const [accommodation, setAccommodation] = useState<Accommodation | null>(null);
+  const query = useQuery({
+    queryKey: ["accommodation", accommodationId],
+    queryFn: () => coreClient.getAccommodation(accommodationId),
+    select: (result) => result.data,
+  });
 
-  const load = useCallback(async () => {
-    const result = await run(
-      t("accessRequest.issuance.loading"),
-      "",
-      () => coreClient.getAccommodation(accommodationId),
-    );
-    setAccommodation(result?.data ?? null);
-  }, [accommodationId, coreClient, run, t]);
+  return {
+    accommodation: query.data ?? null,
+    message: statusMessage(t, query),
+  };
+}
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  return { accommodation, operation };
+function statusMessage(
+  t: Translate,
+  query: { error: unknown; isError: boolean; isPending: boolean },
+) {
+  if (query.isError) {
+    return describeAccessRequestFailure(t, query.error);
+  }
+  return query.isPending ? t("accessRequest.issuance.loading") : "";
 }
 
 function IssuanceForm({
@@ -90,7 +93,7 @@ export function AccessRequestIssuance({
   request,
 }: AccessRequestIssuanceProps) {
   const { t } = useLocale();
-  const { accommodation, operation } = useApprovedAccommodation(
+  const { accommodation, message } = useApprovedAccommodation(
     accommodationId,
     t,
   );
@@ -107,7 +110,7 @@ export function AccessRequestIssuance({
       </h3>
       <p>{t("accessRequest.issuance.hint")}</p>
       <p className="operation-status" role="status" aria-live="polite">
-        {operation.message}
+        {message}
       </p>
       {accommodation === null ? null : (
         <IssuanceForm accommodation={accommodation} request={request} />

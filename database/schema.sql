@@ -1678,7 +1678,9 @@ CREATE TABLE platform.rate_limit_buckets (
     CHECK (scope IN (
       'invite_context', 'invite_submit', 'survey_submit',
       'accommodation_invite_context', 'accommodation_invite_submit',
-      'activation_context', 'activation_submit'
+      'activation_context', 'activation_submit',
+      'accommodation_access_request_context',
+      'accommodation_access_request_submit'
     )),
   CONSTRAINT rate_limit_key_version_not_blank
     CHECK (btrim(subject_key_version) <> ''),

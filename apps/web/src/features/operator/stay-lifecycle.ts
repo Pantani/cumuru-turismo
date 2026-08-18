@@ -98,19 +98,38 @@ export function formatCivilDate(value: string) {
   }).format(parsed);
 }
 
+const stayCivilDateFormat = new Intl.DateTimeFormat("en", {
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: "America/Bahia",
+  year: "numeric",
+});
+
+/** Data civil (AAAA-MM-DD) de um instante, lida no fuso da estadia. */
+function civilDateAtStayZone(moment: Date) {
+  const parts = stayCivilDateFormat.formatToParts(moment);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+/**
+ * Prazos chegam como instante UTC. Cortar os dez primeiros caracteres devolve o
+ * dia do calendário UTC, e uma expiração depois das 21h em `America/Bahia` já
+ * pertence ao dia seguinte lá — a tela anunciaria um dia a mais de prazo do que
+ * o servidor concede. A data civil é lida no fuso da estadia, como manda o
+ * AGENTS.md.
+ */
+export function stayCivilDateOf(instant: string) {
+  const parsed = new Date(instant);
+  return Number.isNaN(parsed.getTime())
+    ? instant.slice(0, 10)
+    : civilDateAtStayZone(parsed);
+}
+
 /** Default civil dates for a new stay, in the observatory's own timezone. */
 export function defaultStayDates(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en", {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone: "America/Bahia",
-    year: "numeric",
-  }).formatToParts(now);
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    Number(parts.find((part) => part.type === type)?.value ?? "0");
-  const base = new Date(
-    Date.UTC(value("year"), value("month") - 1, value("day")),
-  );
+  const base = new Date(`${civilDateAtStayZone(now)}T00:00:00Z`);
   const civilDateAt = (offset: number) => {
     const date = new Date(base);
     date.setUTCDate(date.getUTCDate() + offset);

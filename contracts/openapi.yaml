@@ -1705,6 +1705,8 @@ paths:
           $ref: "#/components/responses/Problem"
         "429":
           $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/InternalServerProblem"
   /accommodation-access-requests:
@@ -1749,6 +1751,8 @@ paths:
           $ref: "#/components/responses/ProblemWithRetry"
         "429":
           $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/InternalServerProblem"
     get:
@@ -1827,6 +1831,8 @@ paths:
           $ref: "#/components/responses/Problem"
         "428":
           $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/InternalServerProblem"
   /accommodation-access-requests/{request_id}/reject:
@@ -1869,6 +1875,8 @@ paths:
         "412":
           $ref: "#/components/responses/Problem"
         "428":
+          $ref: "#/components/responses/Problem"
+        "503":
           $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/InternalServerProblem"

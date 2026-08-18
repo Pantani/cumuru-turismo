@@ -256,13 +256,22 @@ func TestQueueAndDecisionsRefuseTheWrongScope(t *testing.T) {
 	t.Parallel()
 
 	handler := accessRequestHandler(t, accessRequestStub{})
-	targets := map[string]*http.Request{
-		"list":    publicRequest(http.MethodGet, accessRequestPath, ""),
-		"approve": decisionRequest("approve", "{}"),
-		"reject":  decisionRequest("reject", `{"reason_code":"abuse"}`),
+	// Each token gets a request of its own: the body of an httptest request is
+	// a single-use reader, and reusing one would leave the second call with a
+	// drained body — passing today only because authorization refuses before
+	// the handler decodes.
+	targets := map[string]func() *http.Request{
+		"list": func() *http.Request {
+			return publicRequest(http.MethodGet, accessRequestPath, "")
+		},
+		"approve": func() *http.Request { return decisionRequest("approve", "{}") },
+		"reject": func() *http.Request {
+			return decisionRequest("reject", `{"reason_code":"abuse"}`)
+		},
 	}
-	for name, request := range targets {
+	for name, build := range targets {
 		for _, token := range []string{"manager", "approver"} {
+			request := build()
 			request.Header.Set("Authorization", "Bearer "+token)
 			recorder := httptest.NewRecorder()
 			handler.ServeHTTP(recorder, request)
