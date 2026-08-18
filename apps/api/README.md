@@ -1,9 +1,17 @@
 # Backend modular
 
-Este módulo contém a fundação e os domínios implementados das Fases 1 a 4:
-acesso OIDC, acomodações, estadias, questionários, analytics e publicação
-anônima. A integração FNRH continua bloqueada e não deve ser inferida da
-existência de adaptadores, contratos ou fixtures locais.
+Monólito modular em Go. Os domínios implementados são `platform` (saúde,
+prontidão, build e observabilidade), `core` (acomodações, estadias, grupos,
+convites e auditoria), `questionnaire` (versões, publicação e submissão),
+`analytics` (presença, agregação e publicação anônima) e `self-service`
+(autocadastro, ativação de conta e fila de aprovação). Cada um vive sob
+`internal/`, com a configuração correspondente em
+`internal/platform/config/`.
+
+A integração FNRH não está implementada e continua bloqueada por gates
+externos; sua ausência não deve ser inferida da existência de adaptadores,
+contratos ou fixtures locais. Todo o runtime opera como `PROTOTYPE_ONLY`: use
+somente dados, identidades e credenciais fictícios.
 
 ## Processos
 
