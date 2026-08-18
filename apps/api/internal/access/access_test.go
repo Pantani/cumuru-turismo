@@ -171,7 +171,13 @@ func TestDevelopmentFakePlatformTokenHasItsOwnSubject(t *testing.T) {
 		}
 		seen[principal.Subject] = token
 	}
-	if seen[access.DevelopmentPlatformSubject] != access.DevelopmentPlatformToken {
+	// The literal is pinned, not just the constant: deploy/scripts/test-local-demo.sh
+	// counts core.memberships by this exact oidc_subject, so renaming the value
+	// silently would leave the seeded fixtures unreachable by the probe.
+	if seen["fixture-platform-probe"] != access.DevelopmentPlatformToken {
 		t.Fatalf("platform token subject = %v", seen)
+	}
+	if access.DevelopmentPlatformSubject != "fixture-platform-probe" {
+		t.Fatalf("DevelopmentPlatformSubject = %q", access.DevelopmentPlatformSubject)
 	}
 }
