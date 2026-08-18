@@ -1,6 +1,7 @@
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import type { MessageKey } from "../../shared/i18n/translate";
 import { ImageSlot } from "./ImageSlot";
+import { BEACH_PHOTO } from "./landing-content";
 import { SectionIndex } from "./SectionIndex";
 
 /** Fuso civil de toda a contagem de presença; nunca traduzido, é um identificador IANA. */
@@ -37,7 +38,7 @@ export function PlaceSection() {
           </dl>
         </div>
         <div className="lp-place-map">
-          <ImageSlot caption="landing.place.image" />
+          <ImageSlot caption="landing.place.image" photo={BEACH_PHOTO} />
         </div>
       </div>
     </section>

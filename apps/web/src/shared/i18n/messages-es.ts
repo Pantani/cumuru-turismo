@@ -90,10 +90,11 @@ export const messagesEs: Messages = {
   "landing.how.step4.title": "El pueblo recibe el número",
   "landing.how.step4.body":
     "Todo entra agregado, redondeado y protegido en el panel público. Nadie ve su ocupación por separado.",
-  "landing.how.image.desk":
-    "Recepción de posada con el código QR en el mostrador",
-  "landing.how.image.phone": "Huésped completando el registro en el móvil",
-  "landing.how.image.street": "Calle del pueblo en día de movimiento",
+  "landing.how.image.square":
+    "Plaza del centro de Cumuruxatiba, con el comercio y la posada del pueblo",
+  "landing.how.image.gate":
+    "Pórtico de entrada de Cumuruxatiba en el camino de acceso",
+  "landing.how.image.street": "Calle del pueblo bajo los cocoteros",
 
   // -------------------------------------------------------- Landing: anfitriões
   "landing.hosts.index": "03",
@@ -119,7 +120,8 @@ export const messagesEs: Messages = {
     "Antes adivinaba la temporada alta por el movimiento de la calle. Hoy miro la previsión de treinta días y sé cuándo llamar más gente a la cocina.",
   "landing.hosts.quoteCaption":
     "Testimonio de ejemplo — sustituya por un anfitrión real del pueblo.",
-  "landing.hosts.image": "Retrato de un anfitrión o posada del pueblo",
+  "landing.hosts.image":
+    "Hamaca colgada en la galería de un alojamiento del pueblo",
 
   // ---------------------------------------------------------- Landing: cadastro
   "landing.register.title": "Registre su alojamiento",
@@ -162,7 +164,8 @@ export const messagesEs: Messages = {
   "landing.place.beachValue": "Cerca de 17 km",
   "landing.place.season": "Temporada alta",
   "landing.place.seasonValue": "Diciembre a febrero",
-  "landing.place.image": "Mapa del pueblo de Cumuruxatiba con los alojamientos",
+  "landing.place.image":
+    "Praia do Centro en marea baja, con los acantilados de la Costa das Baleias al fondo",
 
   // ------------------------------------------------------- Landing: privacidade
   "landing.privacy.index": "06",
@@ -236,7 +239,10 @@ export const messagesEs: Messages = {
   "landing.contact.dpo": "Encargado de datos",
   "landing.contact.mark": "OBSERVATORIO TURÍSTICO · CUMURUXATIBA",
 
-  "landing.imagePending": "Espacio reservado para una foto",
+  "landing.license.ccBy20": "CC BY 2.0",
+  "landing.license.ccBySa30": "CC BY-SA 3.0",
+  "landing.license.ccBySa40": "CC BY-SA 4.0",
+  "landing.license.publicDomain": "Dominio público",
   "landing.photoCredit": "Foto: {author} · {license} · Wikimedia Commons",
 
   // -------------------------------------------------------- Painel: envelope
@@ -393,7 +399,8 @@ export const messagesEs: Messages = {
   "analytics.delta.same": "al mismo nivel que la media de referencia",
   "analytics.delta.above": "{percent}% por encima de la media de referencia",
   "analytics.delta.below": "{percent}% por debajo de la media de referencia",
-  "analytics.trend.value": "{sign}{percent}% frente a los {size} días anteriores",
+  "analytics.trend.value":
+    "{sign}{percent}% frente a los {size} días anteriores",
 
   // ------------------------------------------------------- Autorregistro por cartel
   "selfService.posterRequired.title": "Cartel necesario",

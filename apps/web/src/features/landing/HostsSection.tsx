@@ -1,6 +1,6 @@
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import { ImageSlot } from "./ImageSlot";
-import { HOST_BENEFITS } from "./landing-content";
+import { HAMMOCK_PHOTO, HOST_BENEFITS } from "./landing-content";
 import { SectionIndex } from "./SectionIndex";
 
 /**
@@ -55,7 +55,7 @@ export function HostsSection() {
         </div>
         <div className="lp-hosts-aside">
           <div className="lp-hosts-portrait">
-            <ImageSlot caption="landing.hosts.image" />
+            <ImageSlot caption="landing.hosts.image" photo={HAMMOCK_PHOTO} />
           </div>
           <RegisterCard />
         </div>
