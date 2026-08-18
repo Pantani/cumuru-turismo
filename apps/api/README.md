@@ -36,7 +36,9 @@ usa `WORKER_OPERATIONS_ADDRESS`, cujo default local é `127.0.0.1:9091`.
 
 O fake OIDC é aceito exclusivamente em `local` e `test`. O token fictício
 `cumuru-local-platform-read` permite testar `GET /api/v1/platform/build`; ele
-nunca deve ser utilizado com dados reais. `staging` e `production` exigem
+nunca deve ser utilizado com dados reais. Esse token responde pelo sujeito
+`fixture-platform-probe`, separado da operadora fictícia do `local-demo`, para
+que a trilha de auditoria distinga a sondagem da pessoa que opera a demonstração. `staging` e `production` exigem
 `OIDC_MODE=real`, HTTPS, exportação OTLP configurada e conexão PostgreSQL com
 exatamente um `sslmode=verify-full`. Modos que somente cifram ou validam a CA
 sem autenticar o hostname são rejeitados.

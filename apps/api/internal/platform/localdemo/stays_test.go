@@ -39,7 +39,7 @@ func TestTransitionStayFixtureResumesHistoricalCheckedInStay(t *testing.T) {
 	err := transitionStayFixture(
 		context.Background(),
 		service,
-		access.NewPrincipal(issuer, operatorSubject, []string{"stays:write"}),
+		access.NewPrincipal(issuer, access.DevelopmentPlatformSubject, []string{"stays:write"}),
 		fixture,
 		current,
 	)
@@ -60,7 +60,7 @@ func TestTransitionStayFixturePreservesCheckOutFailure(t *testing.T) {
 	err := transitionStayFixture(
 		context.Background(),
 		stay.NewService(repository),
-		access.NewPrincipal(issuer, operatorSubject, []string{"stays:write"}),
+		access.NewPrincipal(issuer, access.DevelopmentPlatformSubject, []string{"stays:write"}),
 		fixture,
 		current,
 	)

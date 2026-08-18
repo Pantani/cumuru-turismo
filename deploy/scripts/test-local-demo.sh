@@ -68,7 +68,7 @@ fixture_counts() {
         WHERE id::text LIKE '019fae11-%'),
       (SELECT count(*) FROM core.memberships
         WHERE oidc_issuer = 'https://oidc.invalid/local'
-          AND oidc_subject = 'fixture-operator'),
+          AND oidc_subject = 'fixture-platform-probe'),
       (SELECT count(*) FROM survey.questionnaire_versions
         WHERE id = '019fae13-0000-7000-8000-000000000002'
           AND status = 'published'),

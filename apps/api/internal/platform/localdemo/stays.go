@@ -24,9 +24,12 @@ func loadStayFixture(
 	provisioner *store.LocalDemoRepository,
 	fixture stayFixture,
 ) error {
+	// The seeder writes through the fake OIDC track, so it must present the
+	// subject the fixture memberships were granted to. Both callers on that
+	// track are automation; the human operator stays on the session issuer.
 	operator := access.NewPrincipal(
 		issuer,
-		operatorSubject,
+		access.DevelopmentPlatformSubject,
 		[]string{"stays:write"},
 	)
 	current, err := ensureStayFixture(
