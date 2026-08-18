@@ -25,21 +25,31 @@ func assertDevelopmentFakeAccepted(t *testing.T, environment string) {
 	if err != nil {
 		t.Fatalf("Verify() error = %v", err)
 	}
-	for _, scope := range []string{
+	// The set is asserted whole, not by required members plus one denial. A
+	// membership check passes while an unrelated privileged scope is added
+	// beside it, and this fixture is reachable by a constant string over the
+	// chain verifier: what it may not carry matters as much as what it must.
+	granted := []string{
 		"platform:read",
 		"accommodations:manage",
 		"stays:read:own",
 		"stays:write",
-	} {
+	}
+	for _, scope := range granted {
 		if !principal.HasScope(scope) {
 			t.Errorf("development principal lacks %s", scope)
 		}
 	}
-	// The bearer fixture must not be a second way to admit an establishment: the
-	// local demo operator lost accommodations:onboard on its password account,
-	// and the chain verifier accepts both credentials on the same runtime.
-	if principal.HasScope("accommodations:onboard") {
-		t.Error("development principal must not hold accommodations:onboard")
+	// accommodations:onboard is named on purpose rather than left to the count
+	// above: it is the scope this fixture used to carry, and the one whose
+	// return would reopen establishment admission over the bearer door.
+	for _, scope := range []string{
+		"accommodations:onboard", "questionnaires:manage", "questionnaires:approve",
+		"analytics:read:internal",
+	} {
+		if principal.HasScope(scope) {
+			t.Errorf("development principal must not hold %s", scope)
+		}
 	}
 }
 

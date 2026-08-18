@@ -1,6 +1,7 @@
 package localdemo
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store"
@@ -117,13 +118,23 @@ func TestFixtureSummaryIsDerivedFromFoundationAndResponseFixtures(t *testing.T) 
 func TestDemoOperatorCanReachTheSelfServicePanels(t *testing.T) {
 	t.Parallel()
 
+	// The whole set, not the required members: a containment check stays green
+	// while a privileged scope is added beside the ones listed, and this is the
+	// account a person actually signs into on the demo. Anything granted here
+	// has to be justified here.
+	want := map[string]struct{}{
+		"platform:read":           {},
+		"accommodations:manage":   {},
+		"stays:read:own":          {},
+		"stays:write":             {},
+		"stays:approve":           {},
+		"questionnaires:manage":   {},
+		"questionnaires:approve":  {},
+		"analytics:read:internal": {},
+	}
 	granted := demoOperatorScopes(t)
-	for _, required := range []string{
-		"accommodations:manage", "stays:read:own", "stays:write", "stays:approve",
-	} {
-		if _, ok := granted[required]; !ok {
-			t.Fatalf("the demo operator lacks %s: %v", required, granted)
-		}
+	if !maps.Equal(granted, want) {
+		t.Fatalf("demo operator scopes = %v, want %v", granted, want)
 	}
 }
 

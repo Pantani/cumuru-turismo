@@ -644,9 +644,14 @@ test("percorre a jornada local sem persistir authorities", async ({
   await posterPanel.getByRole("button", { name: "Emitir cartaz" }).click();
   const posterResponse = await posterResponsePromise;
   expect(posterResponse.status()).toBe(201);
-  postersIssued.add(
-    posterAbsenceRoute.exec(new URL(posterResponse.url()).pathname)?.[1] ?? "",
-  );
+  // Sem o id real no conjunto, `posterAbsence` seguiria tolerando 404 daquela
+  // acomodação pelo resto da jornada: a exceção viraria permissão. Um padrão
+  // que não casa é defeito a relatar, não vazio a registrar.
+  const issuedPosterPath = new URL(posterResponse.url()).pathname;
+  const issuedPosterId = posterAbsenceRoute.exec(issuedPosterPath)?.[1];
+  expect(issuedPosterId, `rota do cartaz não casou: ${issuedPosterPath}`)
+    .toBeDefined();
+  postersIssued.add(issuedPosterId as string);
 
   const poster = await posterResponse.json() as { url: string };
   const posterURL = new URL(poster.url);

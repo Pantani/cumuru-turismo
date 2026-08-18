@@ -46,6 +46,14 @@ export CUMURU_BUILD_TIME="${build_metadata[2]}"
 LOCAL_ENV_FILE="${ROOT_DIR}/.env"
 test -f "${LOCAL_ENV_FILE}" || LOCAL_ENV_FILE="${ROOT_DIR}/.env.example"
 
+# O Compose semeia a partir deste mesmo arquivo. Repetir um padrão aqui faria o
+# script tentar entrar com credencial diferente da que foi semeada assim que
+# alguém editasse o `.env` — falha real, mas relatada como se a conta não
+# existisse. O ambiente exportado continua vencendo, que é como a CI sobrescreve.
+env_file_value() {
+  sed -n "s/^$1=//p" "${LOCAL_ENV_FILE}" | tail -n 1
+}
+
 COMPOSE=(
   docker compose
   --env-file "${LOCAL_ENV_FILE}"
@@ -331,7 +339,10 @@ json_field() {
 }
 
 DEMO_EMAIL="operador@cumuru.local"
-DEMO_PASSWORD="${LOCAL_DEMO_ACCOUNT_PASSWORD:-demonstracao-local-2026}"
+DEMO_PASSWORD="${LOCAL_DEMO_ACCOUNT_PASSWORD:-$(env_file_value LOCAL_DEMO_ACCOUNT_PASSWORD)}"
+if test -z "${DEMO_PASSWORD}"; then
+  fail "LOCAL_DEMO_ACCOUNT_PASSWORD is absent from the environment and from ${LOCAL_ENV_FILE}"
+fi
 
 login_payload="$(web_request POST /api/v1/auth/login \
   "{\"email\":\"${DEMO_EMAIL}\",\"password\":\"${DEMO_PASSWORD}\"}" "")"
@@ -345,9 +356,11 @@ authorization="Authorization: Bearer ${session_token}"
 # → Hóspede: o operador fictício do local-demo administra a própria acomodação e
 # aprova a estadia do hóspede, mas quem admite um estabelecimento na plataforma é
 # o administrador do seed — é ele, e só ele, que carrega accommodations:onboard.
-# Os padrões abaixo espelham `.env.example`, do mesmo modo que a senha do demo.
-ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-administracao@cumuru.local}"
-ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:-administracao-local-2026}"
+ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-$(env_file_value SEED_ADMIN_EMAIL)}"
+ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:-$(env_file_value SEED_ADMIN_PASSWORD)}"
+if test -z "${ADMIN_EMAIL}" || test -z "${ADMIN_PASSWORD}"; then
+  fail "SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are absent from the environment and from ${LOCAL_ENV_FILE}"
+fi
 
 admin_login_payload="$(web_request POST /api/v1/auth/login \
   "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" "")"

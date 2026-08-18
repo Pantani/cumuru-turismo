@@ -31,6 +31,19 @@ export CUMURU_BUILD_TIME="${build_metadata[2]}"
 LOCAL_ENV_FILE="${ROOT_DIR}/.env"
 test -f "${LOCAL_ENV_FILE}" || LOCAL_ENV_FILE="${ROOT_DIR}/.env.example"
 
+# O Compose semeia as contas a partir deste arquivo, mas o Playwright roda fora
+# dos containers e não o enxerga. Sem repassar, a jornada tentaria entrar com o
+# padrão embutido no spec enquanto o banco recebeu o valor do arquivo, e o
+# sintoma seria "senha inválida" numa conta que existe. O ambiente já exportado
+# vence, que é como a CI sobrescreve.
+env_file_value() {
+  sed -n "s/^$1=//p" "${LOCAL_ENV_FILE}" | tail -n 1
+}
+LOCAL_DEMO_ACCOUNT_PASSWORD="${LOCAL_DEMO_ACCOUNT_PASSWORD:-$(env_file_value LOCAL_DEMO_ACCOUNT_PASSWORD)}"
+SEED_ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-$(env_file_value SEED_ADMIN_EMAIL)}"
+SEED_ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:-$(env_file_value SEED_ADMIN_PASSWORD)}"
+export LOCAL_DEMO_ACCOUNT_PASSWORD SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD
+
 COMPOSE=(
   docker compose
   --env-file "${LOCAL_ENV_FILE}"
