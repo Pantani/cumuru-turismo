@@ -51,7 +51,32 @@ declare global {
  */
 const AXE_CORE_ROUTE = "/__axe-core__.js";
 
+const posterAbsenceRoute =
+  /^\/api\/v1\/accommodations\/([0-9a-fA-F-]+)\/invite$/u;
+
+/**
+ * The contrast audit reads computed colour, and the grids enter through `rise`,
+ * which animates `opacity` from 0 with a stagger. Measured mid-fade, the colour
+ * read is the blend with the background rather than the token: legible text
+ * fails for being halfway into view, and the same class reports a different
+ * ratio on each run — the signature of a race, not of a palette defect.
+ *
+ * Waiting on the animations themselves settles it whatever the cause, without
+ * depending on a media query being emulated. The infinite ones (`pulse-dot`,
+ * `breathe`) never finish by definition and are skipped, or this would hang
+ * until the timeout.
+ */
+async function settleEntranceAnimations(page: Page) {
+  await page.waitForFunction(() =>
+    document.getAnimations().every((animation) =>
+      animation.effect?.getComputedTiming().iterations === Infinity ||
+      animation.playState === "finished"
+    )
+  );
+}
+
 async function expectNoColorContrastViolations(page: Page, label: string) {
+  await settleEntranceAnimations(page);
   // The site's CSP is `script-src 'self'` with no 'unsafe-inline' (proven
   // earlier in this same spec), and Playwright's addScriptTag always injects
   // an inline <script> when given a local `path`— the browser blocks that
@@ -363,10 +388,17 @@ test("percorre a jornada local sem persistir authorities", async ({
   // 404 declarado no contrato, não falha. Tolerar 404 em geral cegaria o gate
   // inteiro; aqui só este caminho, só com este status, e só antes de o cartaz
   // existir. Depois de emitido, um 404 nesta mesma rota volta a ser falha.
-  const posterAbsenceRoute = /^\/api\/v1\/accommodations\/[0-9a-fA-F-]+\/invite$/u;
   const declaredPosterAbsences: string[] = [];
   const declaredPosterConsoleErrors: string[] = [];
-  let posterIssued = false;
+  // A emissão é por acomodação, então a tolerância também precisa ser. Um único
+  // booleano bastava quando a jornada visitava uma hospedagem só; com o acervo
+  // fictício atual o operador abre várias, e emitir o cartaz da primeira
+  // passaria a acusar como falha a ausência legítima de cartaz na seguinte.
+  const postersIssued = new Set<string>();
+  const posterAbsence = (pathname: string) => {
+    const id = posterAbsenceRoute.exec(pathname)?.[1];
+    return id !== undefined && !postersIssued.has(id);
+  };
 
   // O navegador registra o mesmo 404 duas vezes: uma na rede e uma no console.
   // Aceitá-lo na rede e proibi-lo no console faria o spec se contradizer sobre
@@ -380,8 +412,7 @@ test("percorre a jornada local sem persistir authorities", async ({
     const location = message.location().url;
     const pathname = location === "" ? "" : new URL(location).pathname;
     if (
-      !posterIssued &&
-      posterAbsenceRoute.test(pathname) &&
+      posterAbsence(pathname) &&
       message.text().includes("404")
     ) {
       declaredPosterConsoleErrors.push(`${pathname} ${message.text()}`);
@@ -396,9 +427,8 @@ test("percorre a jornada local sem persistir authorities", async ({
     const pathname = new URL(response.url()).pathname;
     const entry = `${response.status()} ${pathname}`;
     if (
-      !posterIssued &&
       response.status() === 404 &&
-      posterAbsenceRoute.test(pathname)
+      posterAbsence(pathname)
     ) {
       declaredPosterAbsences.push(entry);
       return;
@@ -614,7 +644,9 @@ test("percorre a jornada local sem persistir authorities", async ({
   await posterPanel.getByRole("button", { name: "Emitir cartaz" }).click();
   const posterResponse = await posterResponsePromise;
   expect(posterResponse.status()).toBe(201);
-  posterIssued = true;
+  postersIssued.add(
+    posterAbsenceRoute.exec(new URL(posterResponse.url()).pathname)?.[1] ?? "",
+  );
 
   const poster = await posterResponse.json() as { url: string };
   const posterURL = new URL(poster.url);

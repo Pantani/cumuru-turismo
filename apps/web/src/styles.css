@@ -2636,6 +2636,14 @@ button.quiet-action:disabled {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    /* Encurtar a duração não basta: `rise` usa `backwards`, então durante o
+       atraso o elemento fica preso no quadro inicial, que é `opacity: 0`. Com
+       a entrada em cascata escalonada em até 180ms, quem pede movimento
+       reduzido continuaria vendo o conteúdo aparecer aos pedaços — que é
+       exatamente o movimento recusado. Zerar o atraso é o que faz a grade
+       nascer inteira. */
+    animation-delay: 0s !important;
+    transition-delay: 0s !important;
   }
 }
 
