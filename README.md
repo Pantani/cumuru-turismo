@@ -51,7 +51,7 @@ Jornadas disponíveis na aplicação web:
 | Rota | Para quem | O que faz |
 | --- | --- | --- |
 | `/` | qualquer pessoa | Capa pública trilíngue e painel de indicadores anônimos |
-| `/acesso` | hospedagem | Login por e-mail e senha e área de trabalho da hospedagem |
+| `/acesso` | hospedagem ou administração | Login por e-mail e senha; a conta cai na área da hospedagem ou na da administração, conforme o escopo `accommodations:onboard` |
 | `/registro` | hóspede convidado | Registro do grupo a partir do convite nominal |
 | `/pesquisa` | hóspede convidado | Pesquisa turística opcional |
 | `/i` | hóspede sem convite | Autocadastro pelo cartaz/QR da hospedagem |
