@@ -9,7 +9,6 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/access"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store"
 	"github.com/Pantani/cumuru/apps/api/internal/questionnaire"
-	"github.com/Pantani/cumuru/apps/api/internal/stay"
 	"github.com/google/uuid"
 )
 
@@ -42,6 +41,7 @@ type stayFixture struct {
 	arrival          time.Time
 	departure        time.Time
 	clock            time.Time
+	guestCount       int32
 	responseCategory string
 	keepCheckedIn    bool
 }
@@ -57,13 +57,8 @@ func foundationFixture() store.LocalDemoFoundation {
 		// operator authenticates through the local session issuer and gets its
 		// own memberships in EnsureAccount; keeping the two subjects apart is
 		// what lets the audit trail tell the probe from the operator.
-		OIDCSubject: access.DevelopmentPlatformSubject,
-		Accommodations: []store.LocalDemoAccommodation{
-			localAccommodation(1, "Pousada Farol Fictícia", "formal_lodging", 24, &fakeCadastur),
-			localAccommodation(2, "Hospedaria Rio Fictícia", "formal_lodging", 18, nil),
-			localAccommodation(3, "Chalés Areia Fictícios", "seasonal_rental", 16, nil),
-			localAccommodation(4, "Casa Silenciosa Fictícia", "family_hosting", 8, nil),
-		},
+		OIDCSubject:    access.DevelopmentPlatformSubject,
+		Accommodations: localAccommodations(&fakeCadastur),
 	}
 }
 
@@ -108,6 +103,31 @@ func accountFixture(lookup func(string) (string, bool)) (store.LocalDemoAccount,
 			"analytics:read:internal",
 		},
 	}, nil
+}
+
+// The catalogue spans every category the observatory publishes, with at least
+// three houses in each: the coverage panel only reports a category that reaches
+// the minimum number of reporting accommodations, so a category with one house
+// would render as unavailable no matter how much history it had.
+func localAccommodations(fakeCadastur *string) []store.LocalDemoAccommodation {
+	return []store.LocalDemoAccommodation{
+		localAccommodation(1, "Pousada Farol Fictícia", "formal_lodging", 24, fakeCadastur),
+		localAccommodation(2, "Hospedaria Rio Fictícia", "formal_lodging", 18, nil),
+		localAccommodation(3, "Chalés Areia Fictícios", "seasonal_rental", 16, nil),
+		localAccommodation(4, "Casa Silenciosa Fictícia", "family_hosting", 8, nil),
+		localAccommodation(5, "Pousada Vento Sul Fictícia", "formal_lodging", 30, nil),
+		localAccommodation(6, "Camping Ondas Fictício", "camping", 40, nil),
+		localAccommodation(7, "Kitnets Maré Fictícias", "seasonal_rental", 12, nil),
+		localAccommodation(8, "Quintal da Vovó Fictício", "family_hosting", 6, nil),
+		localAccommodation(9, "Pousada Mirante Fictícia", "formal_lodging", 22, nil),
+		localAccommodation(10, "Recanto Regularizando Fictício", "regularizing", 10, nil),
+		localAccommodation(11, "Camping Rio das Ostras Fictício", "camping", 28, nil),
+		localAccommodation(12, "Camping Barra Fictício", "camping", 34, nil),
+		localAccommodation(13, "Flats Coqueiral Fictícios", "seasonal_rental", 14, nil),
+		localAccommodation(14, "Casa da Ponte Fictícia", "family_hosting", 5, nil),
+		localAccommodation(15, "Sítio em Regularização Fictício", "regularizing", 12, nil),
+		localAccommodation(16, "Chácara Regularizando Fictícia", "regularizing", 9, nil),
+	}
 }
 
 func localAccommodation(
@@ -198,111 +218,11 @@ func metricMapping(category string) store.LocalDemoMetricMapping {
 	}
 }
 
-func stayFixtures(now time.Time, location *time.Location) []stayFixture {
-	today := civilDay(now, location)
-	previousMonth := today.AddDate(0, -1, -(today.Day() - 1))
-	result := make([]stayFixture, 0, 27)
-	result = append(
-		result,
-		historicalStayFixtures(now, today, previousMonth, location)...,
-	)
-	return append(result, currentStayFixtures(now, today)...)
-}
-
-func historicalStayFixtures(
-	now time.Time,
-	today time.Time,
-	previousMonth time.Time,
-	location *time.Location,
-) []stayFixture {
-	result := make([]stayFixture, 0, 24)
-	currentMonth := today.AddDate(0, 0, -(today.Day() - 1))
-	for week := 1; week <= 8; week++ {
-		for accommodation := 1; accommodation <= 3; accommodation++ {
-			index := (week-1)*3 + accommodation
-			arrival := currentMonth.AddDate(0, 0, -week*7)
-			clock, category := responseFixtureDetails(
-				index,
-				now,
-				previousMonth,
-				location,
-			)
-			result = append(result, stayFixture{
-				key: fmt.Sprintf(
-					"history-%s-%02d",
-					previousMonth.Format("2006-01"),
-					index,
-				),
-				accommodationID:  localAccommodationID(accommodation),
-				arrival:          arrival,
-				departure:        arrival.AddDate(0, 0, 1),
-				clock:            clock,
-				responseCategory: category,
-			})
-		}
-	}
-	return result
-}
-
-func currentStayFixtures(now, today time.Time) []stayFixture {
-	result := make([]stayFixture, 0, 3)
-	for accommodation := 1; accommodation <= 3; accommodation++ {
-		result = append(result, stayFixture{
-			key:             fmt.Sprintf("current-%02d", accommodation),
-			accommodationID: localAccommodationID(accommodation),
-			arrival:         today.AddDate(0, 0, -2),
-			departure:       today.AddDate(0, 0, 35),
-			clock:           now,
-			keepCheckedIn:   true,
-		})
-	}
-	return result
-}
-
-func responseFixtureDetails(
-	index int,
-	now time.Time,
-	previousMonth time.Time,
-	location *time.Location,
-) (time.Time, string) {
-	if index > 20 {
-		return now, ""
-	}
-	clock := civilNoon(previousMonth.AddDate(0, 0, index-1), location)
-	if index <= 10 {
-		return clock, "first_visit"
-	}
-	return clock, "returning"
-}
-
 func localAccommodationID(index int) uuid.UUID {
 	return uuid.MustParse(fmt.Sprintf(
 		"019fae11-0000-7000-8000-%012x",
 		index,
 	))
-}
-
-func fixtureVisitors(key string) []stay.Visitor {
-	result := make([]stay.Visitor, 0, 4)
-	for index := 1; index <= 4; index++ {
-		role := stay.VisitorCompanion
-		if index == 1 {
-			role = stay.VisitorResponsible
-		}
-		age := stay.Age25To34
-		if index%2 == 0 {
-			age = stay.Age35To44
-		}
-		result = append(result, stay.Visitor{
-			ClientID:          deterministicUUID("visitor-"+key, index).String(),
-			Role:              role,
-			AgeBand:           age,
-			ResidenceCountry:  "BR",
-			ResidenceState:    "BA",
-			ResidenceCityCode: "2925509",
-		})
-	}
-	return result
 }
 
 func deterministicUUID(namespace string, ordinal int) uuid.UUID {
