@@ -1,5 +1,11 @@
 services:
+  # Fixtures fictícias do operador: só o ambiente de teste precisa delas. Fora
+  # do perfil padrão para que `make up`/`make docker-dev` subam só com o
+  # administrador; quem depende delas ativa `--profile test` ou roda
+  # `make seed-test-fixtures`/os alvos que já fazem isso (smoke-local,
+  # analytics-full-stack, local-demo-e2e, self-service-full-stack).
   local-demo:
+    profiles: [test]
     image: "cumuru-api:${CUMURU_IMAGE_TAG:-0.2.0}"
     build:
       context: .
@@ -81,11 +87,13 @@ services:
     restart: "no"
     networks: [private]
 
-  # Semeadura de bootstrap sob demanda: `make seed`. Fica fora do perfil padrão
-  # porque `make up` já aplica as fixtures pelo local-demo; este serviço existe
-  # para exercitar localmente o mesmo binário que staging e produção executam.
+  # Bootstrap do administrador: incondicional. `make up`/`make docker-dev` o
+  # aplicam sempre, porque uma stack sem administrador não tem por onde entrar.
+  # SEED_PROFILE fixo em admin — as fixtures fictícias do operador são
+  # responsabilidade exclusiva do local-demo, atrás do perfil test, para que
+  # este serviço nunca as duplique. É o mesmo binário `/app/seed` que staging e
+  # produção executam.
   seed:
-    profiles: [seed]
     image: "cumuru-api:${CUMURU_IMAGE_TAG:-0.2.0}"
     build:
       context: .
@@ -98,7 +106,7 @@ services:
     environment:
       <<: *local-demo-environment
       SEED_ENABLED: "true"
-      SEED_PROFILE: "${SEED_PROFILE:-admin}"
+      SEED_PROFILE: admin
       SEED_ADMIN_EMAIL: "${SEED_ADMIN_EMAIL:?SEED_ADMIN_EMAIL is required}"
       SEED_ADMIN_PASSWORD: "${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD is required}"
       SEED_ADMIN_DISPLAY_NAME: "${SEED_ADMIN_DISPLAY_NAME:-Administração Cumuru}"
@@ -120,12 +128,12 @@ services:
     environment:
       ACCOMMODATION_ONBOARDING_ENABLED: "true"
     depends_on:
-      local-demo:
+      seed:
         condition: service_completed_successfully
 
   worker:
     depends_on:
-      local-demo:
+      seed:
         condition: service_completed_successfully
 
   web:
@@ -133,11 +141,16 @@ services:
       args:
         LOCAL_DEMO_PROXY_LOOPBACK: "true"
     healthcheck:
+      # /api/v1/public/summary exige uma publicação de analytics — hoje só
+      # existe com as fixtures do local-demo (perfil test), e o administrador
+      # sobe sozinho sem elas. platform/health não depende de dado nenhum,
+      # só do processo da API estar de pé; é o mesmo endpoint que smoke.sh usa
+      # no perfil base.
       test:
         - CMD-SHELL
         - >-
           curl --fail --silent --show-error
-          http://127.0.0.1:8080/api/v1/public/summary >/dev/null
+          http://127.0.0.1:8080/api/v1/platform/health >/dev/null
       interval: 2s
       timeout: 3s
       retries: 60

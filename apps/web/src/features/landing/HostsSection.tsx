@@ -1,13 +1,17 @@
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import { ImageSlot } from "./ImageSlot";
-import { HAMMOCK_PHOTO, HOST_BENEFITS } from "./landing-content";
+import {
+  CONTACT_EMAIL,
+  HAMMOCK_PHOTO,
+  HOST_BENEFITS,
+} from "./landing-content";
 import { SectionIndex } from "./SectionIndex";
 
 /**
- * O cartão de cadastro leva à área da hospedagem em vez de repetir um
- * formulário próprio: o cadastro real acontece lá, com validação e trilha de
- * auditoria. Um formulário de capa que não escreve em lugar nenhum prometeria
- * um envio que não existe.
+ * O cartão abre conversa com a equipe em vez de mandar para `/acesso`: hoje não
+ * existe autocadastro de hospedagem — a conta nasce de um link de ativação que
+ * a equipe emite —, então um botão para a tela de login deixaria quem ainda não
+ * tem conta num beco sem saída. O link de entrar fica embaixo, para quem já tem.
  */
 function RegisterCard() {
   const { t } = useLocale();
@@ -15,9 +19,12 @@ function RegisterCard() {
     <div className="lp-register" id="cadastro">
       <h3>{t("landing.register.title")}</h3>
       <p>{t("landing.register.body")}</p>
-      <a className="lp-button-dark" href="/acesso">
+      <a className="lp-button-dark" href={`mailto:${CONTACT_EMAIL}`}>
         {t("landing.register.action")}
       </a>
+      <p className="lp-register-footnote">
+        <a href="/acesso">{t("landing.register.signIn")}</a>
+      </p>
       <p className="lp-register-footnote">{t("landing.register.footnote")}</p>
     </div>
   );
@@ -48,10 +55,6 @@ export function HostsSection() {
               </li>
             ))}
           </ul>
-          <figure className="lp-quote">
-            <blockquote>{t("landing.hosts.quote")}</blockquote>
-            <figcaption>{t("landing.hosts.quoteCaption")}</figcaption>
-          </figure>
         </div>
         <div className="lp-hosts-aside">
           <div className="lp-hosts-portrait">
