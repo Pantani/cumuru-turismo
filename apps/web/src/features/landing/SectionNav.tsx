@@ -17,7 +17,8 @@ export function SectionNav() {
           </li>
         ))}
       </ul>
-      <a className="lp-section-nav-cta" href="/acesso">
+      {/* "Cadastrar hospedagem" é promessa de cadastro; entrar fica no menu. */}
+      <a className="lp-section-nav-cta" href="/convite">
         {t("landing.nav.register")}
       </a>
     </nav>

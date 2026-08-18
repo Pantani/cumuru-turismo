@@ -1,5 +1,13 @@
 -- Consolidated from 000005_audit_outbox_returning_grants.down.sql through 000001_initial_schema.down.sql (third pre-launch wave, reverse order). See ADR-032.
 
+DROP INDEX core.accommodation_access_requests_expiry_idx;
+DROP INDEX core.accommodation_access_requests_pending_email_idx;
+DROP INDEX core.accommodation_access_requests_pending_idx;
+DROP TABLE core.accommodation_access_requests;
+
+COMMIT;
+BEGIN;
+
 REVOKE SELECT (id) ON TABLE platform.outbox_events FROM app_runtime;
 REVOKE SELECT (id) ON TABLE platform.audit_events FROM app_runtime;
 

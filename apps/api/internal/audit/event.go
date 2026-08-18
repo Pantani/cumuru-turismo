@@ -90,6 +90,14 @@ const (
 	ActionQuestionnairePublished Action = "questionnaire.published"
 	ActionQuestionnaireRetired   Action = "questionnaire.retired"
 	ActionSurveyRecorded         Action = "survey_response.recorded"
+	// The access request has actions of its own because it is not an
+	// accommodation: it is born from an anonymous origin and may be refused.
+	// Reusing accommodation.created would put every refused attempt into the
+	// trail the rest of the system reads as a real registration (ADR-042).
+	ActionAccessRequestCreated  Action = "accommodation_access_request.created"
+	ActionAccessRequestApproved Action = "accommodation_access_request.approved"
+	ActionAccessRequestRejected Action = "accommodation_access_request.rejected"
+	ActionAccessRequestExpired  Action = "accommodation_access_request.expired"
 )
 
 type EntityType string
@@ -101,6 +109,10 @@ const (
 	EntityQuestionnaire        EntityType = "questionnaire"
 	EntityQuestionnaireVersion EntityType = "questionnaire_version"
 	EntitySurveyResponse       EntityType = "survey_response"
+	// EntityAccessRequest exists before any organization does, and a rejected or
+	// expired request never has one. That is why it joins the organization-less
+	// group of validOrganization.
+	EntityAccessRequest EntityType = "accommodation_access_request"
 )
 
 var actionEntities = map[Action]EntityType{
@@ -132,6 +144,10 @@ var actionEntities = map[Action]EntityType{
 	ActionQuestionnairePublished: EntityQuestionnaireVersion,
 	ActionQuestionnaireRetired:   EntityQuestionnaireVersion,
 	ActionSurveyRecorded:         EntitySurveyResponse,
+	ActionAccessRequestCreated:   EntityAccessRequest,
+	ActionAccessRequestApproved:  EntityAccessRequest,
+	ActionAccessRequestRejected:  EntityAccessRequest,
+	ActionAccessRequestExpired:   EntityAccessRequest,
 }
 
 type PurposeCode string
@@ -217,7 +233,8 @@ func validActorType(actorType ActorType) bool {
 func validOrganization(entity EntityType, organizationID uuid.UUID) bool {
 	global := entity == EntityQuestionnaire ||
 		entity == EntityQuestionnaireVersion ||
-		entity == EntitySurveyResponse
+		entity == EntitySurveyResponse ||
+		entity == EntityAccessRequest
 	return global == (organizationID == uuid.Nil)
 }
 

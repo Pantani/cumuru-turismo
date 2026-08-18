@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Pantani/cumuru/apps/api/internal/access"
+	"github.com/Pantani/cumuru/apps/api/internal/accessrequest"
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
 	"github.com/Pantani/cumuru/apps/api/internal/activation"
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
@@ -64,6 +65,7 @@ type Dependencies struct {
 	AccommodationOnboardingEnabled bool
 	Stays                          *stay.Service
 	SelfServiceEnabled             bool
+	AccessRequests                 *accessrequest.Service
 	Activation                     *activation.Service
 	Questionnaires                 *questionnaire.Service
 	PublicAnalytics                analytics.PublicReader
@@ -138,7 +140,8 @@ func (d Dependencies) resolveCursorCodec() (cursorCodec, error) {
 }
 
 func (d Dependencies) paginates() bool {
-	return d.Accommodations != nil || d.Stays != nil || d.Questionnaires != nil
+	return d.Accommodations != nil || d.Stays != nil ||
+		d.Questionnaires != nil || d.AccessRequests != nil
 }
 
 func (d Dependencies) registerPlatformRoutes(mux *http.ServeMux, metrics *httpMetrics) {
@@ -187,6 +190,9 @@ func (d Dependencies) registerOpenChannelRoutes(mux *http.ServeMux, metrics *htt
 	}
 	if d.Activation != nil {
 		d.registerActivationRoutes(mux, metrics)
+	}
+	if d.AccessRequests != nil {
+		d.registerAccessRequestRoutes(mux, metrics)
 	}
 }
 
@@ -514,7 +520,10 @@ type problemMapping struct {
 // more specific mapping always precedes a broader one.
 var serviceProblems = []problemMapping{
 	{http.StatusForbidden, "forbidden", "Operação não permitida",
-		[]error{accommodation.ErrForbidden, stay.ErrForbidden, activation.ErrForbidden}},
+		[]error{
+			accommodation.ErrForbidden, stay.ErrForbidden, activation.ErrForbidden,
+			accessrequest.ErrForbidden,
+		}},
 	// The refusal of a minor gets its own code so the form can point at the
 	// assisted channel. It depends only on the submitted body and never on
 	// pre-existing data about a subject, so it is not an oracle (T-02).
@@ -526,22 +535,26 @@ var serviceProblems = []problemMapping{
 			accommodation.ErrInvalidInput, stay.ErrInvalidInput,
 			questionnaire.ErrInvalidInput, activation.ErrInvalidInput,
 		}},
+	// The access request has no 422 in the contract: writeAccessRequestError
+	// intercepts ErrInvalidInput before this table and answers 400.
 	{http.StatusNotFound, "not-found", "Recurso não encontrado",
 		[]error{
 			accommodation.ErrNotFound, stay.ErrNotFound, questionnaire.ErrNotFound,
 			questionnaire.ErrCapabilityInvalid, activation.ErrNotFound,
+			accessrequest.ErrNotFound,
 		}},
 	{http.StatusPreconditionFailed, "precondition-failed", "Versão desatualizada",
 		[]error{
 			accommodation.ErrPreconditionFailed, stay.ErrPreconditionFailed,
 			questionnaire.ErrPreconditionFailed, activation.ErrPreconditionFailed,
+			accessrequest.ErrPreconditionFailed,
 		}},
 	{http.StatusConflict, "invite-consumed", "Convite já consumido",
 		[]error{stay.ErrInviteConsumed}},
 	{http.StatusConflict, "conflict", "Conflito de estado",
 		[]error{
 			accommodation.ErrConflict, stay.ErrConflict, questionnaire.ErrConflict,
-			activation.ErrConflict,
+			activation.ErrConflict, accessrequest.ErrConflict,
 		}},
 }
 
@@ -573,7 +586,9 @@ func (d Dependencies) writeRetryableError(
 ) bool {
 	var processing *idempotency.ProcessingError
 	switch {
-	case errors.Is(err, stay.ErrRateLimited), errors.Is(err, questionnaire.ErrRateLimited):
+	case errors.Is(err, stay.ErrRateLimited),
+		errors.Is(err, questionnaire.ErrRateLimited),
+		errors.Is(err, accessrequest.ErrRateLimited):
 		writer.Header().Set("Retry-After", "60")
 		writeProblem(writer, request, http.StatusTooManyRequests, "rate-limited", "Muitas tentativas")
 	case errors.As(err, &processing):

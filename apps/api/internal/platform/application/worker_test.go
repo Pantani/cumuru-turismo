@@ -25,13 +25,25 @@ type cleanupStub struct {
 }
 
 type expiredRecordCleanerStub struct {
-	results    []store.ExpiredRecordCleanupResult
-	errs       []error
-	calls      int
-	cutoffs    []time.Time
-	batchSizes []int32
-	cancel     context.CancelFunc
-	cancelAt   int
+	results        []store.ExpiredRecordCleanupResult
+	errs           []error
+	calls          int
+	cutoffs        []time.Time
+	batchSizes     []int32
+	cancel         context.CancelFunc
+	cancelAt       int
+	accessRequests int64
+	accessErr      error
+	accessCalls    int
+}
+
+func (s *expiredRecordCleanerStub) ExpireAccommodationAccessRequests(
+	_ context.Context,
+	_ time.Time,
+	_ int32,
+) (int64, error) {
+	s.accessCalls++
+	return s.accessRequests, s.accessErr
 }
 
 type analyticsWorkerStub struct {

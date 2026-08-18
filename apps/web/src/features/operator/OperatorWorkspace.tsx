@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuthSession } from "../../shared/auth/AuthSession";
+import { AccessRequestQueue } from "../access-request/AccessRequestQueue";
 import { AccommodationAccessPanel } from "../accommodation/AccommodationAccessPanel";
 import { ApprovalQueue } from "../approval/ApprovalQueue";
 import { AccommodationOnboarding } from "./AccommodationOnboarding";
@@ -39,6 +40,21 @@ function LoadFailure({ operation }: { operation: { message: string; tone: string
  * montado não dispara efeito, e efeito não disparado não gera `404`.
  */
 const SELF_SERVICE_SCOPE = "stays:approve";
+
+/**
+ * Aprovar um pedido cria a acomodação, então a fila custa a mesma permissão que
+ * criar o cadastro à mão: `accommodations:onboard` (ADR-042). O painel devolve
+ * `null` antes de montar, e painel não montado não dispara efeito nem `403`.
+ */
+const ACCESS_REQUEST_SCOPE = "accommodations:onboard";
+
+function AccessRequestPanel() {
+  const { hasScope } = useAuthSession();
+  if (!hasScope(ACCESS_REQUEST_SCOPE)) {
+    return null;
+  }
+  return <AccessRequestQueue />;
+}
 
 function SelfServicePanels({ accommodation }: { accommodation: Accommodation }) {
   const { hasScope } = useAuthSession();
@@ -114,6 +130,8 @@ export function OperatorWorkspace() {
           />
         ) : null}
       </section>
+
+      <AccessRequestPanel />
 
       {selected === null ? null : (
         <>

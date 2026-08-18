@@ -23,6 +23,11 @@ const (
 	// rotation, because issuing one does not bump the accommodation version.
 	AggregateAccommodationInvite     AggregateType = "accommodation_invite"
 	AggregateAccommodationActivation AggregateType = "accommodation_activation"
+	// The access request is an aggregate of its own: it exists before the
+	// accommodation and may never become one. Filing it under the accommodation
+	// would force inventing a registration identifier for the rejected request,
+	// which has none.
+	AggregateAccessRequest AggregateType = "accommodation_access_request"
 )
 
 type EventType string
@@ -57,6 +62,9 @@ const (
 	EventQuestionnairePublished             EventType = "questionnaire.published"
 	EventQuestionnaireRetired               EventType = "questionnaire.retired"
 	EventSurveyResponseRecorded             EventType = "survey_response.recorded"
+	EventAccessRequestCreated               EventType = "accommodation_access_request.created"
+	EventAccessRequestApproved              EventType = "accommodation_access_request.approved"
+	EventAccessRequestRejected              EventType = "accommodation_access_request.rejected"
 )
 
 var eventAggregates = map[EventType]AggregateType{
@@ -89,6 +97,9 @@ var eventAggregates = map[EventType]AggregateType{
 	EventQuestionnairePublished:             AggregateQuestionnaireVersion,
 	EventQuestionnaireRetired:               AggregateQuestionnaireVersion,
 	EventSurveyResponseRecorded:             AggregateSurveyResponse,
+	EventAccessRequestCreated:               AggregateAccessRequest,
+	EventAccessRequestApproved:              AggregateAccessRequest,
+	EventAccessRequestRejected:              AggregateAccessRequest,
 }
 
 type Event struct {

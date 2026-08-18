@@ -32,6 +32,7 @@ export const messagesEs: Messages = {
   "app.title.public": "Panel público del turismo",
   "app.title.registration": "Registro de visitantes",
   "app.title.selfRegistration": "Autorregistro por cartel",
+  "app.title.inviteRequest": "Solicitud de acceso",
   "app.title.activation": "Activación de la cuenta",
   "app.title.survey": "Encuesta al visitante",
   "app.title.workspace": "Área del alojamiento",
@@ -124,8 +125,8 @@ export const messagesEs: Messages = {
   // ---------------------------------------------------------- Landing: cadastro
   "landing.register.title": "Registre su alojamiento",
   "landing.register.body":
-    "Toma cinco minutos. Recibe el acceso al área del alojamiento y el código QR del mostrador el mismo día.",
-  "landing.register.action": "Ir al área del alojamiento",
+    "Toma cinco minutos. Cuenta cómo aloja, deja un contacto y la administración le envía por correo la invitación de acceso después de analizar la solicitud.",
+  "landing.register.action": "Solicitar mi acceso",
   "landing.register.footnote": "Sin costo. Puede salir cuando quiera.",
 
   // ---------------------------------------------------------- Landing: comércio
@@ -446,6 +447,137 @@ export const messagesEs: Messages = {
     "La verificación fue interrumpida. Envíe de nuevo cuando quiera.",
   "selfService.error.offline":
     "Sin conexión ahora. Lo que completó quedó guardado, cifrado, en este dispositivo.",
+
+  // ---------------------------------------------- Solicitud de acceso del alojamiento
+  "inviteRequest.eyebrow": "Registro de alojamiento",
+  "inviteRequest.pageTitle": "Solicite su acceso al Observatorio",
+  "inviteRequest.intro":
+    "Cuente quién es y cómo aloja. La administración analiza la solicitud y, si todo está en orden, le envía por correo la invitación para crear su acceso.",
+  "inviteRequest.loading": "Preparando el formulario…",
+  "inviteRequest.pending.title": "Formulario en preparación",
+  "inviteRequest.retry": "Intentar de nuevo",
+  "inviteRequest.formTitle": "Datos del alojamiento y del contacto",
+  "inviteRequest.privacyNote":
+    "Estos datos sirven solo para analizar la solicitud y comunicarnos con usted. Aviso de privacidad versión {version}.",
+  "inviteRequest.verifyingDevice": "Verificando este dispositivo…",
+  "inviteRequest.submit": "Enviar solicitud",
+  "inviteRequest.submitting": "Enviando…",
+
+  "inviteRequest.group.lodging": "Sobre el alojamiento",
+  "inviteRequest.group.contact": "Sobre quien responde",
+  "inviteRequest.field.name": "Nombre del alojamiento",
+  "inviteRequest.field.category": "Tipo de alojamiento",
+  "inviteRequest.field.capacity": "Cuántas personas aloja a la vez",
+  "inviteRequest.field.city": "Ciudad",
+  "inviteRequest.field.state": "Estado (dos letras)",
+  "inviteRequest.field.contactName": "Su nombre",
+  "inviteRequest.field.contactEmail": "Su correo electrónico",
+  "inviteRequest.field.contactPhone": "Su teléfono o WhatsApp (opcional)",
+
+  "inviteRequest.category.placeholder": "Elija una opción",
+  "inviteRequest.category.formalLodging": "Posada u hotel formal",
+  "inviteRequest.category.seasonalRental": "Alquiler de temporada",
+  "inviteRequest.category.familyHosting": "Alojamiento familiar",
+  "inviteRequest.category.camping": "Camping",
+  "inviteRequest.category.regularizing": "En proceso de regularización",
+  "inviteRequest.category.other": "Otro",
+
+  "inviteRequest.error.summary": "Falta corregir un campo antes de enviar.",
+  "inviteRequest.error.name":
+    "Escriba el nombre del alojamiento, con hasta 200 caracteres.",
+  "inviteRequest.error.category": "Elija un tipo de alojamiento de la lista.",
+  "inviteRequest.error.capacity":
+    "Indique cuántas personas aloja, de 1 a 10.000.",
+  "inviteRequest.error.city": "Escriba la ciudad, con hasta 120 caracteres.",
+  "inviteRequest.error.state":
+    "Escriba el estado con dos letras, como BA.",
+  "inviteRequest.error.contactName":
+    "Escriba su nombre, con hasta 120 caracteres.",
+  "inviteRequest.error.email":
+    "Escriba un correo válido, como nombre@ejemplo.com.",
+  "inviteRequest.error.phone":
+    "El teléfono puede tener como máximo 40 caracteres. Déjelo en blanco si prefiere.",
+  "inviteRequest.error.duplicate":
+    "Ya hay una solicitud en análisis para este correo. Espere la respuesta o indique otro correo.",
+  "inviteRequest.error.unprocessable":
+    "Algunos datos no fueron aceptados. Revise el formulario y envíelo de nuevo.",
+  "inviteRequest.error.rateLimited":
+    "Hubo demasiadas solicitudes desde esta red hace poco.",
+  "inviteRequest.error.proofOfWorkAborted":
+    "La verificación fue interrumpida. Envíe de nuevo cuando quiera.",
+  "inviteRequest.error.offline":
+    "Sin conexión ahora. Revise la internet y envíe de nuevo.",
+
+  "inviteRequest.completion.title": "Solicitud enviada",
+  "inviteRequest.completion.body":
+    "Recibimos su solicitud. La respuesta va a {email}.",
+  "inviteRequest.completion.review":
+    "La administración del Observatorio analiza cada solicitud, una por una.",
+  "inviteRequest.completion.noDeadline":
+    "No hay fecha fija para la respuesta: en cuanto termine el análisis, le avisamos.",
+  "inviteRequest.completion.keepEmail":
+    "Tenga ese correo a mano. Por ahí llega la invitación para crear su acceso.",
+  "inviteRequest.completion.back": "Volver a la página inicial",
+
+  // -------------------------- Cola de pedidos de acceso de la administración
+  "accessRequest.title": "Pedidos de acceso de alojamientos",
+  "accessRequest.hint":
+    "Pedidos enviados por la página pública de registro. Aprobar crea el alojamiento en el Observatorio; entregar el acceso sigue siendo un paso aparte, justo después.",
+  "accessRequest.refresh": "Actualizar la lista",
+  "accessRequest.loading": "Cargando los pedidos…",
+  "accessRequest.empty": "Ningún pedido en este momento.",
+  "accessRequest.filter.label": "Mostrar pedidos",
+  "accessRequest.state.pending": "Esperando decisión",
+  "accessRequest.state.approved": "Aprobado",
+  "accessRequest.state.rejected": "Rechazado",
+  "accessRequest.state.expired": "Vencido sin respuesta",
+  "accessRequest.field.category": "Tipo de alojamiento",
+  "accessRequest.field.capacity": "Personas alojadas a la vez",
+  "accessRequest.field.location": "Ciudad y estado",
+  "accessRequest.field.contactName": "Quién respondió",
+  "accessRequest.field.contactEmail": "Correo informado",
+  "accessRequest.field.contactPhone": "Teléfono informado",
+  "accessRequest.locationValue": "{city} ({state})",
+  "accessRequest.capacityValue.one": "1 persona",
+  "accessRequest.capacityValue.other": "{count} personas",
+  "accessRequest.waiting.now": "Llegó recién",
+  "accessRequest.waiting.hour.one": "Esperando desde hace 1 hora",
+  "accessRequest.waiting.hour.other": "Esperando desde hace {count} horas",
+  "accessRequest.waiting.day.one": "Esperando desde hace 1 día",
+  "accessRequest.waiting.day.other": "Esperando desde hace {count} días",
+  "accessRequest.expires": "Vence el {date}",
+  "accessRequest.contactErased":
+    "Los datos de contacto de este pedido ya fueron eliminados. Solo queda el registro de la decisión.",
+  "accessRequest.rejectedReason": "Motivo del rechazo: {reason}",
+  "accessRequest.approve": "Aprobar y registrar",
+  "accessRequest.reject": "Rechazar",
+  "accessRequest.rejection.title": "Motivo del rechazo",
+  "accessRequest.rejection.field": "Elija el motivo",
+  "accessRequest.rejection.warning":
+    "Al rechazar, el nombre, el correo y el teléfono de este pedido se borran de inmediato. No hay vuelta atrás: solo queda el registro de que hubo un rechazo y por qué.",
+  "accessRequest.rejection.confirm": "Confirmar el rechazo",
+  "accessRequest.rejection.cancel": "Volver",
+  "accessRequest.reason.duplicateRequest": "Pedido repetido",
+  "accessRequest.reason.notALodging": "No es un lugar de alojamiento",
+  "accessRequest.reason.insufficientInformation": "Faltan datos para decidir",
+  "accessRequest.reason.abuse": "Pedido indebido o abusivo",
+  "accessRequest.status.approving": "Aprobando el pedido…",
+  "accessRequest.status.rejecting": "Rechazando el pedido…",
+  "accessRequest.status.approved": "Pedido aprobado. El alojamiento quedó registrado.",
+  "accessRequest.status.rejected": "Pedido rechazado y datos de contacto borrados.",
+  "accessRequest.issuance.title": "Ahora entregue el acceso de {name}",
+  "accessRequest.issuance.hint":
+    "El nombre y el correo de abajo vinieron del propio pedido. Revíselos y emita el acceso.",
+  "accessRequest.issuance.unverifiedEmail":
+    "El sistema no verificó que ese correo sea de quien pidió; enviar el acceso es una decisión suya.",
+  "accessRequest.issuance.loading": "Abriendo el alojamiento recién registrado…",
+  "accessRequest.issuance.dismiss": "Emitir después",
+  "accessRequest.error.conflict":
+    "Alguien decidió sobre este pedido mientras usted trabajaba. Actualizamos la lista; revísela y repita la acción.",
+  "accessRequest.error.generic":
+    "No fue posible completar la acción. Actualice la lista e inténtelo de nuevo.",
+  "accessRequest.error.offline":
+    "No pudimos comunicarnos con el servicio. Nada se perdió: inténtelo de nuevo.",
 
   // -------------------------------------------------------- Copia de error de huésped
   "guestCopy.unexpectedFailure":

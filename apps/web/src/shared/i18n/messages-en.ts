@@ -32,6 +32,7 @@ export const messagesEn: Messages = {
   "app.title.public": "Public tourism dashboard",
   "app.title.registration": "Visitor registration",
   "app.title.selfRegistration": "Self-registration by poster",
+  "app.title.inviteRequest": "Access request",
   "app.title.activation": "Account activation",
   "app.title.survey": "Visitor survey",
   "app.title.workspace": "Lodging area",
@@ -121,8 +122,8 @@ export const messagesEn: Messages = {
   // ---------------------------------------------------------- Landing: cadastro
   "landing.register.title": "Register your lodging",
   "landing.register.body":
-    "It takes five minutes. You get your lodging area login and the front-desk QR code the same day.",
-  "landing.register.action": "Go to the lodging area",
+    "It takes five minutes. You describe how you host, leave a contact, and the administration emails you the access invitation once it has reviewed the request.",
+  "landing.register.action": "Request my access",
   "landing.register.footnote": "No cost. You can leave whenever you like.",
 
   // ---------------------------------------------------------- Landing: comércio
@@ -436,6 +437,137 @@ export const messagesEn: Messages = {
     "The verification was interrupted. Submit again whenever you like.",
   "selfService.error.offline":
     "No connection right now. What you filled in was kept, encrypted, on this device.",
+
+  // ------------------------------------------------- Lodging access request
+  "inviteRequest.eyebrow": "Lodging registration",
+  "inviteRequest.pageTitle": "Request your access to the Observatory",
+  "inviteRequest.intro":
+    "Tell us who you are and how you host. The administration reviews the request and, if everything checks out, emails you the invitation to create your access.",
+  "inviteRequest.loading": "Preparing the form…",
+  "inviteRequest.pending.title": "Form being prepared",
+  "inviteRequest.retry": "Try again",
+  "inviteRequest.formTitle": "Lodging and contact details",
+  "inviteRequest.privacyNote":
+    "These details are used only to review the request and to reach you. Privacy notice version {version}.",
+  "inviteRequest.verifyingDevice": "Checking this device…",
+  "inviteRequest.submit": "Send request",
+  "inviteRequest.submitting": "Sending…",
+
+  "inviteRequest.group.lodging": "About the lodging",
+  "inviteRequest.group.contact": "About who is answering",
+  "inviteRequest.field.name": "Lodging name",
+  "inviteRequest.field.category": "Type of lodging",
+  "inviteRequest.field.capacity": "How many people you host at once",
+  "inviteRequest.field.city": "City",
+  "inviteRequest.field.state": "State (two letters)",
+  "inviteRequest.field.contactName": "Your name",
+  "inviteRequest.field.contactEmail": "Your email",
+  "inviteRequest.field.contactPhone": "Your phone or WhatsApp (optional)",
+
+  "inviteRequest.category.placeholder": "Choose an option",
+  "inviteRequest.category.formalLodging": "Formal inn or hotel",
+  "inviteRequest.category.seasonalRental": "Seasonal rental",
+  "inviteRequest.category.familyHosting": "Family hosting",
+  "inviteRequest.category.camping": "Camping",
+  "inviteRequest.category.regularizing": "Being formalised",
+  "inviteRequest.category.other": "Other",
+
+  "inviteRequest.error.summary": "One field still needs fixing before sending.",
+  "inviteRequest.error.name":
+    "Write the lodging name, up to 200 characters.",
+  "inviteRequest.error.category": "Choose a type of lodging from the list.",
+  "inviteRequest.error.capacity":
+    "Tell us how many people you host, from 1 to 10,000.",
+  "inviteRequest.error.city": "Write the city, up to 120 characters.",
+  "inviteRequest.error.state":
+    "Write the two-letter state code, such as BA.",
+  "inviteRequest.error.contactName":
+    "Write your name, up to 120 characters.",
+  "inviteRequest.error.email":
+    "Write a valid email, such as name@example.com.",
+  "inviteRequest.error.phone":
+    "The phone number can have at most 40 characters. Leave it blank if you prefer.",
+  "inviteRequest.error.duplicate":
+    "There is already a request under review for this email. Wait for the answer or use another email.",
+  "inviteRequest.error.unprocessable":
+    "Some details were not accepted. Review the form and send it again.",
+  "inviteRequest.error.rateLimited":
+    "There were too many requests from this network a moment ago.",
+  "inviteRequest.error.proofOfWorkAborted":
+    "The verification was interrupted. Send it again whenever you like.",
+  "inviteRequest.error.offline":
+    "No connection right now. Check the internet and send it again.",
+
+  "inviteRequest.completion.title": "Request sent",
+  "inviteRequest.completion.body":
+    "We received your request. The answer goes to {email}.",
+  "inviteRequest.completion.review":
+    "The Observatory administration reviews each request, one by one.",
+  "inviteRequest.completion.noDeadline":
+    "There is no set date for the answer: as soon as the review is done, you are notified.",
+  "inviteRequest.completion.keepEmail":
+    "Keep that email at hand. It is where the invitation to create your access arrives.",
+  "inviteRequest.completion.back": "Back to the home page",
+
+  // ------------------------------------- Administration access-request queue
+  "accessRequest.title": "Lodging access requests",
+  "accessRequest.hint":
+    "Requests sent through the public sign-up page. Approving creates the lodging in the Observatory; handing over the access is a separate step, right after.",
+  "accessRequest.refresh": "Refresh the list",
+  "accessRequest.loading": "Loading the requests…",
+  "accessRequest.empty": "No requests right now.",
+  "accessRequest.filter.label": "Show requests",
+  "accessRequest.state.pending": "Awaiting a decision",
+  "accessRequest.state.approved": "Approved",
+  "accessRequest.state.rejected": "Refused",
+  "accessRequest.state.expired": "Expired with no answer",
+  "accessRequest.field.category": "Type of lodging",
+  "accessRequest.field.capacity": "People hosted at one time",
+  "accessRequest.field.location": "City and state",
+  "accessRequest.field.contactName": "Who answered",
+  "accessRequest.field.contactEmail": "Email given",
+  "accessRequest.field.contactPhone": "Phone given",
+  "accessRequest.locationValue": "{city} ({state})",
+  "accessRequest.capacityValue.one": "1 person",
+  "accessRequest.capacityValue.other": "{count} people",
+  "accessRequest.waiting.now": "Just arrived",
+  "accessRequest.waiting.hour.one": "Waiting for 1 hour",
+  "accessRequest.waiting.hour.other": "Waiting for {count} hours",
+  "accessRequest.waiting.day.one": "Waiting for 1 day",
+  "accessRequest.waiting.day.other": "Waiting for {count} days",
+  "accessRequest.expires": "Expires on {date}",
+  "accessRequest.contactErased":
+    "The contact details of this request have already been erased. Only the record of the decision remains.",
+  "accessRequest.rejectedReason": "Reason for refusal: {reason}",
+  "accessRequest.approve": "Approve and register",
+  "accessRequest.reject": "Refuse",
+  "accessRequest.rejection.title": "Reason for refusal",
+  "accessRequest.rejection.field": "Choose the reason",
+  "accessRequest.rejection.warning":
+    "Refusing erases the name, email and phone of this request right away. There is no undo: only the record that a refusal happened, and why.",
+  "accessRequest.rejection.confirm": "Confirm refusal",
+  "accessRequest.rejection.cancel": "Back",
+  "accessRequest.reason.duplicateRequest": "Repeated request",
+  "accessRequest.reason.notALodging": "Not a place that hosts people",
+  "accessRequest.reason.insufficientInformation": "Not enough information to decide",
+  "accessRequest.reason.abuse": "Improper or abusive request",
+  "accessRequest.status.approving": "Approving the request…",
+  "accessRequest.status.rejecting": "Refusing the request…",
+  "accessRequest.status.approved": "Request approved. The lodging has been registered.",
+  "accessRequest.status.rejected": "Request refused and contact details erased.",
+  "accessRequest.issuance.title": "Now hand over the access for {name}",
+  "accessRequest.issuance.hint":
+    "The name and email below came from the request itself. Check them and issue the access.",
+  "accessRequest.issuance.unverifiedEmail":
+    "The system did not check that this email really belongs to whoever asked; sending the access is your call.",
+  "accessRequest.issuance.loading": "Opening the newly registered lodging…",
+  "accessRequest.issuance.dismiss": "Issue later",
+  "accessRequest.error.conflict":
+    "Someone decided on this request while you were working. We refreshed the list; check it and repeat the action.",
+  "accessRequest.error.generic":
+    "The action could not be completed. Refresh the list and try again.",
+  "accessRequest.error.offline":
+    "We could not reach the service. Nothing was lost — try again.",
 
   // ------------------------------------------------------------- Guest error copy
   "guestCopy.unexpectedFailure":

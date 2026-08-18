@@ -98,6 +98,9 @@ const (
 	OperationApproveStay                 Operation = "approveStay"
 	OperationRejectStay                  Operation = "rejectStay"
 	OperationCreateActivation            Operation = "createAccommodationActivation"
+	OperationCreateAccessRequest         Operation = "createAccommodationAccessRequest"
+	OperationApproveAccessRequest        Operation = "approveAccommodationAccessRequest"
+	OperationRejectAccessRequest         Operation = "rejectAccommodationAccessRequest"
 )
 
 // The allow-list is explicit rather than derived, so adding a constant without
@@ -127,6 +130,9 @@ var validOperations = map[Operation]bool{
 	OperationApproveStay:                 true,
 	OperationRejectStay:                  true,
 	OperationCreateActivation:            true,
+	OperationCreateAccessRequest:         true,
+	OperationApproveAccessRequest:        true,
+	OperationRejectAccessRequest:         true,
 }
 
 // Valid reports whether the operation may be recorded against an idempotency

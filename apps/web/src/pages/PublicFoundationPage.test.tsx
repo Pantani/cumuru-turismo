@@ -86,6 +86,23 @@ describe("capa pública do observatório", () => {
     }
   });
 
+  // Quem chega pela capa ainda não tem conta: um CTA de cadastro apontando
+  // para a tela de login terminava numa parede de credencial.
+  it("manda todo convite ao cadastro para o pedido de acesso, não para o login", () => {
+    renderPage();
+
+    for (const name of [
+      "Cadastrar minha hospedagem",
+      "Cadastrar hospedagem",
+      "Pedir meu acesso",
+    ]) {
+      expect(screen.getByRole("link", { name })).toHaveAttribute(
+        "href",
+        "/convite",
+      );
+    }
+  });
+
   it("liga os guias aos PDFs servidos pela aplicação", () => {
     renderPage();
 

@@ -201,3 +201,65 @@ func assertContainsAll(t *testing.T, content string, snippets ...string) {
 		}
 	}
 }
+
+// The erasure of the contact lives in the SQL itself rather than in an
+// application step: the decision constraint refuses 'rejected' and 'expired'
+// rows still carrying a name, e-mail or phone, so the purge cannot be forgotten
+// by some path through the code (ADR-042).
+func TestAccessRequestDecisionsEraseTheContactInSQL(t *testing.T) {
+	t.Parallel()
+
+	content := readSQL(t, "access_request.sql")
+	for _, name := range []string{
+		"RejectAccommodationAccessRequest",
+		"ExpireAccommodationAccessRequests",
+	} {
+		assertContainsAll(t, namedQuery(t, content, name),
+			"contact_name = NULL",
+			"contact_email = NULL",
+			"contact_phone = NULL",
+		)
+	}
+}
+
+// The worker sweep stays inside the column-by-column grant: it does not read the
+// contact it erases, does not read version — which is why version is not
+// incremented — and returns only the id. Without a batch and without SKIP
+// LOCKED, one cycle would hold the whole table.
+func TestAccessRequestExpirySweepStaysInsideTheWorkerGrant(t *testing.T) {
+	t.Parallel()
+
+	sweep := namedQuery(t, readSQL(t, "access_request.sql"),
+		"ExpireAccommodationAccessRequests")
+	assertContainsAll(t, sweep,
+		"candidate.approval_state = 'pending'",
+		"candidate.expires_at < sqlc.arg(cutoff)",
+		"LIMIT sqlc.arg(batch_size)",
+		"FOR UPDATE SKIP LOCKED",
+		"RETURNING request.id",
+	)
+	assertSQLDoesNotContain(t, sweep,
+		"version = request.version + 1",
+		"decided_at",
+		"decided_by_oidc_issuer",
+	)
+}
+
+// Every decision is gated by the expected version and by the pending state:
+// without both conditions, approving an already rejected request would take
+// effect.
+func TestAccessRequestDecisionsDemandThePendingStateAndTheVersion(t *testing.T) {
+	t.Parallel()
+
+	content := readSQL(t, "access_request.sql")
+	for _, name := range []string{
+		"ApproveAccommodationAccessRequest",
+		"RejectAccommodationAccessRequest",
+	} {
+		assertContainsAll(t, namedQuery(t, content, name),
+			"request.version = sqlc.arg(expected_version)",
+			"request.approval_state = 'pending'",
+			"version = request.version + 1",
+		)
+	}
+}
