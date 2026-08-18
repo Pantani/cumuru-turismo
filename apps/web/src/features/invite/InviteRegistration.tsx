@@ -17,6 +17,8 @@ import { normalizedVisitor } from "../visitors/visitor-input";
 import { ApiError } from "../../shared/api/http-client";
 import { createCoreClient } from "../../shared/api/core-client";
 import { guestCopyFor } from "../../shared/forms/guest-copy";
+import { useLocale } from "../../shared/i18n/LocaleProvider";
+import type { Translate } from "../../shared/i18n/translate";
 import {
   deleteDraft,
   loadDraft,
@@ -82,11 +84,11 @@ const guestMessages: Readonly<Record<number, string>> = {
   429: "Já houve envios demais desta rede agora há pouco.",
 };
 
-function errorMessage(error: unknown) {
+function errorMessage(t: Translate, error: unknown) {
   if (!(error instanceof ApiError)) {
     return "Sem conexão. O rascunho foi preservado neste dispositivo.";
   }
-  return guestCopyFor(error, guestMessages);
+  return guestCopyFor(t, error, guestMessages);
 }
 
 async function removeDraft(id: string | null) {
@@ -179,6 +181,7 @@ export function RegistrationCompletion({
 }
 
 async function recoverSubmission(
+  t: Translate,
   error: unknown,
   draftId: string | null,
   inviteWasValidated: boolean,
@@ -193,7 +196,7 @@ async function recoverSubmission(
   if (error instanceof ApiError && error.status === 404) {
     actions.clearExpired();
   }
-  actions.setMessage(errorMessage(error));
+  actions.setMessage(errorMessage(t, error));
 }
 
 async function purgeInitialInviteIfMissing(
@@ -209,6 +212,7 @@ async function purgeInitialInviteIfMissing(
 }
 
 export function InviteRegistration() {
+  const { t } = useLocale();
   const [context, setContext] = useState<InviteContext | null>(null);
   const [visitors, setVisitors] = useState<VisitorInput[]>(() => [
     createVisitor("responsible"),
@@ -264,7 +268,7 @@ export function InviteRegistration() {
             setDraftId(null);
             setContext(null);
           }
-          setMessage(errorMessage(error));
+          setMessage(errorMessage(t, error));
         }
       });
     return () => {
@@ -333,6 +337,7 @@ export function InviteRegistration() {
       setContext(null);
     } catch (error) {
       await recoverSubmission(
+        t,
         error,
         draftId,
         context !== null,
@@ -349,7 +354,7 @@ export function InviteRegistration() {
     } finally {
       setSubmitting(false);
     }
-  }, [context, draftId, payload, persistDraft]);
+  }, [context, draftId, payload, persistDraft, t]);
 
   useEffect(() => {
     if (draftId === null) {

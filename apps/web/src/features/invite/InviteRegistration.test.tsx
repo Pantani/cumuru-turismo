@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -10,6 +11,7 @@ import {
   peekInviteCapability,
 } from "../../shared/security/invite-capability";
 import RegistrationPage from "../../pages/RegistrationPage";
+import { LocaleProvider } from "../../shared/i18n/LocaleProvider";
 import {
   clearSurveyCapability,
   setSurveyCapability,
@@ -19,6 +21,10 @@ import {
   inspectDraftPresence,
   saveDraft,
 } from "../../shared/offline/encrypted-drafts";
+
+function renderRegistration(element: ReactElement) {
+  return render(<LocaleProvider initial="pt">{element}</LocaleProvider>);
+}
 
 const capability = "z".repeat(64);
 const inviteContext = {
@@ -80,7 +86,9 @@ describe("registro por convite", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <RegistrationPage />
+        <LocaleProvider initial="pt">
+          <RegistrationPage />
+        </LocaleProvider>
       </QueryClientProvider>,
     );
 
@@ -93,7 +101,7 @@ describe("registro por convite", () => {
   });
 
   it("falha fechada quando não existe capability em memória", () => {
-    render(<RegistrationPage />);
+    renderRegistration(<RegistrationPage />);
 
     expect(
       screen.getByRole("heading", { name: "Convite necessário" }),
@@ -103,7 +111,7 @@ describe("registro por convite", () => {
   it("preserva a confirmação após consumir o convite", () => {
     setSurveyCapability("payload.signature");
 
-    render(<RegistrationPage />);
+    renderRegistration(<RegistrationPage />);
 
     expect(
       screen.getByRole("heading", { name: "Registro concluído" }),
@@ -114,7 +122,7 @@ describe("registro por convite", () => {
   });
 
   it("não apresenta violações axe sem convite", async () => {
-    const { container } = render(<RegistrationPage />);
+    const { container } = renderRegistration(<RegistrationPage />);
 
     const report = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },
@@ -129,7 +137,7 @@ describe("registro por convite", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       coreResponse(inviteContext),
     );
-    render(<RegistrationPage />);
+    renderRegistration(<RegistrationPage />);
     await screen.findByRole("heading", {
       name: "Confirme o grupo da estadia",
     });
@@ -168,7 +176,7 @@ describe("registro por convite", () => {
             },
           ),
         );
-      render(<RegistrationPage />);
+      renderRegistration(<RegistrationPage />);
       await screen.findByRole("heading", {
         name: "Confirme o grupo da estadia",
       });
@@ -216,7 +224,7 @@ describe("registro por convite", () => {
           },
         ),
       );
-    render(<RegistrationPage />);
+    renderRegistration(<RegistrationPage />);
     await screen.findByRole("heading", {
       name: "Confirme o grupo da estadia",
     });
@@ -251,7 +259,7 @@ describe("registro por convite", () => {
           },
         ),
       );
-    render(<RegistrationPage />);
+    renderRegistration(<RegistrationPage />);
     await screen.findByRole("heading", {
       name: "Confirme o grupo da estadia",
     });
@@ -286,7 +294,7 @@ describe("registro por convite", () => {
           },
         ),
       );
-    render(<RegistrationPage />);
+    renderRegistration(<RegistrationPage />);
     await screen.findByRole("heading", {
       name: "Confirme o grupo da estadia",
     });
@@ -336,7 +344,7 @@ describe("registro por convite", () => {
       ),
     );
 
-    render(<RegistrationPage />);
+    renderRegistration(<RegistrationPage />);
 
     await screen.findByText("Convite expirado.");
     expect(peekInviteCapability()).toBeNull();
@@ -358,7 +366,7 @@ describe("registro por convite", () => {
       ),
     );
 
-    render(<RegistrationPage />);
+    renderRegistration(<RegistrationPage />);
 
     expect(
       await screen.findByText(/Não conseguimos falar com o serviço/u),
@@ -395,7 +403,7 @@ describe("registro por convite", () => {
         ),
       );
 
-      render(<RegistrationPage />);
+      renderRegistration(<RegistrationPage />);
 
       expect(
         await screen.findByText(new RegExp(expectedCopy, "u")),
@@ -411,7 +419,7 @@ describe("registro por convite", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       coreResponse(inviteContext),
     );
-    const { container } = render(<RegistrationPage />);
+    const { container } = renderRegistration(<RegistrationPage />);
     await screen.findByRole("heading", {
       name: "Confirme o grupo da estadia",
     });

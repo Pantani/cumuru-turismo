@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -33,8 +32,18 @@ const (
 	maxBufferedResponseBytes = 1 << 20
 )
 
-var safeRequestID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$`)
 var errResponseTooLarge = errors.New("response exceeds bounded buffer")
+
+// clientRequestIDValid decides whether a client-supplied X-Request-ID is honored
+// instead of a server-generated one. It used to accept any value matching a wide
+// charset (8-128 chars of letters, digits, '.', '_', ':', '-'), which made the
+// header a free-form content channel into platform.audit_events — an append-only
+// table with no DELETE. A UUID has no room to carry a message: requiring one
+// keeps client correlation working end to end while closing that channel.
+func clientRequestIDValid(value string) bool {
+	_, err := uuid.Parse(value)
+	return err == nil
+}
 
 type ReadinessChecker interface {
 	CheckReadiness(context.Context) error
@@ -268,7 +277,7 @@ func hasAnyScope(principal access.Principal, scopes []string) bool {
 func (d Dependencies) withRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requestID := request.Header.Get("X-Request-ID")
-		if !safeRequestID.MatchString(requestID) {
+		if !clientRequestIDValid(requestID) {
 			id, err := uuid.NewV7()
 			if err != nil {
 				id = uuid.New()
@@ -345,7 +354,7 @@ func resetToSafeHeaders(header http.Header) {
 	requestID := header.Get("X-Request-ID")
 	cacheControl := header.Get("Cache-Control")
 	clear(header)
-	if safeRequestID.MatchString(requestID) {
+	if clientRequestIDValid(requestID) {
 		header.Set("X-Request-ID", requestID)
 	}
 	if cacheControl == "no-store" {

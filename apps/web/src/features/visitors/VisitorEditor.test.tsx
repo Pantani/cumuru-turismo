@@ -1,12 +1,18 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { type ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { LocaleProvider } from "../../shared/i18n/LocaleProvider";
 import {
   createVisitor,
   VisitorEditor,
   type VisitorEditorHandle,
 } from "./VisitorEditor";
+
+function renderVisitorEditor(element: ReactElement) {
+  return render(<LocaleProvider initial="pt">{element}</LocaleProvider>);
+}
 
 describe("editor compartilhado de visitantes", () => {
   afterEach(cleanup);
@@ -16,7 +22,7 @@ describe("editor compartilhado de visitantes", () => {
     const onChange = vi.fn();
     const initial = [createVisitor("responsible")];
 
-    render(<VisitorEditor visitors={initial} onChange={onChange} />);
+    renderVisitorEditor(<VisitorEditor visitors={initial} onChange={onChange} />);
 
     const ageBand = screen.getByLabelText("Faixa etária do visitante 1");
     expect(
@@ -50,7 +56,7 @@ describe("editor compartilhado de visitantes", () => {
     const visitors = Array.from({ length: 100 }, (_, index) =>
       createVisitor(index === 0 ? "responsible" : "companion"),
     );
-    const { rerender } = render(
+    const { rerender } = renderVisitorEditor(
       <VisitorEditor visitors={initial} onChange={vi.fn()} />,
     );
 
@@ -58,7 +64,11 @@ describe("editor compartilhado de visitantes", () => {
       screen.getByRole("button", { name: "Remover visitante 1" }),
     ).toBeDisabled();
 
-    rerender(<VisitorEditor visitors={visitors} onChange={vi.fn()} />);
+    rerender(
+      <LocaleProvider initial="pt">
+        <VisitorEditor visitors={visitors} onChange={vi.fn()} />
+      </LocaleProvider>,
+    );
 
     expect(
       screen.getByRole("button", { name: "Adicionar visitante" }),
@@ -67,7 +77,7 @@ describe("editor compartilhado de visitantes", () => {
 
   it("marca e foca o primeiro campo inválido", () => {
     const handle = { current: null as VisitorEditorHandle | null };
-    render(
+    renderVisitorEditor(
       <VisitorEditor
         ref={handle}
         visitors={[createVisitor("responsible")]}

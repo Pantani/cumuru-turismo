@@ -1,5 +1,84 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+// axe's `color-contrast` rule needs real layout and paint to resolve a
+// stacking context's composed background, which jsdom never provides — the
+// unit suites measured `violations: 0, incomplete: 1, passes: 0` under jsdom
+// and disabled the rule there for that reason (see
+// shared/theme/status-contrast.test.ts). Chromium here has real layout, so
+// this is the one place the rule can actually reprove a regression instead of
+// rubber-stamping one.
+const AXE_CORE_PATH = require.resolve("axe-core/axe.min.js");
+
+interface AxeViolationNode {
+  failureSummary: string | null;
+  html: string;
+}
+
+interface AxeViolation {
+  id: string;
+  nodes: AxeViolationNode[];
+}
+
+interface AxeResult {
+  violations: AxeViolation[];
+}
+
+interface AxeRunner {
+  run(
+    context: Document,
+    options: { runOnly: { type: "rule"; values: string[] } },
+  ): Promise<AxeResult>;
+}
+
+declare global {
+  interface Window {
+    axe?: AxeRunner;
+  }
+}
+
+/**
+ * Runs axe's `color-contrast` rule against whatever is on screen right now
+ * and fails the test with the violated nodes' HTML and failure summary if any
+ * text fails WCAG contrast. Scoped to this one rule: the rest of the axe
+ * ruleset is exercised in the jsdom-based component suites, and duplicating
+ * it here would just slow this journey down without adding coverage.
+ */
+const AXE_CORE_ROUTE = "/__axe-core__.js";
+
+async function expectNoColorContrastViolations(page: Page, label: string) {
+  // The site's CSP is `script-src 'self'` with no 'unsafe-inline' (proven
+  // earlier in this same spec), and Playwright's addScriptTag always injects
+  // an inline <script> when given a local `path`— the browser blocks that
+  // outright. Routing axe-core through a same-origin URL keeps the script
+  // request inside 'self' instead of asking the app to relax its policy for
+  // a test harness.
+  await page.route(AXE_CORE_ROUTE, async (route) => {
+    await route.fulfill({
+      contentType: "application/javascript",
+      path: AXE_CORE_PATH,
+    });
+  });
+  await page.addScriptTag({ url: AXE_CORE_ROUTE });
+  await page.unroute(AXE_CORE_ROUTE);
+  const violations = await page.evaluate(async () => {
+    const axe = window.axe;
+    if (axe === undefined) {
+      throw new Error("axe-core did not attach to window");
+    }
+    const result = await axe.run(document, {
+      runOnly: { type: "rule", values: ["color-contrast"] },
+    });
+    return result.violations.map((violation) => ({
+      id: violation.id,
+      nodes: violation.nodes.map((node) => ({
+        html: node.html,
+        failureSummary: node.failureSummary,
+      })),
+    }));
+  });
+  expect(violations, `color-contrast violations at "${label}"`).toEqual([]);
+}
+
 const accommodationRequestFields = [
   "capacity",
   "category",
@@ -226,6 +305,12 @@ test("percorre a jornada local sem persistir authorities", async ({
   await expect(
     page.getByText("Não foi possível carregar os indicadores públicos."),
   ).toHaveCount(0);
+  // Not checked here: the landing page has a pre-existing, unrelated
+  // color-contrast defect (coral index numbers/accents on cream backgrounds,
+  // e.g. `.lp-index-number`, `.lp-step-number`, `.lp-accent` in styles.css) that
+  // axe caught the moment this rule was turned on. It predates this change,
+  // is outside Fase 7 scope, and fixing brand colors needs design sign-off —
+  // flagged separately rather than silently scoped out.
 
   await page.goto("/acesso");
   await signIn(page);
@@ -241,6 +326,11 @@ test("percorre a jornada local sem persistir authorities", async ({
   await expect(
     page.getByRole("region", { name: /^Estadias de / }),
   ).toBeVisible();
+  // Not checked here: this operator workspace screen predates Fase 7 and has
+  // its own pre-existing, unrelated color-contrast defect (`.property-capacity`
+  // muted text at ~2.67:1 against the panel background in styles.css) that axe
+  // caught the moment this rule was turned on. Flagged separately; the four
+  // Fase 7 screens below are what this debt item asked for.
 
   const familyName = "Casa Horizonte Fictícia E2E";
   const formalName = "Pousada Mar Azul Fictícia E2E";
@@ -371,6 +461,7 @@ test("percorre a jornada local sem persistir authorities", async ({
   await expect(
     page.getByRole("group", { name: "Cartaz pronto para impressão" }),
   ).toBeVisible();
+  await expectNoColorContrastViolations(page, "poster panel");
 
   await page.goto(`/i#${posterToken}`);
   await expect(
@@ -379,6 +470,9 @@ test("percorre a jornada local sem persistir authorities", async ({
   await expect(
     page.getByRole("heading", { name: "Confirme os dados da estadia" }),
   ).toBeVisible();
+  // /i is the one Fase 7 screen a guest — not an operator — ever sees, so its
+  // contrast matters more than any of the operator-only ones.
+  await expectNoColorContrastViolations(page, "self-service form (/i)");
 
   await page.getByLabel("Data de chegada").fill("2026-11-03");
   await page.getByLabel("Data de saída").fill("2026-11-07");
@@ -410,6 +504,7 @@ test("percorre a jornada local sem persistir authorities", async ({
   await expect(
     page.getByRole("heading", { name: "Autocadastro enviado" }),
   ).toBeVisible();
+  await expectNoColorContrastViolations(page, "self-service submission receipt");
 
   // A sessão vive só na memória da aba, então voltar exige entrar de novo.
   const workspaceAgain = await ensureWorkspace(page);
@@ -419,6 +514,7 @@ test("percorre a jornada local sem persistir authorities", async ({
   await expect(queue).toBeVisible();
   const pending = queue.getByRole("listitem").first();
   await expect(pending).toBeVisible();
+  await expectNoColorContrastViolations(page, "approval queue");
 
   const approveResponsePromise = page.waitForResponse((response) =>
     response.request().method() === "POST" &&
@@ -430,6 +526,7 @@ test("percorre a jornada local sem persistir authorities", async ({
   await expect(
     page.getByRole("group", { name: "Autocadastro aprovado" }),
   ).toBeVisible();
+  await expectNoColorContrastViolations(page, "approval confirmation");
 
   await page.evaluate(async () => {
     if ("serviceWorker" in navigator) {

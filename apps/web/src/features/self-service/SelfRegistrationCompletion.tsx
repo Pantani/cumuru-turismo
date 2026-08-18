@@ -1,6 +1,8 @@
+import { useLocale } from "../../shared/i18n/LocaleProvider";
 import { peekSurveyCapability } from "../../shared/security/survey-capability";
 
 function SurveyContinuation() {
+  const { t } = useLocale();
   if (peekSurveyCapability() === null) {
     return null;
   }
@@ -13,7 +15,7 @@ function SurveyContinuation() {
         window.dispatchEvent(new PopStateEvent("popstate"));
       }}
     >
-      Responder pesquisa voluntária
+      {t("selfService.completion.continueSurvey")}
     </button>
   );
 }
@@ -24,13 +26,12 @@ function SurveyContinuation() {
  * personal field, and this screen must not create a reason for it to.
  */
 export function SelfRegistrationCompletion() {
+  const { t } = useLocale();
   return (
     <section className="form-card" aria-labelledby="self-registration-done">
-      <h2 id="self-registration-done">Autocadastro enviado</h2>
+      <h2 id="self-registration-done">{t("selfService.completion.title")}</h2>
       <p role="status" aria-live="polite">
-        A hospedagem precisa aprovar este cadastro. Se ninguém decidir em 72
-        horas, o pedido expira e os dados enviados são eliminados. Nada entra em
-        estatística ou no painel público antes da aprovação.
+        {t("selfService.completion.body")}
       </p>
       <SurveyContinuation />
     </section>

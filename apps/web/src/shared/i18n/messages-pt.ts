@@ -394,6 +394,84 @@ export const messagesPt = {
   "analytics.delta.above": "{percent}% acima da média de referência",
   "analytics.delta.below": "{percent}% abaixo da média de referência",
   "analytics.trend.value": "{sign}{percent}% ante os {size} dias anteriores",
+
+  // -------------------------------------------------- Autocadastro pelo cartaz
+  "selfService.posterRequired.title": "Cartaz necessário",
+  "selfService.posterRequired.body":
+    "Leia o código QR exposto pela hospedagem. O token fica no fragmento do endereço, nunca é enviado ao servidor e é apagado da barra de endereço antes desta página aparecer.",
+  "selfService.eyebrow": "Cartaz da hospedagem",
+  "selfService.pageTitle": "Autocadastro pelo cartaz",
+  "selfService.validating": "Validando o cartaz…",
+  "selfService.pending.title": "Cartaz em validação",
+  "selfService.retry": "Tentar de novo",
+  "selfService.verifyingDevice": "Verificando este dispositivo…",
+  "selfService.formTitle": "Confirme os dados da estadia",
+  "selfService.submit": "Enviar autocadastro",
+  "selfService.submitting": "Enviando…",
+
+  "selfService.privacy.title": "Aviso de privacidade",
+  "selfService.privacy.introBefore": "Você está iniciando um cadastro para",
+  "selfService.privacy.introAfter":
+    ". Este formulário é aberto e não pede identificação: coletamos apenas faixa etária, papel no grupo, residência e datas previstas.",
+  "selfService.privacy.noIdentity":
+    "Não informe nome, documento, e-mail, telefone, endereço ou qualquer observação pessoal. Estes dados não são aceitos aqui.",
+  "selfService.privacy.needsApproval":
+    "A hospedagem precisa aprovar o cadastro. Sem aprovação, nada entra em estatística nem no painel público.",
+  "selfService.privacy.expiry":
+    "Se a hospedagem recusar, ou se ninguém decidir em 72 horas, os dados enviados são eliminados e resta apenas o registro auditável da decisão.",
+  "selfService.privacy.assistedAlternative":
+    "Se preferir não usar este formulário, peça à hospedagem para registrar a estadia com você, pelo canal assistido.",
+  "selfService.privacy.versionLabel": "Versão do aviso:",
+
+  "selfService.window.legend": "Período previsto",
+  "selfService.window.arrival": "Data de chegada",
+  "selfService.window.departure": "Data de saída",
+
+  "selfService.completion.title": "Autocadastro enviado",
+  "selfService.completion.body":
+    "A hospedagem precisa aprovar este cadastro. Se ninguém decidir em 72 horas, o pedido expira e os dados enviados são eliminados. Nada entra em estatística ou no painel público antes da aprovação.",
+  "selfService.completion.continueSurvey": "Responder pesquisa voluntária",
+
+  "selfService.error.forbidden": "Este cartaz não está aceitando cadastros agora.",
+  "selfService.error.notFound":
+    "Este cartaz não é mais válido. Peça um novo à hospedagem.",
+  "selfService.error.conflict":
+    "O aviso de privacidade mudou desde que o cartaz foi impresso. Peça um cartaz atualizado à hospedagem.",
+  "selfService.error.unprocessable":
+    "Alguns dados não são aceitos neste formulário aberto. Revise e tente de novo.",
+  "selfService.error.rateLimited": "Já houve envios demais desta rede agora há pouco.",
+  "selfService.error.proofOfWorkAborted":
+    "A verificação foi interrompida. Envie novamente quando quiser.",
+  "selfService.error.offline":
+    "Sem conexão agora. O que você preencheu ficou guardado, cifrado, neste dispositivo.",
+
+  // ------------------------------------------------ Cópia de erro para hóspede
+  "guestCopy.unexpectedFailure":
+    "Não conseguimos falar com o serviço agora. Tente de novo em alguns instantes.",
+  "guestCopy.idempotencyInProgress": "Já recebemos este envio e estamos concluindo.",
+  "guestCopy.retrySeconds.one": "Tente novamente em 1 segundo.",
+  "guestCopy.retrySeconds.other": "Tente novamente em {seconds} segundos.",
+
+  // -------------------------------------------------------- Editor de visitantes
+  "visitor.role.responsible": "Responsável",
+  "visitor.role.companion": "Acompanhante",
+  "visitor.role.minor": "Menor",
+  "visitor.ageBand.0_5": "0 a 5",
+  "visitor.ageBand.6_11": "6 a 11",
+  "visitor.ageBand.12_17": "12 a 17",
+  "visitor.ageBand.18_24": "18 a 24",
+  "visitor.ageBand.25_34": "25 a 34",
+  "visitor.ageBand.35_44": "35 a 44",
+  "visitor.ageBand.45_59": "45 a 59",
+  "visitor.ageBand.60_plus": "60 ou mais",
+  "visitor.legend": "Visitante {number}",
+  "visitor.roleLabel": "Papel do visitante {number}",
+  "visitor.ageBandLabel": "Faixa etária do visitante {number}",
+  "visitor.residenceState": "UF de residência do visitante {number}",
+  "visitor.residenceCity": "Município IBGE do visitante {number}",
+  "visitor.residenceCountry": "País de residência do visitante {number}",
+  "visitor.remove": "Remover visitante {number}",
+  "visitor.add": "Adicionar visitante",
 } as const;
 
 export type MessageKey = keyof typeof messagesPt;

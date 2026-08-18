@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../../shared/api/http-client";
+import { createTranslate } from "../../shared/i18n/translate";
 import { describeSelfServiceFailure } from "./self-service-messages";
+
+const t = createTranslate("pt");
 
 /**
  * QA probe, fourth gate. ae109ad claims `problem.title` no longer reaches the
@@ -26,6 +29,7 @@ function retryable(status: number, title: string, seconds: number) {
 describe("QA probe — cópia de hóspede nos status com Retry-After", () => {
   it("não repassa o título do 429 do servidor", () => {
     const message = describeSelfServiceFailure(
+      t,
       retryable(429, "Muitas tentativas", 60),
     );
     expect(message).not.toContain("Muitas tentativas");
@@ -33,6 +37,7 @@ describe("QA probe — cópia de hóspede nos status com Retry-After", () => {
 
   it("não repassa o título do 409 em processamento e usa a cópia do 409", () => {
     const message = describeSelfServiceFailure(
+      t,
       retryable(409, "Requisição em processamento", 3),
     );
     expect(message).not.toContain("Requisição em processamento");
@@ -56,6 +61,7 @@ describe("cópia de hóspede nos dois ramos", () => {
     "status %s com Retry-After: usa a cópia do cliente e mantém o prazo",
     (status, serverTitle, seconds, expectedCopy) => {
       const message = describeSelfServiceFailure(
+        t,
         retryable(status, serverTitle, seconds),
       );
 
@@ -70,6 +76,7 @@ describe("cópia de hóspede nos dois ramos", () => {
     (status) => {
       const serverTitle = "Upstream dependency returned an unexpected shape.";
       const message = describeSelfServiceFailure(
+        t,
         new ApiError(status, { type: "urn:x", title: serverTitle, status }, null),
       );
 
@@ -97,7 +104,7 @@ function inProgress(seconds: number) {
 
 describe("os dois 409 do canal aberto", () => {
   it("não manda pedir cartaz novo quando a submissão está em andamento", () => {
-    const message = describeSelfServiceFailure(inProgress(3));
+    const message = describeSelfServiceFailure(t, inProgress(3));
 
     expect(message).toContain("Já recebemos este envio");
     expect(message).not.toContain("cartaz atualizado");
@@ -107,6 +114,7 @@ describe("os dois 409 do canal aberto", () => {
 
   it("mantém a cópia do aviso desatualizado para o outro 409", () => {
     const message = describeSelfServiceFailure(
+      t,
       new ApiError(
         409,
         {
@@ -122,6 +130,6 @@ describe("os dois 409 do canal aberto", () => {
   });
 
   it("concorda com o singular quando o prazo é de um segundo", () => {
-    expect(describeSelfServiceFailure(inProgress(1))).toContain("1 segundo.");
+    expect(describeSelfServiceFailure(t, inProgress(1))).toContain("1 segundo.");
   });
 });

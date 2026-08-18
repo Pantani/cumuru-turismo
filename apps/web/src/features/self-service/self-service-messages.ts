@@ -1,5 +1,6 @@
 import { ApiError } from "../../shared/api/http-client";
 import { guestCopyFor } from "../../shared/forms/guest-copy";
+import type { Translate } from "../../shared/i18n/translate";
 import {
   ProofOfWorkAbortedError,
   ProofOfWorkExhaustedError,
@@ -10,29 +11,31 @@ import {
  * one are indistinguishable by design, so the message must not speculate about
  * which one happened.
  */
-const statusMessages: Readonly<Record<number, string>> = {
-  403: "Este cartaz não está aceitando cadastros agora.",
-  404: "Este cartaz não é mais válido. Peça um novo à hospedagem.",
-  409: "O aviso de privacidade mudou desde que o cartaz foi impresso. Peça um cartaz atualizado à hospedagem.",
-  422: "Alguns dados não são aceitos neste formulário aberto. Revise e tente de novo.",
-  429: "Já houve envios demais desta rede agora há pouco.",
-};
+function statusMessages(t: Translate): Readonly<Record<number, string>> {
+  return {
+    403: t("selfService.error.forbidden"),
+    404: t("selfService.error.notFound"),
+    409: t("selfService.error.conflict"),
+    422: t("selfService.error.unprocessable"),
+    429: t("selfService.error.rateLimited"),
+  };
+}
 
-function localFailureMessage(error: unknown) {
+function localFailureMessage(t: Translate, error: unknown) {
   if (error instanceof ProofOfWorkExhaustedError) {
     return error.message;
   }
   if (error instanceof ProofOfWorkAbortedError) {
-    return "A verificação foi interrompida. Envie novamente quando quiser.";
+    return t("selfService.error.proofOfWorkAborted");
   }
-  return "Sem conexão agora. O que você preencheu ficou guardado, cifrado, neste dispositivo.";
+  return t("selfService.error.offline");
 }
 
-export function describeSelfServiceFailure(error: unknown) {
+export function describeSelfServiceFailure(t: Translate, error: unknown) {
   if (!(error instanceof ApiError)) {
-    return localFailureMessage(error);
+    return localFailureMessage(t, error);
   }
-  return guestCopyFor(error, statusMessages);
+  return guestCopyFor(t, error, statusMessages(t));
 }
 
 /** A refusal that will never succeed on retry must not keep a local copy. */

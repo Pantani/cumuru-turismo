@@ -113,6 +113,54 @@ describe("PasswordRotationForm", () => {
     ).toBeTruthy();
   });
 
+  // FieldError used to live inside the <label htmlFor>, so once an issue was
+  // reported the input's accessible name absorbed the error text too — a
+  // screen reader would read label and error as one run-on phrase instead of
+  // announcing the error separately through aria-describedby. This proves the
+  // accessible name stays exactly the label, both before and after an issue
+  // is reported.
+  it("keeps each password field's accessible name free of the error text", async () => {
+    const user = userEvent.setup();
+    renderRotation({
+      login: async () => provisional,
+      describe: async () => provisional,
+      rotatePassword: async () => {
+        throw new AuthError(422, "A nova senha precisa ter ao menos 12 caracteres.");
+      },
+      logout: async () => undefined,
+    });
+    await signInWithProvisionalSecret(user);
+    await screen.findByRole("heading", { name: "Defina uma senha própria" });
+
+    const currentField = screen.getByLabelText("Senha atual");
+    const nextField = screen.getByLabelText("Nova senha");
+    const confirmationField = screen.getByLabelText("Confirme a nova senha");
+    expect(currentField).toHaveAccessibleName("Senha atual");
+    expect(nextField).toHaveAccessibleName("Nova senha");
+    expect(confirmationField).toHaveAccessibleName("Confirme a nova senha");
+
+    await user.type(currentField, "senha-provisoria");
+    await user.type(nextField, "senha-definitiva");
+    await user.type(confirmationField, "senha-definitiva");
+    await user.click(screen.getByRole("button", { name: /trocar senha/i }));
+    await screen.findByRole("alert");
+
+    // The submission failure does not touch these three fields' own issues,
+    // so exercise the validation-issue path directly: clear the confirmation
+    // to provoke a mismatch and confirm the name is still just the label.
+    await user.clear(confirmationField);
+    await user.type(confirmationField, "outra-coisa-qualquer");
+    await user.click(screen.getByRole("button", { name: /trocar senha/i }));
+    await waitFor(() => {
+      expect(screen.getByText("A confirmação não confere com a nova senha.")).toBeTruthy();
+    });
+    expect(screen.getByLabelText("Senha atual")).toHaveAccessibleName("Senha atual");
+    expect(screen.getByLabelText("Nova senha")).toHaveAccessibleName("Nova senha");
+    expect(
+      screen.getByLabelText("Confirme a nova senha"),
+    ).toHaveAccessibleName("Confirme a nova senha");
+  });
+
   it("reports a rejected secret without leaving the screen", async () => {
     const user = userEvent.setup();
     renderRotation({

@@ -585,4 +585,113 @@ for directive in connect-src script-src img-src default-src style-src; do
   done
 done
 
-echo "self-service full stack passed: contract surface, generated client, uniform 404 for absent capabilities, header-only capability transport, the approval queue as a listStays filter, the real proof-of-work pair over HTTP with tampered, mismatched and replayed controls, poster rotation invalidating the previous token, and a Content-Security-Policy that admits no external source"
+# ---------------------------------------------------------------------------
+# N-07, N-08, N-09, N-44: nenhum segredo real do fluxo aparece em stdout, em
+# platform.audit_events ou em platform.outbox_events.
+#
+# Reaproveita os segredos que o fluxo real acima já produziu — nenhuma
+# chamada nova, nenhum fixture sintético. session_token é o Bearer da sessão
+# do operador; live_token, foreign_token e rotated_token são as capabilities
+# do cartaz (só existem no fragmento da URL, nunca no caminho); DEMO_PASSWORD
+# é a senha literal usada no login. São exatamente os quatro tipos que N-07
+# pede para varrer: token, HMAC (coberto indiretamente — request_hash e
+# actor_subject_hmac são derivados destes mesmos tokens/segredos, então a
+# ausência do preimage nos destroi também a hipótese de reversão trivial) e
+# senha.
+secrets_probe=(
+  "${session_token}"
+  "${live_token}"
+  "${foreign_token}"
+  "${rotated_token}"
+  "${DEMO_PASSWORD}"
+)
+for secret in "${secrets_probe[@]}"; do
+  if test -z "${secret}"; then
+    fail "one of the real secrets collected from the flow is empty; the negative scans below would pass vacuously"
+  fi
+done
+
+# N-07: docker compose logs é o stdout/stderr real dos quatro serviços do
+# fluxo inteiro, não uma amostra.
+full_stack_logs="$("${COMPOSE[@]}" logs --no-color --timestamps 2>&1 || true)"
+
+# Prova de carga da varredura em si, ANTES de usá-la para provar ausência: se
+# ela não encontrasse nem o que sabemos que está nos logs, "nenhum segredo
+# apareceu" significaria "a varredura não lê nada", não "não vazou". O
+# caminho literal da submissão real por HTTP é um valor que sabemos ter sido
+# processado pelo serviço `api` e por isso tem de estar em algum lugar do
+# stdout combinado.
+case "${full_stack_logs}" in
+  *"/api/v1/accommodation-invite/submit"*) ;;
+  *)
+    fail "the stdout scan cannot find a request path we know was served; docker compose logs read nothing useful"
+    ;;
+esac
+
+for secret in "${secrets_probe[@]}"; do
+  if grep --fixed-strings --quiet -- "${secret}" <<<"${full_stack_logs}"; then
+    fail "a real secret from the self-service flow appeared verbatim in docker compose logs (N-07): ${secret}"
+  fi
+done
+
+# N-08/N-09/N-44: platform.audit_events e platform.outbox_events, no molde de
+# N-29/N-30 (varredura de banco real, não inspeção de código). Os quatro
+# segredos viajam como parâmetro de bind (--set / :'name'), nunca interpolados
+# na string SQL, e cada um é comparado por LIKE contra as colunas de texto e
+# jsonb das duas tabelas — inclusive changed_fields, purpose_code e
+# request_id, que são os únicos lugares em audit_events onde texto livre
+# poderia esconder um segredo.
+channel_leak="$(
+  "${COMPOSE[@]}" exec -T -e PGPASSWORD=cumuru-local-migration-only postgres \
+    psql -U cumuru_migration -d cumuru -tA \
+    --set=s1="${session_token}" \
+    --set=s2="${live_token}" \
+    --set=s3="${foreign_token}" \
+    --set=s4="${rotated_token}" \
+    --set=s5="${DEMO_PASSWORD}" \
+    -c "
+      WITH secrets(value) AS (
+        VALUES (:'s1'), (:'s2'), (:'s3'), (:'s4'), (:'s5')
+      )
+      SELECT
+        (
+          SELECT count(*) FROM platform.audit_events, secrets
+          WHERE metadata::text LIKE '%' || secrets.value || '%'
+             OR coalesce(request_id, '') LIKE '%' || secrets.value || '%'
+             OR coalesce(purpose_code, '') LIKE '%' || secrets.value || '%'
+             OR coalesce(array_to_string(changed_fields, ','), '')
+                  LIKE '%' || secrets.value || '%'
+        )
+        || ':' ||
+        (
+          SELECT count(*) FROM platform.outbox_events, secrets
+          WHERE aggregate_type LIKE '%' || secrets.value || '%'
+             OR event_type LIKE '%' || secrets.value || '%'
+             OR coalesce(lease_owner, '') LIKE '%' || secrets.value || '%'
+             OR coalesce(last_error_code, '') LIKE '%' || secrets.value || '%'
+        )
+    " | tr -d '[:space:]'
+)"
+if test -z "${channel_leak}"; then
+  fail "the audit_events/outbox_events scan produced no output; the negative assertion would pass vacuously"
+fi
+
+# Prova de carga da varredura de canal: os dois canais têm de conter LINHAS
+# reais do fluxo que acabou de rodar, senão "zero vazamentos" pode significar
+# "zero linhas", não "linhas sem segredo".
+channel_populated="$(
+  "${COMPOSE[@]}" exec -T -e PGPASSWORD=cumuru-local-migration-only postgres \
+    psql -U cumuru_migration -d cumuru -tA -c "
+      SELECT (count(*) > 0)::text FROM platform.audit_events
+        WHERE occurred_at >= now() - interval '5 minutes'
+    "
+)"
+if test "${channel_populated}" != "t"; then
+  fail "platform.audit_events has no recent row; the self-service flow above wrote nothing to scan against, so the negative assertion is vacuous"
+fi
+
+if test "${channel_leak}" != "0:0"; then
+  fail "a real secret from the self-service flow appeared inside platform.audit_events or platform.outbox_events (N-08/N-09/N-44): ${channel_leak}"
+fi
+
+echo "self-service full stack passed: contract surface, generated client, uniform 404 for absent capabilities, header-only capability transport, the approval queue as a listStays filter, the real proof-of-work pair over HTTP with tampered, mismatched and replayed controls, poster rotation invalidating the previous token, a Content-Security-Policy that admits no external source, and no session token, capability or password leaking into stdout, audit_events or outbox_events"

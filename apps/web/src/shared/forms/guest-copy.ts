@@ -21,22 +21,12 @@
  * pior que jargão. Por isso `problem.type` decide **antes** do status.
  */
 
+import type { Translate } from "../i18n/translate";
+
 const PROBLEM_BASE = "https://turismo.prado.ba.gov.br/problems/";
 
 /** `httpapi.go:558-577`, o único `409` que não é conflito de estado. */
 export const IDEMPOTENCY_IN_PROGRESS = `${PROBLEM_BASE}idempotency-in-progress`;
-
-/**
- * Causa compartilhada pelas três telas: a mesma submissão já está sendo
- * processada e vai concluir. A frase mora aqui, e não em cada tabela, porque a
- * condição é do transporte e não do domínio de cada tela.
- */
-const sharedTypeMessages: Readonly<Record<string, string>> = {
-  [IDEMPOTENCY_IN_PROGRESS]: "Já recebemos este envio e estamos concluindo.",
-};
-
-export const GUEST_UNEXPECTED_FAILURE =
-  "Não conseguimos falar com o serviço agora. Tente de novo em alguns instantes.";
 
 export interface GuestFailure {
   problem: { type: string };
@@ -45,30 +35,34 @@ export interface GuestFailure {
 }
 
 function messageFor(
+  t: Translate,
   failure: GuestFailure,
   messages: Readonly<Record<number, string>>,
 ) {
-  const byType = sharedTypeMessages[failure.problem.type];
-  if (byType !== undefined) {
-    return byType;
+  // Causa compartilhada pelas três telas: a mesma submissão já está sendo
+  // processada e vai concluir. A frase mora aqui, e não em cada tabela, porque
+  // a condição é do transporte e não do domínio de cada tela.
+  if (failure.problem.type === IDEMPOTENCY_IN_PROGRESS) {
+    return t("guestCopy.idempotencyInProgress");
   }
-  return messages[failure.status] ?? GUEST_UNEXPECTED_FAILURE;
+  return messages[failure.status] ?? t("guestCopy.unexpectedFailure");
 }
 
 /** `NewProcessingError` tem piso de um segundo, então o singular acontece. */
-function retryPhrase(seconds: number) {
+function retryPhrase(t: Translate, seconds: number) {
   return seconds === 1
-    ? "Tente novamente em 1 segundo."
-    : `Tente novamente em ${seconds} segundos.`;
+    ? t("guestCopy.retrySeconds.one")
+    : t("guestCopy.retrySeconds.other", { seconds });
 }
 
 export function guestCopyFor(
+  t: Translate,
   failure: GuestFailure,
   messages: Readonly<Record<number, string>>,
 ) {
-  const message = messageFor(failure, messages);
+  const message = messageFor(t, failure, messages);
   if (failure.retryAfterSeconds === null) {
     return message;
   }
-  return `${message} ${retryPhrase(failure.retryAfterSeconds)}`;
+  return `${message} ${retryPhrase(t, failure.retryAfterSeconds)}`;
 }

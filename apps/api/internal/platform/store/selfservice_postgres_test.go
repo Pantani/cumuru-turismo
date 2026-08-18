@@ -1130,6 +1130,63 @@ func TestSelfServicePosterOfOneAccommodationNeverReachesAnother(t *testing.T) {
 	assertStayBelongsTo(t, ctx, admin, submission.stayID, first.accommodationID)
 }
 
+// N-06. usablePoster (poster_repository.go) gates the open channel on the
+// accommodation's status in Go, not by leaning on the WHERE clause that only
+// guards issuance. A suspended or closed accommodation must make its poster
+// answer exactly like an unknown token: stay.ErrNotFound, the same error the
+// HTTP layer turns into a 404. The sibling accommodation, still active, is the
+// control — without it, an accidentally-always-ErrNotFound path would pass
+// this test trivially.
+func TestSelfServicePosterOfSuspendedOrClosedAccommodationIsNotFound(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	admin, runtime, control := openSelfServiceIntegration(t, ctx)
+	repository := newSelfServiceRepository(t, runtime)
+	controlToken := issueSelfServicePoster(t, ctx, repository, control)
+
+	for _, status := range []string{"suspended", "closed"} {
+		fixture := seedSelfServiceFixture(t, ctx, admin)
+		t.Cleanup(func() { cleanupSelfServiceFixture(t, fixture, admin) })
+		// The poster is issued while the accommodation is still active: the
+		// guard under test is CreateAccommodationInvite requires 'active' too,
+		// so issuing after the status change would prove nothing about reads.
+		token := issueSelfServicePoster(t, ctx, repository, fixture)
+		setAccommodationStatus(t, ctx, admin, fixture.accommodationID, status)
+
+		_, err := repository.GetAccommodationInviteContext(ctx, stay.InviteRequest{
+			Token: token, RateSubject: "203.0.113.0/24",
+		})
+		if !errors.Is(err, stay.ErrNotFound) {
+			t.Fatalf(
+				"GetAccommodationInviteContext() on %s accommodation error = %v, want ErrNotFound",
+				status, err,
+			)
+		}
+	}
+
+	if _, err := repository.GetAccommodationInviteContext(ctx, stay.InviteRequest{
+		Token: controlToken, RateSubject: "198.51.100.0/24",
+	}); err != nil {
+		t.Fatalf("GetAccommodationInviteContext() on active control accommodation error = %v, want nil", err)
+	}
+}
+
+func setAccommodationStatus(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	accommodationID uuid.UUID,
+	status string,
+) {
+	t.Helper()
+	if _, err := pool.Exec(ctx,
+		`UPDATE core.accommodations SET status = $2 WHERE id = $1`,
+		accommodationID, status,
+	); err != nil {
+		t.Fatalf("set accommodation status to %s: %v", status, err)
+	}
+}
+
 // N-32. The queue is listStays with a filter, so its isolation is the core
 // membership join. The listing deliberately carries **no** accommodation filter:
 // if isolation came from the filter rather than from the join, this would still

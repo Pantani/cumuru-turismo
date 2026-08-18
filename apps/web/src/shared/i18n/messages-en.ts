@@ -386,4 +386,82 @@ export const messagesEn: Messages = {
   "analytics.delta.above": "{percent}% above the reference average",
   "analytics.delta.below": "{percent}% below the reference average",
   "analytics.trend.value": "{sign}{percent}% against the previous {size} days",
+
+  // ------------------------------------------------------ Poster self-registration
+  "selfService.posterRequired.title": "Poster required",
+  "selfService.posterRequired.body":
+    "Scan the QR code displayed by the accommodation. The token lives in the address fragment, is never sent to the server, and is erased from the address bar before this page appears.",
+  "selfService.eyebrow": "Accommodation poster",
+  "selfService.pageTitle": "Self-registration by poster",
+  "selfService.validating": "Validating the poster…",
+  "selfService.pending.title": "Poster being validated",
+  "selfService.retry": "Try again",
+  "selfService.verifyingDevice": "Verifying this device…",
+  "selfService.formTitle": "Confirm the stay details",
+  "selfService.submit": "Submit self-registration",
+  "selfService.submitting": "Submitting…",
+
+  "selfService.privacy.title": "Privacy notice",
+  "selfService.privacy.introBefore": "You are starting a registration for",
+  "selfService.privacy.introAfter":
+    ". This form is open and does not ask for identification: we only collect age range, role in the group, residence, and planned dates.",
+  "selfService.privacy.noIdentity":
+    "Do not enter name, document, e-mail, phone, address, or any personal remark. This data is not accepted here.",
+  "selfService.privacy.needsApproval":
+    "The accommodation must approve the registration. Without approval, nothing enters statistics or the public dashboard.",
+  "selfService.privacy.expiry":
+    "If the accommodation declines, or if no one decides within 72 hours, the data sent is deleted and only the auditable record of the decision remains.",
+  "selfService.privacy.assistedAlternative":
+    "If you would rather not use this form, ask the accommodation to register the stay with you, through the assisted channel.",
+  "selfService.privacy.versionLabel": "Notice version:",
+
+  "selfService.window.legend": "Planned window",
+  "selfService.window.arrival": "Arrival date",
+  "selfService.window.departure": "Departure date",
+
+  "selfService.completion.title": "Self-registration submitted",
+  "selfService.completion.body":
+    "The accommodation must approve this registration. If no one decides within 72 hours, the request expires and the data sent is deleted. Nothing enters statistics or the public dashboard before approval.",
+  "selfService.completion.continueSurvey": "Answer the voluntary survey",
+
+  "selfService.error.forbidden": "This poster is not accepting registrations right now.",
+  "selfService.error.notFound":
+    "This poster is no longer valid. Ask the accommodation for a new one.",
+  "selfService.error.conflict":
+    "The privacy notice changed since the poster was printed. Ask the accommodation for an updated poster.",
+  "selfService.error.unprocessable":
+    "Some data is not accepted in this open form. Review it and try again.",
+  "selfService.error.rateLimited": "Too many submissions from this network just now.",
+  "selfService.error.proofOfWorkAborted":
+    "The verification was interrupted. Submit again whenever you like.",
+  "selfService.error.offline":
+    "No connection right now. What you filled in was kept, encrypted, on this device.",
+
+  // ------------------------------------------------------------- Guest error copy
+  "guestCopy.unexpectedFailure":
+    "We could not reach the service right now. Try again in a few moments.",
+  "guestCopy.idempotencyInProgress": "We already received this submission and are finishing it up.",
+  "guestCopy.retrySeconds.one": "Try again in 1 second.",
+  "guestCopy.retrySeconds.other": "Try again in {seconds} seconds.",
+
+  // ------------------------------------------------------------------ Visitor editor
+  "visitor.role.responsible": "Responsible",
+  "visitor.role.companion": "Companion",
+  "visitor.role.minor": "Minor",
+  "visitor.ageBand.0_5": "0 to 5",
+  "visitor.ageBand.6_11": "6 to 11",
+  "visitor.ageBand.12_17": "12 to 17",
+  "visitor.ageBand.18_24": "18 to 24",
+  "visitor.ageBand.25_34": "25 to 34",
+  "visitor.ageBand.35_44": "35 to 44",
+  "visitor.ageBand.45_59": "45 to 59",
+  "visitor.ageBand.60_plus": "60 or more",
+  "visitor.legend": "Visitor {number}",
+  "visitor.roleLabel": "Role of visitor {number}",
+  "visitor.ageBandLabel": "Age range of visitor {number}",
+  "visitor.residenceState": "State of residence of visitor {number}",
+  "visitor.residenceCity": "IBGE municipality of visitor {number}",
+  "visitor.residenceCountry": "Country of residence of visitor {number}",
+  "visitor.remove": "Remove visitor {number}",
+  "visitor.add": "Add visitor",
 };

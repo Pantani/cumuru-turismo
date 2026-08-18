@@ -394,4 +394,85 @@ export const messagesEs: Messages = {
   "analytics.delta.above": "{percent}% por encima de la media de referencia",
   "analytics.delta.below": "{percent}% por debajo de la media de referencia",
   "analytics.trend.value": "{sign}{percent}% frente a los {size} días anteriores",
+
+  // ------------------------------------------------------- Autorregistro por cartel
+  "selfService.posterRequired.title": "Cartel necesario",
+  "selfService.posterRequired.body":
+    "Lea el código QR expuesto por el alojamiento. El token vive en el fragmento de la dirección, nunca se envía al servidor y se borra de la barra de direcciones antes de que aparezca esta página.",
+  "selfService.eyebrow": "Cartel del alojamiento",
+  "selfService.pageTitle": "Autorregistro por cartel",
+  "selfService.validating": "Validando el cartel…",
+  "selfService.pending.title": "Cartel en validación",
+  "selfService.retry": "Intentar de nuevo",
+  "selfService.verifyingDevice": "Verificando este dispositivo…",
+  "selfService.formTitle": "Confirme los datos de la estadía",
+  "selfService.submit": "Enviar autorregistro",
+  "selfService.submitting": "Enviando…",
+
+  "selfService.privacy.title": "Aviso de privacidad",
+  "selfService.privacy.introBefore": "Está iniciando un registro para",
+  "selfService.privacy.introAfter":
+    ". Este formulario es abierto y no pide identificación: recopilamos solo rango de edad, papel en el grupo, residencia y fechas previstas.",
+  "selfService.privacy.noIdentity":
+    "No indique nombre, documento, correo electrónico, teléfono, dirección ni ninguna observación personal. Estos datos no se aceptan aquí.",
+  "selfService.privacy.needsApproval":
+    "El alojamiento debe aprobar el registro. Sin aprobación, nada entra en estadística ni en el panel público.",
+  "selfService.privacy.expiry":
+    "Si el alojamiento rechaza, o si nadie decide en 72 horas, los datos enviados se eliminan y solo queda el registro auditable de la decisión.",
+  "selfService.privacy.assistedAlternative":
+    "Si prefiere no usar este formulario, pida al alojamiento que registre la estadía con usted, por el canal asistido.",
+  "selfService.privacy.versionLabel": "Versión del aviso:",
+
+  "selfService.window.legend": "Período previsto",
+  "selfService.window.arrival": "Fecha de llegada",
+  "selfService.window.departure": "Fecha de salida",
+
+  "selfService.completion.title": "Autorregistro enviado",
+  "selfService.completion.body":
+    "El alojamiento debe aprobar este registro. Si nadie decide en 72 horas, la solicitud expira y los datos enviados se eliminan. Nada entra en estadística ni en el panel público antes de la aprobación.",
+  "selfService.completion.continueSurvey": "Responder la encuesta voluntaria",
+
+  "selfService.error.forbidden":
+    "Este cartel no está aceptando registros ahora.",
+  "selfService.error.notFound":
+    "Este cartel ya no es válido. Pida uno nuevo al alojamiento.",
+  "selfService.error.conflict":
+    "El aviso de privacidad cambió desde que se imprimió el cartel. Pida un cartel actualizado al alojamiento.",
+  "selfService.error.unprocessable":
+    "Algunos datos no se aceptan en este formulario abierto. Revíselos e intente de nuevo.",
+  "selfService.error.rateLimited":
+    "Ya hubo demasiados envíos desde esta red hace poco.",
+  "selfService.error.proofOfWorkAborted":
+    "La verificación fue interrumpida. Envíe de nuevo cuando quiera.",
+  "selfService.error.offline":
+    "Sin conexión ahora. Lo que completó quedó guardado, cifrado, en este dispositivo.",
+
+  // -------------------------------------------------------- Copia de error de huésped
+  "guestCopy.unexpectedFailure":
+    "No pudimos comunicarnos con el servicio ahora. Intente de nuevo en unos instantes.",
+  "guestCopy.idempotencyInProgress":
+    "Ya recibimos este envío y lo estamos concluyendo.",
+  "guestCopy.retrySeconds.one": "Intente de nuevo en 1 segundo.",
+  "guestCopy.retrySeconds.other": "Intente de nuevo en {seconds} segundos.",
+
+  // ------------------------------------------------------------- Editor de visitantes
+  "visitor.role.responsible": "Responsable",
+  "visitor.role.companion": "Acompañante",
+  "visitor.role.minor": "Menor",
+  "visitor.ageBand.0_5": "0 a 5",
+  "visitor.ageBand.6_11": "6 a 11",
+  "visitor.ageBand.12_17": "12 a 17",
+  "visitor.ageBand.18_24": "18 a 24",
+  "visitor.ageBand.25_34": "25 a 34",
+  "visitor.ageBand.35_44": "35 a 44",
+  "visitor.ageBand.45_59": "45 a 59",
+  "visitor.ageBand.60_plus": "60 o más",
+  "visitor.legend": "Visitante {number}",
+  "visitor.roleLabel": "Papel del visitante {number}",
+  "visitor.ageBandLabel": "Rango de edad del visitante {number}",
+  "visitor.residenceState": "Estado de residencia del visitante {number}",
+  "visitor.residenceCity": "Municipio IBGE del visitante {number}",
+  "visitor.residenceCountry": "País de residencia del visitante {number}",
+  "visitor.remove": "Eliminar visitante {number}",
+  "visitor.add": "Añadir visitante",
 };

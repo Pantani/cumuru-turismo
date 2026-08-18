@@ -13,6 +13,7 @@ import {
   clearAllDrafts,
   inspectDraftRecord,
 } from "../../shared/offline/encrypted-drafts";
+import { LocaleProvider } from "../../shared/i18n/LocaleProvider";
 import { SurveyForm } from "./SurveyForm";
 
 const id = "019f0000-0000-7000-8000-000000000051";
@@ -58,7 +59,9 @@ function renderSurvey() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SurveyForm />
+      <LocaleProvider initial="pt">
+        <SurveyForm />
+      </LocaleProvider>
     </QueryClientProvider>,
   );
 }

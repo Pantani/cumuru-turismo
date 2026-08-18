@@ -255,6 +255,48 @@ func TestRequestIDRejectsUnsafeClientValue(t *testing.T) {
 	}
 }
 
+// A client-chosen value that used to satisfy the old charset regexp
+// (`^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$`) is no longer honored: it carries no
+// structure a UUID enforces, so it was a free-form channel into
+// platform.audit_events, an append-only table. Before this fix this exact
+// input was echoed back verbatim — the assertion below fails on that code and
+// passes only once the client value is rejected for not being a UUID.
+func TestRequestIDRejectsNonUUIDClientValue(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newHandlers(t, readinessFunc(func(context.Context) error { return nil }), validVerifier(), nil)
+	const clientValue = "request-000000000001"
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/platform/health", nil)
+	request.Header.Set("X-Request-ID", clientValue)
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if got := recorder.Header().Get("X-Request-ID"); got == "" || got == clientValue {
+		t.Fatalf("X-Request-ID = %q, want a server-generated UUID, not the client value", got)
+	}
+}
+
+// The fix must not eliminate client correlation entirely: a client that sends
+// an actual UUID keeps it, because a UUID has no room to carry arbitrary
+// content — it is the shape that closes the injection channel without
+// removing the field.
+func TestRequestIDAcceptsValidUUIDClientValue(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newHandlers(t, readinessFunc(func(context.Context) error { return nil }), validVerifier(), nil)
+	const clientValue = "019f0000-0000-7000-8000-0000000000ab"
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/platform/health", nil)
+	request.Header.Set("X-Request-ID", clientValue)
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if got := recorder.Header().Get("X-Request-ID"); got != clientValue {
+		t.Fatalf("X-Request-ID = %q, want the client UUID %q preserved", got, clientValue)
+	}
+}
+
 func TestTraceUsesOnlyNormalizedAllowlistedAttributes(t *testing.T) {
 	t.Parallel()
 

@@ -5,6 +5,8 @@ import {
 } from "react";
 
 import type { components } from "../../generated/schema";
+import { useLocale } from "../../shared/i18n/LocaleProvider";
+import type { MessageKey, Translate } from "../../shared/i18n/translate";
 import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import type { ValidationIssue } from "../../shared/validation/core-validation";
 
@@ -34,11 +36,15 @@ interface VisitorEditorProps {
   visitors: VisitorInput[];
 }
 
-export const visitorRoleLabels: Record<VisitorInput["role"], string> = {
-  responsible: "Responsável",
-  companion: "Acompanhante",
-  minor: "Menor",
+const visitorRoleKeys: Record<VisitorInput["role"], MessageKey> = {
+  responsible: "visitor.role.responsible",
+  companion: "visitor.role.companion",
+  minor: "visitor.role.minor",
 };
+
+export function visitorRoleLabel(t: Translate, role: VisitorInput["role"]) {
+  return t(visitorRoleKeys[role]);
+}
 
 const allVisitorRoles = [
   "responsible",
@@ -46,17 +52,17 @@ const allVisitorRoles = [
   "minor",
 ] as const satisfies readonly VisitorInput["role"][];
 
-const ageBands: ReadonlyArray<
-  readonly [VisitorInput["age_band"], string]
+const ageBandKeys: ReadonlyArray<
+  readonly [VisitorInput["age_band"], MessageKey]
 > = [
-  ["0_5", "0 a 5"],
-  ["6_11", "6 a 11"],
-  ["12_17", "12 a 17"],
-  ["18_24", "18 a 24"],
-  ["25_34", "25 a 34"],
-  ["35_44", "35 a 44"],
-  ["45_59", "45 a 59"],
-  ["60_plus", "60 ou mais"],
+  ["0_5", "visitor.ageBand.0_5"],
+  ["6_11", "visitor.ageBand.6_11"],
+  ["12_17", "visitor.ageBand.12_17"],
+  ["18_24", "visitor.ageBand.18_24"],
+  ["25_34", "visitor.ageBand.25_34"],
+  ["35_44", "visitor.ageBand.35_44"],
+  ["45_59", "visitor.ageBand.45_59"],
+  ["60_plus", "visitor.ageBand.60_plus"],
 ];
 
 export function createVisitor(
@@ -166,6 +172,7 @@ interface CoreFieldsProps {
   number: number;
   register: RegisterTarget;
   roles: readonly VisitorInput["role"][];
+  t: Translate;
   visitor: VisitorInput;
 }
 
@@ -175,7 +182,7 @@ function CoreFields(props: CoreFieldsProps) {
   return (
     <>
       <label>
-        Papel do visitante {props.number}
+        {props.t("visitor.roleLabel", { number: props.number })}
         <select
           ref={(target) => props.register(props.index, "role", target)}
           value={props.visitor.role}
@@ -187,7 +194,7 @@ function CoreFields(props: CoreFieldsProps) {
         >
           {props.roles.map((role) => (
             <option key={role} value={role}>
-              {visitorRoleLabels[role]}
+              {visitorRoleLabel(props.t, role)}
             </option>
           ))}
         </select>
@@ -198,7 +205,7 @@ function CoreFields(props: CoreFieldsProps) {
         )}
       </label>
       <label>
-        Faixa etária do visitante {props.number}
+        {props.t("visitor.ageBandLabel", { number: props.number })}
         <select
           ref={(target) => props.register(props.index, "age_band", target)}
           value={props.visitor.age_band}
@@ -206,9 +213,9 @@ function CoreFields(props: CoreFieldsProps) {
             props.change(props.index, "age_band", event.target.value)
           }
         >
-          {ageBands.map(([value, label]) => (
+          {ageBandKeys.map(([value, key]) => (
             <option key={value} value={value}>
-              {label}
+              {props.t(key)}
             </option>
           ))}
         </select>
@@ -223,6 +230,7 @@ interface ResidenceFieldsProps {
   issues: ValidationIssue[];
   number: number;
   register: RegisterTarget;
+  t: Translate;
   visitor: VisitorInput;
 }
 
@@ -233,7 +241,7 @@ function BrazilResidenceFields(props: ResidenceFieldsProps) {
         id={`visitor-${props.index}-state`}
         index={props.index}
         field="residence_state"
-        label={`UF de residência do visitante ${props.number}`}
+        label={props.t("visitor.residenceState", { number: props.number })}
         value={props.visitor.residence_state ?? ""}
         pattern="[A-Za-z]{2}"
         maxLength={2}
@@ -245,7 +253,7 @@ function BrazilResidenceFields(props: ResidenceFieldsProps) {
         id={`visitor-${props.index}-city`}
         index={props.index}
         field="residence_city_code"
-        label={`Município IBGE do visitante ${props.number}`}
+        label={props.t("visitor.residenceCity", { number: props.number })}
         value={props.visitor.residence_city_code ?? ""}
         inputMode="numeric"
         pattern="\d{7}"
@@ -265,7 +273,7 @@ function ResidenceFields(props: ResidenceFieldsProps) {
         id={`visitor-${props.index}-country`}
         index={props.index}
         field="residence_country"
-        label={`País de residência do visitante ${props.number}`}
+        label={props.t("visitor.residenceCountry", { number: props.number })}
         value={props.visitor.residence_country}
         pattern="[A-Za-z]{2}"
         maxLength={2}
@@ -294,7 +302,7 @@ function VisitorFields(props: VisitorFieldsProps) {
       : undefined;
   return (
     <fieldset disabled={props.disabled}>
-      <legend>Visitante {props.number}</legend>
+      <legend>{props.t("visitor.legend", { number: props.number })}</legend>
       <div className="field-grid">
         <CoreFields {...props} groupIssue={groupIssue} />
         <ResidenceFields {...props} />
@@ -304,7 +312,7 @@ function VisitorFields(props: VisitorFieldsProps) {
         disabled={props.disabled || props.visitorCount === 1}
         onClick={() => props.onRemove(props.index)}
       >
-        Remover visitante {props.number}
+        {props.t("visitor.remove", { number: props.number })}
       </button>
     </fieldset>
   );
@@ -317,6 +325,7 @@ export const VisitorEditor = forwardRef<
   { disabled = false, issues = [], onChange, roles = allVisitorRoles, visitors },
   forwardedRef,
 ) {
+  const { t } = useLocale();
   const targets = useRef<Record<string, FocusTarget | null>>({});
 
   useImperativeHandle(
@@ -368,6 +377,7 @@ export const VisitorEditor = forwardRef<
           change={change}
           register={register}
           onRemove={remove}
+          t={t}
         />
       ))}
       <button
@@ -375,7 +385,7 @@ export const VisitorEditor = forwardRef<
         disabled={disabled || visitors.length >= 100}
         onClick={add}
       >
-        Adicionar visitante
+        {t("visitor.add")}
       </button>
     </div>
   );

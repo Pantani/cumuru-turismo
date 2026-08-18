@@ -1,9 +1,11 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import SelfRegistrationPage from "../../pages/SelfRegistrationPage";
+import { LocaleProvider } from "../../shared/i18n/LocaleProvider";
 import {
   captureSelfServiceCapability,
   clearSelfServiceCapability,
@@ -15,6 +17,10 @@ import {
   listDraftIds,
   loadDraft,
 } from "../../shared/offline/encrypted-drafts";
+
+function renderSelfRegistration(element: ReactElement) {
+  return render(<LocaleProvider initial="pt">{element}</LocaleProvider>);
+}
 
 const capability = "s".repeat(96);
 const inviteContext = {
@@ -98,7 +104,7 @@ async function renderLoadedForm() {
   const fetcher = vi
     .spyOn(globalThis, "fetch")
     .mockResolvedValueOnce(apiResponse(inviteContext));
-  const view = render(<SelfRegistrationPage />);
+  const view = renderSelfRegistration(<SelfRegistrationPage />);
   await screen.findByRole("heading", { name: /Autocadastro/u });
   await screen.findByText(inviteContext.accommodation_name);
   return { fetcher, view };
@@ -120,7 +126,7 @@ describe("autocadastro pelo cartaz da acomodação", () => {
   it("falha fechada e não chama a API sem o token do cartaz", () => {
     const fetcher = vi.spyOn(globalThis, "fetch");
 
-    render(<SelfRegistrationPage />);
+    renderSelfRegistration(<SelfRegistrationPage />);
 
     expect(
       screen.getByRole("heading", { name: "Cartaz necessário" }),
@@ -268,7 +274,7 @@ describe("autocadastro pelo cartaz da acomodação", () => {
     // É o que o fim de sessão e um boot sem fragmento fazem.
     clearSelfServiceCapability();
     cleanup();
-    render(<SelfRegistrationPage />);
+    renderSelfRegistration(<SelfRegistrationPage />);
 
     expect(
       screen.getByRole("heading", { name: "Cartaz necessário" }),
@@ -291,7 +297,7 @@ describe("autocadastro pelo cartaz da acomodação", () => {
       ),
     );
 
-    render(<SelfRegistrationPage />);
+    renderSelfRegistration(<SelfRegistrationPage />);
 
     // A mesma região `role="status"` mostra "Validando o cartaz…" na primeira
     // renderização e só troca de texto depois que a promessa do fetch rejeita.
@@ -400,3 +406,123 @@ describe("autocadastro pelo cartaz da acomodação", () => {
     expect(report.violations).toEqual([]);
   });
 });
+
+// Fase 7 debt: /i is the one screen a guest — not an operator — ever sees, so
+// it is the priority for PT/EN/ES parity. Each case below asserts the actual
+// translated copy for the locale under test, not merely that no error was
+// thrown: a component that silently ignored the locale and always rendered
+// Portuguese would pass an "absence of error" check but fail these.
+describe.each([
+  {
+    arrivalLabel: "Data de chegada",
+    completionTitle: "Autocadastro enviado",
+    locale: "pt" as const,
+    posterRequiredTitle: "Cartaz necessário",
+    privacyTitle: "Aviso de privacidade",
+    residenceCityLabel: "Município IBGE do visitante 1",
+    residenceStateLabel: "UF de residência do visitante 1",
+    submitLabel: "Enviar autocadastro",
+  },
+  {
+    arrivalLabel: "Arrival date",
+    completionTitle: "Self-registration submitted",
+    locale: "en" as const,
+    posterRequiredTitle: "Poster required",
+    privacyTitle: "Privacy notice",
+    residenceCityLabel: "IBGE municipality of visitor 1",
+    residenceStateLabel: "State of residence of visitor 1",
+    submitLabel: "Submit self-registration",
+  },
+  {
+    arrivalLabel: "Fecha de llegada",
+    completionTitle: "Autorregistro enviado",
+    locale: "es" as const,
+    posterRequiredTitle: "Cartel necesario",
+    privacyTitle: "Aviso de privacidad",
+    residenceCityLabel: "Municipio IBGE del visitante 1",
+    residenceStateLabel: "Estado de residencia del visitante 1",
+    submitLabel: "Enviar autorregistro",
+  },
+])(
+  "i18n do formulário aberto ($locale)",
+  ({
+    arrivalLabel,
+    completionTitle,
+    locale,
+    posterRequiredTitle,
+    privacyTitle,
+    residenceCityLabel,
+    residenceStateLabel,
+    submitLabel,
+  }) => {
+    beforeEach(async () => {
+      clearSelfServiceCapability();
+      clearSurveyCapability();
+      await clearAllDrafts();
+      window.history.replaceState(null, "", "/i");
+    });
+
+    afterEach(() => {
+      cleanup();
+      vi.restoreAllMocks();
+    });
+
+    it("mostra o estado sem cartaz no idioma selecionado", () => {
+      render(
+        <LocaleProvider initial={locale}>
+          <SelfRegistrationPage />
+        </LocaleProvider>,
+      );
+
+      expect(
+        screen.getByRole("heading", { name: posterRequiredTitle }),
+      ).toBeInTheDocument();
+    });
+
+    it("mostra o aviso de privacidade, os rótulos e o botão de envio no idioma selecionado", async () => {
+      capture();
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        apiResponse(inviteContext),
+      );
+      render(
+        <LocaleProvider initial={locale}>
+          <SelfRegistrationPage />
+        </LocaleProvider>,
+      );
+      await screen.findByText(inviteContext.accommodation_name);
+
+      expect(
+        screen.getByRole("heading", { name: privacyTitle }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText(arrivalLabel)).toBeInTheDocument();
+      expect(screen.getByLabelText(residenceStateLabel)).toBeInTheDocument();
+      expect(screen.getByLabelText(residenceCityLabel)).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: submitLabel }),
+      ).toBeInTheDocument();
+    });
+
+    it("mostra a confirmação de envio no idioma selecionado", async () => {
+      const user = userEvent.setup();
+      capture();
+      const fetcher = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(apiResponse(inviteContext));
+      render(
+        <LocaleProvider initial={locale}>
+          <SelfRegistrationPage />
+        </LocaleProvider>,
+      );
+      await screen.findByText(inviteContext.accommodation_name);
+      fetcher.mockResolvedValueOnce(acceptedResponse());
+      await user.type(screen.getByLabelText(residenceStateLabel), "BA");
+      await user.type(screen.getByLabelText(residenceCityLabel), "2925509");
+
+      await user.click(screen.getByRole("button", { name: submitLabel }));
+
+      expect(
+        await screen.findByRole("heading", { name: completionTitle }),
+      ).toBeInTheDocument();
+    });
+  },
+);

@@ -4,6 +4,7 @@ import {
   invalidFlag,
   issueMessage,
 } from "../../shared/forms/FieldFeedback";
+import { useLocale } from "../../shared/i18n/LocaleProvider";
 import type { ValidationIssue } from "../../shared/validation/core-validation";
 
 interface PlannedWindowFieldsProps {
@@ -50,15 +51,16 @@ export function PlannedWindowFields({
   issues,
   onChange,
 }: PlannedWindowFieldsProps) {
+  const { t } = useLocale();
   return (
     <fieldset className="planned-window" disabled={disabled}>
-      <legend>Período previsto</legend>
+      <legend>{t("selfService.window.legend")}</legend>
       <div className="field-grid">
         <DateField
           field="arrival"
           id="self-registration-arrival"
           issue={issueMessage(issues, "planned_arrival_on")}
-          label="Data de chegada"
+          label={t("selfService.window.arrival")}
           onChange={onChange}
           value={arrival}
         />
@@ -66,7 +68,7 @@ export function PlannedWindowFields({
           field="departure"
           id="self-registration-departure"
           issue={issueMessage(issues, "planned_departure_on")}
-          label="Data de saída"
+          label={t("selfService.window.departure")}
           onChange={onChange}
           value={departure}
         />

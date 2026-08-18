@@ -1,5 +1,6 @@
 import { SelfRegistrationCompletion } from "../features/self-service/SelfRegistrationCompletion";
 import { SelfRegistrationForm } from "../features/self-service/SelfRegistrationForm";
+import { useLocale } from "../shared/i18n/LocaleProvider";
 import {
   peekSelfRegistrationCompleted,
   peekSelfServiceCapability,
@@ -17,6 +18,7 @@ import {
  * não um formulário em branco.
  */
 function SelfRegistrationBody() {
+  const { t } = useLocale();
   if (peekSelfRegistrationCompleted()) {
     return <SelfRegistrationCompletion />;
   }
@@ -25,31 +27,28 @@ function SelfRegistrationBody() {
   }
   return (
     <section className="boundary-note" aria-labelledby="poster-required">
-      <h2 id="poster-required">Cartaz necessário</h2>
-      <p>
-        Leia o código QR exposto pela hospedagem. O token fica no fragmento do
-        endereço, nunca é enviado ao servidor e é apagado da barra de endereço
-        antes desta página aparecer.
-      </p>
+      <h2 id="poster-required">{t("selfService.posterRequired.title")}</h2>
+      <p>{t("selfService.posterRequired.body")}</p>
     </section>
   );
 }
 
 export default function SelfRegistrationPage() {
+  const { t } = useLocale();
   return (
     <article className="page registration-page">
       <div className="page-eyebrow-row">
-        <div className="eyebrow">Cartaz da hospedagem</div>
+        <div className="eyebrow">{t("selfService.eyebrow")}</div>
         {/*
           Exigência do brandkit, não enfeite: "rótulo de dado fictício visível
           em toda peça de protótipo". Esta é a superfície mais pública da fase e
           a única alcançável por quem nunca falou com a hospedagem, então o
           aviso precisa estar acima da dobra, não só no rodapé do site.
         */}
-        <span className="prototype-badge">Dados fictícios de protótipo</span>
+        <span className="prototype-badge">{t("landing.ticker.prototype")}</span>
       </div>
       <h1 data-route-heading tabIndex={-1}>
-        Autocadastro pelo cartaz
+        {t("selfService.pageTitle")}
       </h1>
       <SelfRegistrationBody />
     </article>

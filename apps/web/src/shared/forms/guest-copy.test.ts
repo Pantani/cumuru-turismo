@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  GUEST_UNEXPECTED_FAILURE,
-  guestCopyFor,
-  IDEMPOTENCY_IN_PROGRESS,
-} from "./guest-copy";
+import { guestCopyFor, IDEMPOTENCY_IN_PROGRESS } from "./guest-copy";
+import { createTranslate } from "../i18n/translate";
+
+const t = createTranslate("pt");
+const GUEST_UNEXPECTED_FAILURE = t("guestCopy.unexpectedFailure");
 
 const messages: Readonly<Record<number, string>> = {
   409: "O aviso mudou. Peça outro à hospedagem.",
@@ -23,13 +23,13 @@ function failure(
 
 describe("cópia de hóspede", () => {
   it("usa a tabela quando o status é conhecido", () => {
-    expect(guestCopyFor(failure(409, null, OTHER_409), messages)).toBe(
+    expect(guestCopyFor(t, failure(409, null, OTHER_409), messages)).toBe(
       messages[409],
     );
   });
 
   it("cai na frase genérica quando o status não é explicável", () => {
-    expect(guestCopyFor(failure(503, null), messages)).toBe(
+    expect(guestCopyFor(t, failure(503, null), messages)).toBe(
       GUEST_UNEXPECTED_FAILURE,
     );
   });
@@ -41,7 +41,7 @@ describe("cópia de hóspede", () => {
     [429, 60, "https://turismo.prado.ba.gov.br/problems/rate-limited"],
     [503, 12, "https://turismo.prado.ba.gov.br/problems/generic"],
   ])("acrescenta o prazo do Retry-After ao status %s", (status, seconds, type) => {
-    const message = guestCopyFor(failure(status, seconds, type), messages);
+    const message = guestCopyFor(t, failure(status, seconds, type), messages);
 
     expect(message).toContain(`${seconds} segundos`);
     expect(message.startsWith(messages[status] ?? GUEST_UNEXPECTED_FAILURE)).toBe(
@@ -50,13 +50,14 @@ describe("cópia de hóspede", () => {
   });
 
   it("não menciona prazo quando o servidor não mandou Retry-After", () => {
-    expect(guestCopyFor(failure(429, null), messages)).not.toContain("segundos");
+    expect(guestCopyFor(t, failure(429, null), messages)).not.toContain("segundos");
   });
 
   // D-16: o `409` tem duas causas e elas não podem virar a mesma frase.
   describe("os dois 409", () => {
     it("a submissão em andamento tem cópia própria, não a do aviso", () => {
       const message = guestCopyFor(
+        t,
         failure(409, 3, IDEMPOTENCY_IN_PROGRESS),
         messages,
       );
@@ -72,14 +73,14 @@ describe("cópia de hóspede", () => {
       };
 
       expect(
-        guestCopyFor(failure(409, null, IDEMPOTENCY_IN_PROGRESS), outra),
+        guestCopyFor(t, failure(409, null, IDEMPOTENCY_IN_PROGRESS), outra),
       ).toBe("Já recebemos este envio e estamos concluindo.");
     });
   });
 
   it("concorda o singular quando o prazo é de um segundo", () => {
     expect(
-      guestCopyFor(failure(409, 1, IDEMPOTENCY_IN_PROGRESS), messages),
+      guestCopyFor(t, failure(409, 1, IDEMPOTENCY_IN_PROGRESS), messages),
     ).toContain("1 segundo.");
   });
 });

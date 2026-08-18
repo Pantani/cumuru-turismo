@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { components } from "../../generated/schema";
 import { guestCopyFor } from "../../shared/forms/guest-copy";
+import { useLocale } from "../../shared/i18n/LocaleProvider";
+import type { Translate } from "../../shared/i18n/translate";
 import {
   type FormEvent,
   useEffect,
@@ -46,11 +48,11 @@ const guestMessages: Readonly<Record<number, string>> = {
   429: "Já houve envios demais desta rede agora há pouco.",
 };
 
-function errorMessage(error: unknown) {
+function errorMessage(t: Translate, error: unknown) {
   if (!(error instanceof ApiError)) {
     return "Sem conexão. Você pode preservar um rascunho cifrado neste dispositivo.";
   }
-  return guestCopyFor(error, guestMessages);
+  return guestCopyFor(t, error, guestMessages);
 }
 
 interface SurveyDraft {
@@ -157,6 +159,7 @@ function SurveyGateNotice({ state }: { state: GateState }) {
 }
 
 export function SurveyForm() {
+  const { t } = useLocale();
   const capability = peekSurveyCapability();
   const [answers, setAnswers] = useState<AnswerState>({});
   const [consents, setConsents] = useState<Record<string, boolean>>({});
@@ -225,7 +228,7 @@ export function SurveyForm() {
   });
   if (gate !== null) {
     return gate === "error" ? (
-      <p role="alert">{errorMessage(active.error)}</p>
+      <p role="alert">{errorMessage(t, active.error)}</p>
     ) : (
       <SurveyGateNotice state={gate} />
     );
@@ -304,7 +307,7 @@ export function SurveyForm() {
       );
       await finish();
     } catch (error) {
-      setMessage(errorMessage(error));
+      setMessage(errorMessage(t, error));
     } finally {
       setBusy(false);
     }

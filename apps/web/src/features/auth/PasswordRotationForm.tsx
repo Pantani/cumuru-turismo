@@ -65,9 +65,14 @@ function SecretField({
   onChange,
   value,
 }: SecretFieldProps) {
+  // FieldError must not live inside <label htmlFor>: a wrapping label folds
+  // every descendant's text into the control's accessible name, so an error
+  // message would run on after the label text instead of being announced
+  // through aria-describedby. AccountActivationForm.tsx already applies this
+  // structure; PasswordRotationForm predates it and is corrected here.
   return (
-    <label className="field-control" htmlFor={id}>
-      {label}
+    <div className="field-control">
+      <label htmlFor={id}>{label}</label>
       <input
         id={id}
         type="password"
@@ -79,7 +84,7 @@ function SecretField({
         required
       />
       <FieldError id={`${id}-error`} message={issue} />
-    </label>
+    </div>
   );
 }
 

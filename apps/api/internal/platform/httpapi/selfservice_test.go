@@ -3,8 +3,10 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +18,10 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/platform/httpapi"
 	"github.com/Pantani/cumuru/apps/api/internal/stay"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -328,6 +334,188 @@ func TestPosterContextReadsTheCapabilityHeader(t *testing.T) {
 	if strings.Contains(recorder.Body.String(), posterToken) {
 		t.Fatal("the response echoed the capability")
 	}
+}
+
+// N-12. The rate-limit subject the open channel computes from the client
+// address must be the generalized prefix (cors.go: generalizedAddress), never
+// the exact remote address — that prefix is what reaches the HMAC bucket key
+// downstream. Proving it at the unit level (cors_test.go) shows the function
+// is correct; this proves the HTTP handler actually uses it, not some other
+// value built from the raw RemoteAddr.
+func TestPosterContextRateSubjectIsGeneralizedNeverRaw(t *testing.T) {
+	t.Parallel()
+
+	var captured stay.InviteRequest
+	handler := selfServiceHandler(t, selfServiceStayStub{posterRequest: &captured}, nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/accommodation-invite", nil)
+	request.Header.Set("X-Cumuru-Invite-Token", posterToken)
+	request.Header.Set("X-Request-ID", "request-000000000001")
+	request.RemoteAddr = "203.0.113.77:54321"
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("poster context = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	const wantSubject = "203.0.113.0/24"
+	if captured.RateSubject != wantSubject {
+		t.Fatalf("RateSubject = %q, want the generalized prefix %q", captured.RateSubject, wantSubject)
+	}
+	if strings.Contains(captured.RateSubject, ".77") {
+		t.Fatalf("RateSubject %q carries the exact remote address, not only its prefix", captured.RateSubject)
+	}
+}
+
+// N-13. X-Forwarded-For and X-Real-IP disagreeing behind a trusted proxy means
+// the chain is untrustworthy, not that one header should win — rateSubject
+// (cors.go) already refuses this at the unit level. This proves the refusal
+// reaches the HTTP boundary as a 400, before the repository is ever called: a
+// captured, still-zero InviteRequest is the evidence that the query never ran.
+func TestPosterContextRefusesDivergentProxyHeaders(t *testing.T) {
+	t.Parallel()
+
+	var captured stay.InviteRequest
+	handler := selfServiceHandlerWithTrustedProxies(
+		t, selfServiceStayStub{posterRequest: &captured},
+		[]netip.Prefix{netip.MustParsePrefix("10.20.30.40/32")},
+	)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/accommodation-invite", nil)
+	request.Header.Set("X-Cumuru-Invite-Token", posterToken)
+	request.Header.Set("X-Request-ID", "request-000000000001")
+	request.RemoteAddr = "10.20.30.40:4321"
+	request.Header.Set("X-Forwarded-For", "198.51.100.44")
+	request.Header.Set("X-Real-IP", "203.0.113.9")
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("poster context with divergent proxy headers = %d, want 400: %s", recorder.Code, recorder.Body)
+	}
+	if captured.Token != "" {
+		t.Fatal("the repository was reached despite the untrustworthy proxy chain")
+	}
+}
+
+func selfServiceHandlerWithTrustedProxies(
+	t *testing.T,
+	stays stay.Repository,
+	trusted []netip.Prefix,
+) http.Handler {
+	t.Helper()
+	verifier := verifierFunc(func(_ context.Context, token string) (access.Principal, error) {
+		return access.NewPrincipal("https://issuer.invalid", token, nil), nil
+	})
+	handler, _, err := httpapi.New(httpapi.Dependencies{
+		Readiness:          readinessFunc(func(context.Context) error { return nil }),
+		Verifier:           verifier,
+		Accommodations:     accommodation.NewService(accommodationRepositoryStub{}),
+		Stays:              stay.NewService(stays),
+		SelfServiceEnabled: true,
+		CORSAllowedOrigins: []string{"https://allowed.invalid"},
+		TrustedProxyCIDRs:  trusted,
+		CursorKeys: config.KeyringConfig{
+			CurrentVersion: "cursor-v1",
+			Keys: map[string][]byte{
+				"cursor-v1": []byte("cursor-test-key-is-at-least-32-bytes"),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
+	return handler
+}
+
+// N-10. The invite token rides on a header (X-Cumuru-Invite-Token), never on
+// the URL, and both the metric label and the span attributes come from the
+// fixed route pattern passed at registration time (httpapi.go), not from the
+// request itself — so the token has no path into either. This proves the
+// wiring holds for the Fase 7 open channel specifically, rather than trusting
+// the generic proof over an unrelated authenticated route.
+func TestPosterContextTelemetryNeverCarriesTheToken(t *testing.T) {
+	t.Parallel()
+
+	spans := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+	registry := prometheus.NewRegistry()
+	handler, metrics := selfServiceHandlerWithTelemetry(
+		t, selfServiceStayStub{}, registry, provider.Tracer("test"),
+	)
+
+	// GetAccommodationInviteContext (stay/service.go) requires a token 64-128
+	// chars long before it even reaches the repository, so the canary keeps
+	// that shape while remaining unique enough to detect a leak.
+	const tokenCanary = "invite-token-telemetry-canary-0123456789abcdef0123456789abcdef01234567"
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/accommodation-invite", nil)
+	request.Header.Set("X-Cumuru-Invite-Token", tokenCanary)
+	request.Header.Set("X-Request-ID", "request-000000000001")
+	recorderHTTP := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorderHTTP, request)
+
+	if recorderHTTP.Code != http.StatusOK {
+		t.Fatalf("poster context = %d: %s", recorderHTTP.Code, recorderHTTP.Body)
+	}
+
+	ended := spans.Ended()
+	if len(ended) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(ended))
+	}
+	if ended[0].Name() != "/api/v1/accommodation-invite" {
+		t.Fatalf("span name = %q, want the templated route", ended[0].Name())
+	}
+	serializedSpan, err := json.Marshal(ended[0].Attributes())
+	if err != nil {
+		t.Fatalf("marshal span attributes: %v", err)
+	}
+	if strings.Contains(string(serializedSpan), tokenCanary) {
+		t.Fatalf("span leaked the token: %s", serializedSpan)
+	}
+
+	metricsRecorder := httptest.NewRecorder()
+	metrics.ServeHTTP(metricsRecorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if strings.Contains(metricsRecorder.Body.String(), tokenCanary) {
+		t.Fatal("metrics leaked the token")
+	}
+	if !strings.Contains(metricsRecorder.Body.String(), `route="/api/v1/accommodation-invite"`) {
+		t.Fatalf("metrics lack the templated route: %s", metricsRecorder.Body)
+	}
+}
+
+func selfServiceHandlerWithTelemetry(
+	t *testing.T,
+	stays stay.Repository,
+	registry *prometheus.Registry,
+	tracer trace.Tracer,
+) (http.Handler, http.Handler) {
+	t.Helper()
+	verifier := verifierFunc(func(_ context.Context, token string) (access.Principal, error) {
+		return access.NewPrincipal("https://issuer.invalid", token, nil), nil
+	})
+	handler, metrics, err := httpapi.New(httpapi.Dependencies{
+		Readiness:          readinessFunc(func(context.Context) error { return nil }),
+		Verifier:           verifier,
+		Accommodations:     accommodation.NewService(accommodationRepositoryStub{}),
+		Stays:              stay.NewService(stays),
+		SelfServiceEnabled: true,
+		CORSAllowedOrigins: []string{"https://allowed.invalid"},
+		Logger:             slog.New(slog.DiscardHandler),
+		Registry:           registry,
+		Tracer:             tracer,
+		CursorKeys: config.KeyringConfig{
+			CurrentVersion: "cursor-v1",
+			Keys: map[string][]byte{
+				"cursor-v1": []byte("cursor-test-key-is-at-least-32-bytes"),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("httpapi.New() error = %v", err)
+	}
+	return handler, metrics
 }
 
 // The open channel has nowhere to put an identity field, and the strict decoder

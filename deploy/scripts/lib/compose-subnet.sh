@@ -77,12 +77,40 @@ cumuru_release_subnet() {
   CUMURU_SUBNET_LOCK_HELD=false
 }
 
+# D-19: a janela vulnerável fica entre esta chamada e o `trap cleanup EXIT`
+# que o script chamador instala depois — ali o único trap ativo é o mínimo
+# abaixo. Tentei primeiro preservar `$?` dentro do handler (capturar em
+# `local status="$?"` e terminar com `return "${status}"`, para que o último
+# comando do trap seja o que define o status de saída do processo). Não
+# resolve: sob bash 3.2 (o bash padrão do macOS, o mesmo que roda estes
+# scripts fora do container) com `set -e` ativo, um erro de PARSE (não de
+# runtime) já zera `$?` para 0 antes do trap começar a rodar — o handler nunca
+# vê o 2 do parser, então não há status para preservar. Reproduzido com:
+#   set -euo pipefail; trap 't() { echo $?; }; t' EXIT; fi
+# que imprime `status=0` no bash 3.2 e `status=2` no bash 5. É bug conhecido
+# de versões antigas do bash nessa combinação específica (parser abort +
+# errexit + trap), não algo corrigível só lendo `$?` dentro do handler.
+#
+# A correção real está em cumuru_acquire_subnet: validar a sintaxe do script
+# inteiro ANTES de instalar qualquer trap ou adquirir o lock. `bash -n` é uma
+# checagem estática — enxerga erro em `cleanup()` mesmo que essa função ainda
+# não tenha sido chamada — então nenhum abort de parse pode mais acontecer
+# dentro da janela vulnerável: o script já teria sido recusado antes dela
+# começar, com um status real e sem trap nenhum envolvido.
+cumuru_release_subnet_exit_trap() {
+  cumuru_release_subnet
+}
+
 # O lock serializa execuções do mesmo gate. Só a verificação continuaria
 # probabilística: duas execuções podem consultar o daemon no mesmo instante,
 # ver o mesmo octeto livre e pedi-lo juntas. Ele é devolvido depois do teardown,
 # que é o que impede a execução seguinte de pedir endereço ainda em liberação.
 cumuru_acquire_subnet() {
   local gate="$1"
+  if ! bash -n "$0" 2>&1; then
+    echo "${gate}: $0 has a bash syntax error; refusing to acquire the subnet lock or install any trap" >&2
+    return 1
+  fi
   CUMURU_SUBNET_LOCK_DIR="${TMPDIR:-/tmp}/cumuru-subnet-${gate}.lock"
   local deadline=$((SECONDS + 900))
   local owner_pid=""
@@ -104,7 +132,7 @@ cumuru_acquire_subnet() {
   printf '%s\n' "$$" >"${CUMURU_SUBNET_LOCK_DIR}/pid"
   CUMURU_SUBNET_LOCK_HELD=true
   # Trap mínimo até o cleanup completo do script assumir.
-  trap cumuru_release_subnet EXIT
+  trap cumuru_release_subnet_exit_trap EXIT
   CUMURU_SUBNET_OCTET="$(cumuru_select_subnet_octet)"
   export CUMURU_SUBNET_OCTET
   echo "${gate} using 172.30.${CUMURU_SUBNET_OCTET}.0/24" >&2

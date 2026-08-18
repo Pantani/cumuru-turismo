@@ -98,7 +98,7 @@ migration_files="$(
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_organization_document.down.sql\n000002_organization_document.up.sql\n000003_self_service_and_approval.down.sql\n000003_self_service_and_approval.up.sql\n000004_rename_fnrh_failures_reason.down.sql\n000004_rename_fnrh_failures_reason.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_organization_document.down.sql\n000002_organization_document.up.sql\n000003_self_service_and_approval.down.sql\n000003_self_service_and_approval.up.sql\n000004_rename_fnrh_failures_reason.down.sql\n000004_rename_fnrh_failures_reason.up.sql\n000005_audit_outbox_returning_grants.down.sql\n000005_audit_outbox_returning_grants.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
@@ -1693,4 +1693,98 @@ case "${fnrh_reason_constraint}" in
     ;;
 esac
 
-echo "migrations zero-to-four, rollback to zero, reapply, reversible document uniqueness, reversible self-service and approval, fnrh reason rename, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
+# 000005: grant preventivo de SELECT (id) em platform.audit_events e
+# platform.outbox_events para app_runtime, fechando a classe de incidente que
+# derrubou CreateActivationAccount (queries/auth.sql:140-146) antes que ela
+# morda de novo — desta vez num INSERT ... RETURNING id, o padrão real já
+# usado alhures no código, sem introduzir nenhuma query nova aqui.
+returning_grant_acl="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT has_column_privilege('app_runtime', 'platform.audit_events', 'id', 'SELECT')::integer
+        || ':' || has_column_privilege('app_runtime', 'platform.audit_events', 'actor_subject_hmac', 'SELECT')::integer
+        || ':' || has_column_privilege('app_runtime', 'platform.audit_events', 'metadata', 'SELECT')::integer
+        || ':' || has_column_privilege('app_runtime', 'platform.outbox_events', 'id', 'SELECT')::integer
+        || ':' || has_column_privilege('app_runtime', 'platform.outbox_events', 'aggregate_id', 'SELECT')::integer
+        || ':' || has_column_privilege('app_runtime', 'platform.outbox_events', 'event_type', 'SELECT')::integer
+    "
+)"
+test "${returning_grant_acl}" = "1:0:0:1:0:0"
+
+# Prova funcional, não só de catálogo: exatamente o RETURNING que quebrou
+# CreateActivationAccount, desta vez sobre as duas tabelas que o auditor
+# apontou como a "classe aberta" — id sozinho passa.
+psql_as cumuru_app cumuru-local-app-only <<'SQL'
+INSERT INTO platform.audit_events (
+  id, occurred_at, actor_subject_hmac, actor_hmac_key_version, actor_type,
+  action, entity_type, outcome
+) VALUES (
+  '00000000-0000-7000-8000-000000000801', now(), NULL, NULL,
+  'operator', 'returning_grant_probe', 'probe', 'success'
+) RETURNING id;
+
+INSERT INTO platform.outbox_events (
+  id, aggregate_type, aggregate_id, aggregate_version, event_type
+) VALUES (
+  '00000000-0000-7000-8000-000000000802', 'probe',
+  '00000000-0000-7000-8000-000000000802', 1, 'returning_grant_probe'
+) RETURNING id;
+SQL
+
+# E prova o limite: projetar QUALQUER outra coluna no RETURNING continua
+# recusado — o grant não foi ampliado além do necessário para evitar o
+# próximo incidente.
+audit_returning_over_grant="$(
+  psql_as cumuru_app cumuru-local-app-only \
+    --command="
+      INSERT INTO platform.audit_events (
+        id, occurred_at, actor_type, action, entity_type, outcome
+      ) VALUES (
+        '00000000-0000-7000-8000-000000000803', now(),
+        'operator', 'returning_grant_probe', 'probe', 'success'
+      ) RETURNING id, occurred_at
+    " 2>&1 || true
+)"
+case "${audit_returning_over_grant}" in
+  *permission\ denied*) ;;
+  *)
+    echo "app_runtime can now SELECT audit_events.occurred_at — the grant is wider than the incident requires: ${audit_returning_over_grant}" >&2
+    exit 1
+    ;;
+esac
+
+outbox_returning_over_grant="$(
+  psql_as cumuru_app cumuru-local-app-only \
+    --command="
+      INSERT INTO platform.outbox_events (
+        id, aggregate_type, aggregate_id, aggregate_version, event_type
+      ) VALUES (
+        '00000000-0000-7000-8000-000000000804', 'probe',
+        '00000000-0000-7000-8000-000000000804', 1, 'returning_grant_probe'
+      ) RETURNING id, event_type
+    " 2>&1 || true
+)"
+case "${outbox_returning_over_grant}" in
+  *permission\ denied*) ;;
+  *)
+    echo "app_runtime can now SELECT outbox_events.event_type — the grant is wider than the incident requires: ${outbox_returning_over_grant}" >&2
+    exit 1
+    ;;
+esac
+
+psql_as cumuru_migration cumuru-local-migration-only \
+  --command="
+    DELETE FROM platform.audit_events
+      WHERE id IN (
+        '00000000-0000-7000-8000-000000000801',
+        '00000000-0000-7000-8000-000000000803'
+      );
+    DELETE FROM platform.outbox_events
+      WHERE id IN (
+        '00000000-0000-7000-8000-000000000802',
+        '00000000-0000-7000-8000-000000000804'
+      );
+  " >/dev/null
+
+echo "migrations zero-to-five, rollback to zero, reapply, reversible document uniqueness, reversible self-service and approval, fnrh reason rename, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"

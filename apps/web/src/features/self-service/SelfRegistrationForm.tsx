@@ -8,6 +8,8 @@ import {
 
 import type { components } from "../../generated/schema";
 import { createSelfServiceClient } from "../../shared/api/self-service-client";
+import { useLocale } from "../../shared/i18n/LocaleProvider";
+import type { Translate } from "../../shared/i18n/translate";
 import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import { deleteDraft, saveDraft } from "../../shared/offline/encrypted-drafts";
 import { solveProofOfWork } from "../../shared/security/proof-of-work";
@@ -62,9 +64,9 @@ function initialFormState(): SelfRegistrationFormState {
   };
 }
 
-function useInviteContext() {
+function useInviteContext(t: Translate) {
   const [context, setContext] = useState<AccommodationInviteContext | null>(null);
-  const [message, setMessage] = useState("Validando o cartaz…");
+  const [message, setMessage] = useState(t("selfService.validating"));
 
   const load = useCallback(async () => {
     const capability = peekSelfServiceCapability();
@@ -76,9 +78,9 @@ function useInviteContext() {
       setContext(result.data);
       setMessage("");
     } catch (error) {
-      setMessage(describeSelfServiceFailure(error));
+      setMessage(describeSelfServiceFailure(t, error));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -139,7 +141,8 @@ function submissionTarget(
 }
 
 export function SelfRegistrationForm() {
-  const { context, load, message, setMessage } = useInviteContext();
+  const { t } = useLocale();
+  const { context, load, message, setMessage } = useInviteContext(t);
   const [form, setForm] = useState<SelfRegistrationFormState>(initialFormState);
   const [issues, setIssues] = useState<readonly ValidationIssue[]>([]);
   const [busy, setBusy] = useState(false);
@@ -189,7 +192,7 @@ export function SelfRegistrationForm() {
         capability: target.capability,
         context: target.context,
         draft,
-        onProgress: () => setMessage("Verificando este dispositivo…"),
+        onProgress: () => setMessage(t("selfService.verifyingDevice")),
       });
       setSurveyCapability(result.surveyCapability);
       await discardDraft(draftIdRef);
@@ -201,12 +204,12 @@ export function SelfRegistrationForm() {
       setCompleted(true);
     } catch (error) {
       await preserveDraft(draft, error);
-      setMessage(describeSelfServiceFailure(error));
+      setMessage(describeSelfServiceFailure(t, error));
     } finally {
       inFlightRef.current = false;
       setBusy(false);
     }
-  }, [context, form, preserveDraft, reportIssues, setMessage]);
+  }, [context, form, preserveDraft, reportIssues, setMessage, t]);
 
   useEffect(() => {
     const retry = () => void submit();
@@ -226,12 +229,12 @@ export function SelfRegistrationForm() {
   if (context === null) {
     return (
       <section className="form-card" aria-labelledby="poster-state-title">
-        <h2 id="poster-state-title">Cartaz em validação</h2>
+        <h2 id="poster-state-title">{t("selfService.pending.title")}</h2>
         <p role="status" aria-live="polite">
           {message}
         </p>
         <button type="button" onClick={() => void load()}>
-          Tentar de novo
+          {t("selfService.retry")}
         </button>
       </section>
     );
@@ -244,7 +247,7 @@ export function SelfRegistrationForm() {
         version={context.privacy_notice_version}
       />
       <section className="form-card" aria-labelledby="self-registration-title">
-        <h2 id="self-registration-title">Confirme os dados da estadia</h2>
+        <h2 id="self-registration-title">{t("selfService.formTitle")}</h2>
         <form noValidate onSubmit={handleSubmit}>
           <PlannedWindowFields
             arrival={form.plannedArrivalOn}
@@ -268,7 +271,7 @@ export function SelfRegistrationForm() {
           />
           <div className="form-actions">
             <button className="primary-action" type="submit" disabled={busy}>
-              {busy ? "Enviando…" : "Enviar autocadastro"}
+              {busy ? t("selfService.submitting") : t("selfService.submit")}
             </button>
           </div>
         </form>
