@@ -275,17 +275,34 @@ export const messagesEn: Messages = {
   "analytics.value.observed": "{value} person-days",
   "analytics.value.central": "Central estimate: {value} person-days",
   "analytics.value.band": "Likely range: {lower} to {upper}",
+  "analytics.percent.plain": "{percent}%",
+  "analytics.percent.signed": "{sign}{percent}%",
+  "analytics.summary.forecastTotal": "Forecast total over 30 days",
+  "analytics.summary.forecastTotalHint":
+    "Sum of the central estimates across the {count} published forecast days, in person-days. It is the volume of the month, not of a day.",
+  "analytics.summary.forecastTotalNone":
+    "No day in the horizon carries a published forecast, so there is no volume to add up.",
 
   // -------------------------------------------------------- Painel: série
   "analytics.presence.kicker": "Series in person-days",
   "analytics.presence.title": "Presence over time",
-  "analytics.window.label": "Presence window",
-  "analytics.window.recent": "Last 30 days",
-  "analytics.window.next": "Next 30 days",
-  "analytics.window.combined": "Last 30 and next 30 days",
-  "analytics.window.scope.recent": "last 30 days",
+  "analytics.updating": "Updating the window…",
+  "analytics.history.label": "History",
+  "analytics.history.recent30": "30 days",
+  "analytics.history.recent90": "90 days",
+  "analytics.history.recent365": "1 year",
+  "analytics.history.recent730": "2 years",
+  "analytics.history.month": "Month",
+  "analytics.history.monthLabel": "Month queried",
+  "analytics.history.monthPrevious": "Previous month",
+  "analytics.history.monthNext": "Next month",
+  "analytics.view.label": "Show",
+  "analytics.view.observed": "Observed",
+  "analytics.view.combined": "Observed and forecast",
+  "analytics.view.forecast": "Forecast only",
+  "analytics.window.scope.recent": "observed days in the window",
   "analytics.window.scope.next": "next 30 days",
-  "analytics.window.scope.combined": "last 30 observed days",
+  "analytics.window.scope.combined": "observed days in the window",
 
   "analytics.legend.aria": "Series legend",
   "analytics.legend.observed": "Observed",
@@ -296,6 +313,7 @@ export const messagesEn: Messages = {
   "analytics.legend.weekend": "Weekend",
 
   "analytics.stats.aria": "Statistics for the {scope}",
+  "analytics.stats.rhythmAria": "Rhythm and reach of the {scope}",
   "analytics.tile.average": "Daily average",
   "analytics.tile.averageHint":
     "Average of the {count} days with a published value. The dashed line on the chart marks that level.",
@@ -310,9 +328,24 @@ export const messagesEn: Messages = {
     "Average of the last {count} published days against the {count} before them. Protected days are skipped, never counted as zero.",
   "analytics.tile.trendNone":
     "At least two published days are needed to compare periods.",
+  "analytics.tile.median": "Typical day",
+  "analytics.tile.medianHint":
+    "Median of the published days: half the days sat above it, half below. A single holiday moves the mean, not the median.",
+  "analytics.tile.weekend": "Weekend",
+  "analytics.tile.weekendHint":
+    "How far Saturday and Sunday sit above or below the working days in the window. This is the number that sizes staffing and stock.",
+  "analytics.tile.weekendNone":
+    "At least one published day on each side is needed to compare weekend with working day.",
+  "analytics.tile.variation": "Variability",
+  "analytics.tile.variationHint":
+    "Standard deviation as a percentage of the mean. Around 20% demand is predictable; above 60% planning by the mean misleads.",
+  "analytics.tile.variationNone":
+    "At least two published days are needed to measure variation.",
   "analytics.tile.total": "Running total",
   "analytics.tile.totalHint":
     "Sum of published days. Protected days are left out, so the total is a floor, not a census.",
+  "analytics.tile.totalPartialHint":
+    "Partial sum: {count} days in the window carry no published value and are absent from the total. The number is a floor, not a census.",
   "analytics.tile.published": "Published days",
   "analytics.tile.publishedValue": "{published} of {days}",
   "analytics.withheld.none": "Every day in the window has a published value.",

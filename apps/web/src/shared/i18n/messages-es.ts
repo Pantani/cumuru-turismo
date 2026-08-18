@@ -281,17 +281,34 @@ export const messagesEs: Messages = {
   "analytics.value.observed": "{value} personas-día",
   "analytics.value.central": "Estimación central: {value} personas-día",
   "analytics.value.band": "Rango probable: {lower} a {upper}",
+  "analytics.percent.plain": "{percent}%",
+  "analytics.percent.signed": "{sign}{percent}%",
+  "analytics.summary.forecastTotal": "Total previsto en 30 días",
+  "analytics.summary.forecastTotalHint":
+    "Suma de las estimaciones centrales de los {count} días previstos publicados, en personas-día. Es el volumen del mes, no el de un día.",
+  "analytics.summary.forecastTotalNone":
+    "Ningún día del horizonte tiene previsión publicada, así que no hay volumen que sumar.",
 
   // -------------------------------------------------------- Painel: série
   "analytics.presence.kicker": "Serie en personas-día",
   "analytics.presence.title": "Presencia a lo largo del tiempo",
-  "analytics.window.label": "Ventana de presencia",
-  "analytics.window.recent": "Últimos 30 días",
-  "analytics.window.next": "Próximos 30 días",
-  "analytics.window.combined": "Últimos 30 y próximos 30 días",
-  "analytics.window.scope.recent": "últimos 30 días",
+  "analytics.updating": "Actualizando la ventana…",
+  "analytics.history.label": "Historial",
+  "analytics.history.recent30": "30 días",
+  "analytics.history.recent90": "90 días",
+  "analytics.history.recent365": "1 año",
+  "analytics.history.recent730": "2 años",
+  "analytics.history.month": "Mes",
+  "analytics.history.monthLabel": "Mes consultado",
+  "analytics.history.monthPrevious": "Mes anterior",
+  "analytics.history.monthNext": "Mes siguiente",
+  "analytics.view.label": "Mostrar",
+  "analytics.view.observed": "Observado",
+  "analytics.view.combined": "Observado y previsto",
+  "analytics.view.forecast": "Solo previsión",
+  "analytics.window.scope.recent": "días observados de la ventana",
   "analytics.window.scope.next": "próximos 30 días",
-  "analytics.window.scope.combined": "últimos 30 días observados",
+  "analytics.window.scope.combined": "días observados de la ventana",
 
   "analytics.legend.aria": "Leyenda de la serie",
   "analytics.legend.observed": "Observado",
@@ -302,6 +319,7 @@ export const messagesEs: Messages = {
   "analytics.legend.weekend": "Fin de semana",
 
   "analytics.stats.aria": "Estadísticas de los {scope}",
+  "analytics.stats.rhythmAria": "Ritmo y alcance de los {scope}",
   "analytics.tile.average": "Promedio diario",
   "analytics.tile.averageHint":
     "Promedio de los {count} días con valor publicado. La línea discontinua del gráfico marca ese nivel.",
@@ -316,9 +334,24 @@ export const messagesEs: Messages = {
     "Promedio de los {count} últimos días publicados frente a los {count} anteriores. Los días protegidos se saltan, nunca se cuentan como cero.",
   "analytics.tile.trendNone":
     "Se necesitan al menos dos días publicados para comparar períodos.",
+  "analytics.tile.median": "Día común",
+  "analytics.tile.medianHint":
+    "Mediana de los días publicados: la mitad de los días quedó por encima y la mitad por debajo. Un feriado aislado desplaza la media, no la mediana.",
+  "analytics.tile.weekend": "Fin de semana",
+  "analytics.tile.weekendHint":
+    "Cuánto pesan el sábado y el domingo por encima o por debajo de los días hábiles de la ventana. Es el número que dimensiona el equipo y el stock.",
+  "analytics.tile.weekendNone":
+    "Hace falta al menos un día publicado de cada lado para comparar fin de semana con día hábil.",
+  "analytics.tile.variation": "Variabilidad",
+  "analytics.tile.variationHint":
+    "Desviación estándar como porcentaje de la media. Cerca del 20% la demanda es previsible; por encima del 60% planificar por la media engaña.",
+  "analytics.tile.variationNone":
+    "Se necesitan al menos dos días publicados para medir la variación.",
   "analytics.tile.total": "Total acumulado",
   "analytics.tile.totalHint":
     "Suma de los días publicados. Los días protegidos quedan fuera, así que el total es un piso, no un censo.",
+  "analytics.tile.totalPartialHint":
+    "Suma parcial: {count} días de la ventana quedaron sin valor publicado y no entran en el total. El número es un piso, no un censo.",
   "analytics.tile.published": "Días publicados",
   "analytics.tile.publishedValue": "{published} de {days}",
   "analytics.withheld.none":

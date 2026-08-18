@@ -188,6 +188,11 @@ type Querier interface {
 	ListConsentRequirementsForVersion(ctx context.Context, questionnaireVersionID pgtype.UUID) ([]SurveyConsentRequirement, error)
 	ListCurrentPreferenceCells(ctx context.Context, periodSelector string) ([]PublicDataCurrentPreference, error)
 	ListCurrentPresenceCells(ctx context.Context, periodSelector string) ([]PublicDataCurrentPresence, error)
+	// A janela recente é medida contra o `as_of_on` da própria publicação: um
+	// intervalo calculado no cliente e enviado pronto passaria a depender do
+	// relógio de quem consulta, não da release publicada.
+	ListCurrentPresenceCellsForRecentDays(ctx context.Context, arg ListCurrentPresenceCellsForRecentDaysParams) ([]PublicDataCurrentPresence, error)
+	ListCurrentPresenceCellsInRange(ctx context.Context, arg ListCurrentPresenceCellsInRangeParams) ([]PublicDataCurrentPresence, error)
 	ListCurrentQualityRows(ctx context.Context, windowCode string) ([]AnalyticsCurrentQuality, error)
 	ListCurrentSummaryCells(ctx context.Context) ([]PublicDataCurrentSummary, error)
 	ListEligiblePreferenceCounts(ctx context.Context, arg ListEligiblePreferenceCountsParams) ([]ListEligiblePreferenceCountsRow, error)

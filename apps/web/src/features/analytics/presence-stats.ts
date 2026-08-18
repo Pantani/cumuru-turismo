@@ -17,10 +17,13 @@ export interface SeriesStats {
   withheld: number;
   total: number;
   average: number | null;
+  median: number | null;
   peak: PublishedDay | null;
   trough: PublishedDay | null;
   trendPercent: number | null;
   trendSize: number;
+  weekendLiftPercent: number | null;
+  variationPercent: number | null;
 }
 
 /** Longest half the trend compares, so the reading stays about a recent week. */
@@ -97,16 +100,101 @@ export function trendPercent(
 export function seriesStats(series: readonly PresencePoint[]): SeriesStats {
   const published = publishedDays(series);
   const size = trendSize(published.length);
+  const average = mean(published);
   return {
     days: series.length,
     published,
     withheld: series.length - published.length,
     total: published.reduce((sum, day) => sum + day.value, 0),
-    average: mean(published),
+    average,
+    median: medianOf(published.map((day) => day.value)),
     peak: extreme(published, (candidate, current) => candidate > current),
     trough: extreme(published, (candidate, current) => candidate < current),
     trendPercent: trendPercent(published, size),
     trendSize: size,
+    weekendLiftPercent: weekendLift(published),
+    variationPercent: variation(published, average),
+  };
+}
+
+/**
+ * Mediana da janela. A média sozinha responde mal a um feriado: um único dia
+ * atípico desloca a referência que todos os deltas usam, e a mediana diz qual
+ * era o dia comum.
+ */
+function medianOf(values: readonly number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+  const ordered = [...values].sort((first, second) => first - second);
+  const middle = Math.floor(ordered.length / 2);
+  const lower = ordered[middle - 1];
+  const upper = ordered[middle];
+  if (upper === undefined) {
+    return null;
+  }
+  return ordered.length % 2 === 1 || lower === undefined
+    ? upper
+    : (lower + upper) / 2;
+}
+
+/**
+ * Quanto o fim de semana pesa acima — ou abaixo — do dia útil, em pontos
+ * percentuais. É a métrica que decide escala de equipe e compra de estoque, e
+ * ela não existe enquanto um dos dois lados não tiver nenhum dia publicado.
+ */
+function weekendLift(days: readonly PublishedDay[]): number | null {
+  const weekend = mean(days.filter((day) => isWeekend(day.date)));
+  const working = mean(days.filter((day) => !isWeekend(day.date)));
+  return growth(weekend, working);
+}
+
+/**
+ * Coeficiente de variação: o desvio-padrão como percentual da média. Uma
+ * cidade com 20% varia pouco de um dia para o outro; com 80% a demanda é
+ * imprevisível e a média engana quem planeja por ela.
+ */
+function variation(
+  days: readonly PublishedDay[],
+  average: number | null,
+): number | null {
+  if (average === null || average === 0 || days.length < 2) {
+    return null;
+  }
+  const squares = days.map((day) => (day.value - average) ** 2);
+  const deviation = Math.sqrt(
+    squares.reduce((sum, value) => sum + value, 0) / days.length,
+  );
+  return (deviation / average) * 100;
+}
+
+export interface ForecastTotals {
+  lower: number;
+  central: number;
+  upper: number;
+  days: number;
+}
+
+/**
+ * Soma da previsão publicada no horizonte, em pessoa-dia. É o número que uma
+ * pousada ou um restaurante usa para dimensionar equipe e estoque, e o dia a
+ * dia sozinho não o entrega. Dias protegidos não entram — e por isso `days`
+ * diz sobre quantos a soma se apoia.
+ */
+export function forecastTotals(
+  series: readonly PresencePoint[],
+): ForecastTotals | null {
+  const bands = series.flatMap((point) =>
+    point.status === "published" && point.kind === "forecast" ? [point] : [],
+  );
+  if (bands.length === 0) {
+    return null;
+  }
+  return {
+    lower: bands.reduce((sum, point) => sum + point.lower, 0),
+    central: bands.reduce((sum, point) => sum + point.central, 0),
+    upper: bands.reduce((sum, point) => sum + point.upper, 0),
+    days: bands.length,
   };
 }
 

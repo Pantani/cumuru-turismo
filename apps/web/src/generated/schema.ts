@@ -1757,8 +1757,9 @@ export interface components {
         ForecastPresencePoint: components["schemas"]["PublishedForecastPoint"] | components["schemas"]["ProtectedForecastPoint"];
         ObservedPublicPresence: {
             metadata: components["schemas"]["PublicMetadata"];
-            /** @constant */
-            window: "recent_30_days";
+            /** @enum {string} */
+            window: "recent_30_days" | "recent_90_days" | "recent_365_days" | "recent_730_days" | "month";
+            month?: string;
             series: components["schemas"]["ObservedPresencePoint"][];
         };
         ForecastPublicPresence: {
@@ -1846,7 +1847,13 @@ export interface components {
             rounding_base: 10;
             /** @constant */
             rounding_mode: "stable-half-up";
-            allowed_presence_windows: ("recent_30_days" | "next_30_days")[];
+            /**
+             * @description Dias civis de histórico observado que a release corrente publica,
+             *     contados a partir do dia de referência da publicação.
+             * @constant
+             */
+            presence_history_days: 730;
+            allowed_presence_windows: ("recent_30_days" | "recent_90_days" | "recent_365_days" | "recent_730_days" | "next_30_days" | "month")[];
             allowed_preference_periods: "last_complete_month"[];
         };
         AvailableQualityCount: {
@@ -2026,7 +2033,18 @@ export interface components {
         };
     };
     parameters: {
-        PresenceWindow: "recent_30_days" | "next_30_days";
+        /**
+         * @description Janela do documento publicado. As janelas `recent_*` recortam o
+         *     histórico diário observado; `month` recorta um mês civil e exige o
+         *     parâmetro `month`. `next_30_days` é a única janela de previsão.
+         */
+        PresenceWindow: "recent_30_days" | "recent_90_days" | "recent_365_days" | "recent_730_days" | "next_30_days" | "month";
+        /**
+         * @description Mês civil consultado, obrigatório quando `window=month` e recusado em
+         *     qualquer outra janela. Fora do histórico publicado o documento não
+         *     existe e a resposta é 503.
+         */
+        PresenceMonth: string;
         PreferencePeriod: "last_complete_month";
         QualityWindow: "last_30_days";
         IfNoneMatch: string;
@@ -2300,7 +2318,18 @@ export interface operations {
     getPublicPresence: {
         parameters: {
             query: {
+                /**
+                 * @description Janela do documento publicado. As janelas `recent_*` recortam o
+                 *     histórico diário observado; `month` recorta um mês civil e exige o
+                 *     parâmetro `month`. `next_30_days` é a única janela de previsão.
+                 */
                 window: components["parameters"]["PresenceWindow"];
+                /**
+                 * @description Mês civil consultado, obrigatório quando `window=month` e recusado em
+                 *     qualquer outra janela. Fora do histórico publicado o documento não
+                 *     existe e a resposta é 503.
+                 */
+                month?: components["parameters"]["PresenceMonth"];
             };
             header?: {
                 "If-None-Match"?: components["parameters"]["IfNoneMatch"];

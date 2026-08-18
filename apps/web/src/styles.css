@@ -734,6 +734,165 @@ h4 {
   border-top: 1px solid var(--line);
 }
 
+/* Faixa secundária: os mesmos indicadores, metade do peso. Com os nove no
+   mesmo tamanho, "quantos dias foram publicados" competia visualmente com
+   "quantas pessoas por dia", e a hierarquia da leitura desaparecia. */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1px;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  list-style: none;
+}
+
+.stat-strip .stat-tile {
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  border: 0;
+  border-radius: 0;
+}
+
+.stat-strip .stat-value {
+  font-size: 1rem;
+}
+
+/* O gráfico e o ritmo semanal respondem à mesma pergunta em escalas
+   diferentes; lado a lado a comparação é imediata, empilhados exigia rolar. */
+.presence-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (min-width: 60rem) {
+  .presence-panels {
+    grid-template-columns: minmax(0, 2.4fr) minmax(14rem, 1fr);
+  }
+
+  .presence-panels .weekday-pattern {
+    margin-top: 0;
+  }
+}
+
+/* Duas perguntas, dois controles: quanto histórico carregar e o que desenhar. */
+.period-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem 2rem;
+  margin: 1.25rem 0 0;
+}
+
+.period-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.period-label {
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Controle segmentado: as opções são poucas e comparáveis, e um menu fechado
+   escondia justamente que existe mais de trinta dias de histórico a pedir. */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+}
+
+.segment {
+  min-height: 2.25rem;
+  padding: 0.4rem 0.85rem;
+  color: var(--ink-2);
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius-field) - 3px);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+
+.segment:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.segment[aria-pressed="true"] {
+  color: var(--on-accent);
+  background: var(--brand);
+}
+
+.month-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.month-step {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.month-step:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+
+.month-step:disabled {
+  color: var(--ink-3);
+  background: var(--surface-sunken);
+  cursor: not-allowed;
+}
+
+.month-field input {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.6rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-family: var(--font-num);
+  font-size: 0.85rem;
+}
+
+/* Fica vazio na maior parte do tempo: é a região viva que anuncia a troca de
+   janela sem empurrar o cabeçalho quando a mensagem aparece. */
+.series-status {
+  min-height: 1.2rem;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .section-heading label {
   display: grid;
   gap: 0.4rem;
@@ -2494,9 +2653,16 @@ button.quiet-action:disabled {
   .summary-card,
   .quality-card,
   .stat-tile,
+  .segmented,
   .preference-list li,
   .weekday-list li {
     border: 1px solid CanvasText;
+  }
+
+  /* Em alto contraste o fundo do segmento ativo desaparece; o estado precisa
+     sobreviver na borda, ou o controle deixa de dizer o que está selecionado. */
+  .segment[aria-pressed="true"] {
+    border: 2px solid CanvasText;
   }
 
   .summary-card::before,

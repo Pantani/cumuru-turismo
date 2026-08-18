@@ -995,7 +995,7 @@ CREATE TABLE analytics.metric_catalog (
       (
         metric_code = 'presence'
         AND unit = 'person_day'
-        AND period_selector IN ('recent_30_days', 'next_30_days')
+        AND period_selector IN ('observed_daily', 'next_30_days')
         AND dimension_code = 'none'
       )
       OR
@@ -1296,7 +1296,7 @@ CREATE TABLE public_data.metric_cells (
     CHECK (
       (
         metric_code = 'presence'
-        AND period_selector IN ('recent_30_days', 'next_30_days')
+        AND period_selector IN ('observed_daily', 'next_30_days')
         AND unit = 'person_day'
         AND dimension_code = 'none'
         AND category_code = 'none'
@@ -1317,7 +1317,7 @@ CREATE TABLE public_data.metric_cells (
     CHECK (
       metric_code <> 'presence'
       OR (
-        period_selector = 'recent_30_days'
+        period_selector = 'observed_daily'
         AND kind = 'observed'
       )
       OR (
@@ -1468,6 +1468,8 @@ JOIN public_data.metric_cells AS cell
 WHERE current.singleton
   AND cell.metric_code = 'presence';
 
+-- O resumo é a capa: um dia observado e o horizonte previsto. Sem o recorte a
+-- view devolveria os 730 dias de histórico para responder "quantos hoje".
 CREATE VIEW public_data.current_summary
 WITH (security_barrier = true)
 AS
@@ -1489,7 +1491,9 @@ SELECT
   coverage_status,
   coverage_ratio_percent,
   published_at
-FROM public_data.current_presence;
+FROM public_data.current_presence
+WHERE kind = 'forecast'
+  OR period_start = as_of_on;
 
 CREATE VIEW public_data.current_preferences
 WITH (security_barrier = true)
@@ -1540,12 +1544,22 @@ SELECT
   true AS complementary_suppression,
   10::integer AS rounding_base,
   'stable-half-up'::text AS rounding_mode,
-  ARRAY['recent_30_days', 'next_30_days']::text[]
+  ARRAY[
+    'recent_30_days',
+    'recent_90_days',
+    'recent_365_days',
+    'recent_730_days',
+    'next_30_days',
+    'month'
+  ]::text[]
     AS allowed_presence_windows,
   ARRAY['last_complete_month']::text[]
     AS allowed_preference_periods,
   70::integer AS forecast_fallback_lower_percent,
-  130::integer AS forecast_fallback_upper_percent
+  130::integer AS forecast_fallback_upper_percent,
+  -- Coluna nova entra no fim da lista: `CREATE OR REPLACE VIEW` recusa
+  -- inserção no meio, e recriar a view custaria os grants do papel público.
+  730::integer AS presence_history_days
 FROM public_data.current_publication AS current
 JOIN public_data.publications AS publication
   ON publication.publication_version = current.publication_version

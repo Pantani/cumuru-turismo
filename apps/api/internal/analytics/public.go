@@ -9,7 +9,7 @@ var ErrPublicUnavailable = errors.New("public analytics unavailable")
 
 type PublicReader interface {
 	Summary(context.Context) (PublicSummary, error)
-	Presence(context.Context, string) (PublicPresence, error)
+	Presence(context.Context, PresenceSlice) (PublicPresence, error)
 	Preferences(context.Context, string) (PublicPreferences, error)
 	Methodology(context.Context) (PublicMethodology, error)
 }
@@ -62,6 +62,7 @@ type ForecastPeak struct {
 type PublicPresence struct {
 	Metadata PublicMetadata  `json:"metadata"`
 	Window   string          `json:"window"`
+	Month    string          `json:"month,omitempty"`
 	Series   []PresencePoint `json:"series"`
 }
 
@@ -102,6 +103,7 @@ type PublicMethodology struct {
 	ComplementarySuppression       bool           `json:"complementary_suppression"`
 	RoundingBase                   int32          `json:"rounding_base"`
 	RoundingMode                   string         `json:"rounding_mode"`
+	PresenceHistoryDays            int32          `json:"presence_history_days"`
 	AllowedPresenceWindows         []string       `json:"allowed_presence_windows"`
 	AllowedPreferencePeriods       []string       `json:"allowed_preference_periods"`
 }

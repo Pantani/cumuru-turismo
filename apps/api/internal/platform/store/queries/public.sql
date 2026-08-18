@@ -288,6 +288,59 @@ FROM public_data.current_presence
 WHERE period_selector = sqlc.arg(period_selector)
 ORDER BY period_start, kind;
 
+-- name: ListCurrentPresenceCellsForRecentDays :many
+-- A janela recente é medida contra o `as_of_on` da própria publicação: um
+-- intervalo calculado no cliente e enviado pronto passaria a depender do
+-- relógio de quem consulta, não da release publicada.
+SELECT
+  period_selector,
+  period_start,
+  period_end,
+  unit,
+  kind,
+  status,
+  published_value,
+  published_lower,
+  published_central,
+  published_upper,
+  as_of_on,
+  data_mode,
+  privacy_policy_version,
+  methodology_version,
+  coverage_status,
+  coverage_ratio_percent,
+  published_at
+FROM public_data.current_presence
+WHERE period_selector = sqlc.arg(period_selector)
+  AND period_start > as_of_on - sqlc.arg(lookback_days)::integer
+  AND period_start <= as_of_on
+ORDER BY period_start, kind;
+
+-- name: ListCurrentPresenceCellsInRange :many
+SELECT
+  period_selector,
+  period_start,
+  period_end,
+  unit,
+  kind,
+  status,
+  published_value,
+  published_lower,
+  published_central,
+  published_upper,
+  as_of_on,
+  data_mode,
+  privacy_policy_version,
+  methodology_version,
+  coverage_status,
+  coverage_ratio_percent,
+  published_at
+FROM public_data.current_presence
+WHERE period_selector = sqlc.arg(period_selector)
+  AND period_start >= sqlc.arg(start_on)
+  AND period_start < sqlc.arg(end_on)
+ORDER BY period_start, kind;
+
 -- name: ListCurrentPreferenceCells :many
 SELECT
   period_selector,
@@ -331,6 +384,7 @@ SELECT
   complementary_suppression,
   rounding_base,
   rounding_mode,
+  presence_history_days,
   allowed_presence_windows,
   allowed_preference_periods
 FROM public_data.current_methodology;
