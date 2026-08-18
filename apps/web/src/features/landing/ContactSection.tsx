@@ -29,10 +29,6 @@ export function ContactSection() {
             </dd>
           </div>
           <div>
-            <dt>{t("landing.contact.inPerson")}</dt>
-            <dd>{t("landing.contact.inPersonValue")}</dd>
-          </div>
-          <div>
             <dt>{t("landing.contact.dpo")}</dt>
             <dd>
               <a href={`mailto:${DPO_EMAIL}`}>{DPO_EMAIL}</a>

@@ -73,6 +73,17 @@
   background: var(--ink);
 }
 
+/* Cabeçalho de rotas e barra de seções ficam os dois colados no topo, então a
+   âncora tem de parar a altura das duas antes do começo da seção: sem isso o
+   navegador encosta a seção na borda da janela e as barras cobrem a primeira
+   linha. `--lp-nav-h` é a medida publicada por `useStickyNavHeight`; o valor de
+   reserva cobre só o intervalo entre a primeira pintura e a primeira medição. */
+.landing .lp-hero,
+.landing .lp-section,
+.landing .lp-register {
+  scroll-margin-top: calc(var(--header-h) + var(--lp-nav-h, 3.6rem));
+}
+
 /* --------------------------------------------------------------------------
    Estrutura das seções
    -------------------------------------------------------------------------- */
@@ -652,30 +663,6 @@
   line-height: 1.6;
 }
 
-.lp-quote {
-  margin: 0;
-}
-
-.lp-quote blockquote {
-  max-width: 24ch;
-  margin: 0 0 1.1rem;
-  color: var(--lp-ink);
-  font-family: var(--font-display);
-  font-size: clamp(1.6rem, 3vw, 2.6rem);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.04em;
-  text-wrap: balance;
-}
-
-.lp-quote figcaption {
-  color: var(--lp-muted);
-  font-family: var(--font-num);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
 .lp-hosts-aside {
   display: grid;
   gap: 1rem;
@@ -722,6 +709,14 @@
   font-size: 0.68rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+/* O link de entrar divide o rodapé com a nota de custo, mas não é texto de
+   apoio: recebe a tinta cheia do par coral e o sublinhado que diz que é alvo
+   de clique. O cinza de 70% ficaria abaixo do contraste mínimo para um link. */
+.lp-register-footnote a {
+  color: var(--on-accent);
+  text-decoration: underline;
 }
 
 /* --------------------------------------------------------------------------
@@ -1107,6 +1102,13 @@
   .lp-section-nav {
     top: 0;
     gap: 0.75rem;
+  }
+
+  /* ...e por isso só a barra de seções cobre a âncora aqui. */
+  .landing .lp-hero,
+  .landing .lp-section,
+  .landing .lp-register {
+    scroll-margin-top: var(--lp-nav-h, 5.6rem);
   }
 
   /* `min-width: 0` é o que faz a rolagem funcionar: sem ele o item flex cresce
