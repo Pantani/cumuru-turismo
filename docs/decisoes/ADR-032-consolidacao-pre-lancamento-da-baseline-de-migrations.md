@@ -89,6 +89,23 @@ instalação, de modo que nenhuma linha legada pode existir para ser convertida.
 Os seeds versionados já usam as categorias finais. O schema final, os grants e
 os comentários permanecem idênticos.
 
+### Terceira onda de consolidação
+
+Nenhum banco persistente foi montado ou lançado depois da segunda onda, e a
+cadeia voltou a crescer durante o desenvolvimento até `000005`. A mesma
+decisão é reaplicada: `000002_organization_document`,
+`000003_self_service_and_approval`, `000004_rename_fnrh_failures_reason` e
+`000005_audit_outbox_returning_grants` passam a integrar o par
+`000001_initial_schema`, na mesma ordem no `up` e em ordem reversa no `down`,
+com o comentário de proveniência marcado como `third pre-launch wave`.
+
+Diferente da segunda onda, nenhum bloco foi omitido: a concatenação é
+literal, cada migração absorvida preserva seus próprios `BEGIN`/`COMMIT`
+internos, e nenhuma delas continha backfill de dados legados a eliminar — só
+DDL, mudança de vocabulário de dado técnico (`fnrh_failures_reason`) e
+grants. O schema final, os grants e os comentários permanecem idênticos aos
+da cadeia `000001`–`000005` aplicada em sequência.
+
 ## Consequências
 
 - instalações novas executam uma única versão de migration;

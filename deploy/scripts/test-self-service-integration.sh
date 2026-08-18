@@ -4,8 +4,9 @@ set -euo pipefail
 # autoatendimento — autoatendimento e aprovação, integração em PostgreSQL real.
 #
 # O teste central desta fase é a reprodução da falha silenciosa de max_uses
-# nulo. Ela só é reproduzível DEPOIS do DDL da 000003, porque na baseline a
-# coluna é NOT NULL: por isso a asserção compara, sobre o mesmo schema novo, o
+# nulo. Ela só é reproduzível DEPOIS do DDL de autoatendimento e aprovação
+# (hoje absorvido em 000001_initial_schema), porque na baseline anterior a
+# coluna era NOT NULL: por isso a asserção compara, sobre o mesmo schema novo, o
 # predicado antigo (`use_count < max_uses`) contra o corrigido
 # (`max_uses IS NULL OR use_count < max_uses`). O antigo afeta zero linhas e é
 # essa a falha; qualquer suíte que exercite apenas convite limitado fica verde.
