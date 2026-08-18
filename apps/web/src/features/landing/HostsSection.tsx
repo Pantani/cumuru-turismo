@@ -1,14 +1,16 @@
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import { ImageSlot } from "./ImageSlot";
-import { HOST_BENEFITS } from "./landing-content";
+import { HAMMOCK_PHOTO, HOST_BENEFITS } from "./landing-content";
 import { SectionIndex } from "./SectionIndex";
 
 /**
- * O cartão leva a `/convite`, que é onde o pedido de acesso é escrito de fato.
- * Antes ele apontava para `/acesso`, a tela de login: quem chega pela capa
- * ainda não tem conta, então o convite ao cadastro terminava numa parede de
- * credencial. `/convite` grava o pedido na fila de aprovação; a conta continua
- * sendo criada pela administração, depois da análise.
+ * O cartão leva a `/convite`, que é onde o pedido de acesso passa a ser escrito
+ * de fato. Ele já apontou para `/acesso`, a tela de login, e depois para um
+ * `mailto:` da equipe: os dois eram contorno para a mesma ausência, porque não
+ * existia autocadastro de hospedagem e quem chega pela capa ainda não tem conta.
+ * Agora existe — `/convite` grava o pedido na fila de aprovação (ADR-042), e a
+ * conta continua nascendo do link de ativação que a administração emite depois
+ * da análise. O link de entrar fica embaixo, para quem já tem conta.
  */
 function RegisterCard() {
   const { t } = useLocale();
@@ -19,6 +21,9 @@ function RegisterCard() {
       <a className="lp-button-dark" href="/convite">
         {t("landing.register.action")}
       </a>
+      <p className="lp-register-footnote">
+        <a href="/acesso">{t("landing.register.signIn")}</a>
+      </p>
       <p className="lp-register-footnote">{t("landing.register.footnote")}</p>
     </div>
   );
@@ -49,14 +54,10 @@ export function HostsSection() {
               </li>
             ))}
           </ul>
-          <figure className="lp-quote">
-            <blockquote>{t("landing.hosts.quote")}</blockquote>
-            <figcaption>{t("landing.hosts.quoteCaption")}</figcaption>
-          </figure>
         </div>
         <div className="lp-hosts-aside">
           <div className="lp-hosts-portrait">
-            <ImageSlot caption="landing.hosts.image" />
+            <ImageSlot caption="landing.hosts.image" photo={HAMMOCK_PHOTO} />
           </div>
           <RegisterCard />
         </div>

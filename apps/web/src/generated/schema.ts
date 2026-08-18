@@ -229,7 +229,7 @@ export interface paths {
         put?: never;
         /**
          * Iniciar participação local de uma acomodação
-         * @description Onboarding voluntário restrito ao protótipo local/teste com OIDC fake. Cria organização mínima, acomodação ativa e primeira membership manager atomicamente. Não recebe documento, Cadastur, identidade de tenant ou qualquer configuração FNRH.
+         * @description Onboarding voluntário restrito ao protótipo local/teste. Aceita tanto a sessão local de e-mail e senha da ADR-037 quanto o principal federado, e cria organização mínima, acomodação ativa e primeira membership manager atomicamente. Não recebe documento, Cadastur, identidade de tenant ou qualquer configuração FNRH.
          */
         post: operations["createAccommodation"];
         delete?: never;

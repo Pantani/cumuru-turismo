@@ -1,13 +1,31 @@
 # Web
 
-SPA estática da fundação técnica do Observatório Turístico de Cumuruxatiba.
+SPA estática do Observatório Turístico de Cumuruxatiba.
+
+## Rotas
+
+| Rota | Para quem | O que faz |
+| --- | --- | --- |
+| `/` | qualquer pessoa | Capa pública trilíngue e painel de indicadores anônimos |
+| `/acesso` | hospedagem | Login por e-mail e senha e área de trabalho da hospedagem |
+| `/registro` | hóspede convidado | Registro do grupo a partir do convite nominal |
+| `/pesquisa` | hóspede convidado | Pesquisa turística opcional |
+| `/i` | hóspede sem convite | Autocadastro pelo cartaz/QR da hospedagem |
+| `/ativacao` | hospedagem convidada | Ativação da conta por capability de uso único |
+| `/questionarios` | administração | Autoria, revisão e publicação do questionário |
+| `/qualidade` | administração | Painel interno de cobertura e qualidade |
+
+`/registro`, `/pesquisa`, `/i` e `/ativacao` dependem da capability no
+fragmento da URL; abertas diretamente, permanecem bloqueadas por construção.
+As features correspondentes vivem em `src/features/` e consomem a API pelos
+clients de `src/shared/api/`, um por funcionalidade sobre o transporte único
+`http-client.ts`.
 
 ## Limite do protótipo
 
-Questionário, dashboard e FNRH continuam fora desta fase. Dados e identidades
-locais devem ser exclusivamente fictícios.
-
-O ambiente opera como `PROTOTYPE_ONLY`, exclusivamente com dados fictícios.
+A integração FNRH não existe no front-end. O ambiente opera como
+`PROTOTYPE_ONLY`: dados e identidades locais devem ser exclusivamente
+fictícios.
 
 ## Desenvolvimento
 
@@ -77,5 +95,6 @@ origem continuam na raiz, fora do que a aplicação publica.
 O lint usa `apps/web/.oxlintrc.json` e cobre todo arquivo TypeScript, TSX e
 JavaScript próprio dentro de `apps/web`, incluindo `vite.config.ts`, testes e o
 cliente gerado. `node_modules` e `dist` são os únicos artefatos fora dessa
-medição. As regras `complexity` e `sonarjs/cognitive-complexity` falham quando
-uma função ultrapassa 9, sem comentários de suppression.
+medição. As regras `complexity` e `sonarjs/cognitive-complexity` falham
+quando uma função ultrapassa 5 e 8 respectivamente, testes incluídos, sem
+comentários de suppression.

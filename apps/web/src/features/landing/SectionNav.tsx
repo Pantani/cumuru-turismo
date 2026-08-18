@@ -1,5 +1,6 @@
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import { SECTION_ANCHORS } from "./landing-content";
+import { useStickyNavHeight } from "./sticky-nav-height";
 
 /**
  * Índice de seções da capa. Fica separado da navegação de rotas do topo: uma
@@ -8,8 +9,13 @@ import { SECTION_ANCHORS } from "./landing-content";
  */
 export function SectionNav() {
   const { t } = useLocale();
+  const navRef = useStickyNavHeight();
   return (
-    <nav className="lp-section-nav" aria-label={t("landing.sections.aria")}>
+    <nav
+      className="lp-section-nav"
+      ref={navRef}
+      aria-label={t("landing.sections.aria")}
+    >
       <ul>
         {SECTION_ANCHORS.map((anchor) => (
           <li key={anchor.id}>
@@ -17,8 +23,8 @@ export function SectionNav() {
           </li>
         ))}
       </ul>
-      {/* "Cadastrar hospedagem" é promessa de cadastro; entrar fica no menu. */}
-      <a className="lp-section-nav-cta" href="/convite">
+      {/* Mesma âncora da capa: o cartão de cadastro é a porta para `/convite`. */}
+      <a className="lp-section-nav-cta" href="#cadastro">
         {t("landing.nav.register")}
       </a>
     </nav>

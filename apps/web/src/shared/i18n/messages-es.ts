@@ -81,20 +81,21 @@ export const messagesEs: Messages = {
     "Funciona en el móvil, tolera internet débil y no pide nada que usted no pregunte ya en la recepción.",
   "landing.how.step1.title": "Registre el alojamiento",
   "landing.how.step1.body":
-    "Nombre, identificación fiscal, tipo y capacidad aproximada. Posada formal o casa familiar — ambas entran.",
+    "Nombre del lugar, tipo de alojamiento y cuántas personas caben. No pedimos identificación fiscal ni licencia turística. Posada formal o casa familiar — ambas entran.",
   "landing.how.step2.title": "Abra la estancia",
   "landing.how.step2.body":
     "Llegada, salida y número de personas. Solo eso ya alimenta el indicador de presencia del pueblo.",
-  "landing.how.step3.title": "El huésped completa o usted aprueba",
+  "landing.how.step3.title": "El huésped completa y usted aprueba",
   "landing.how.step3.body":
-    "Un código QR en el mostrador lleva al visitante a su propio registro. Si no quiere, la recepción lo completa y aprueba.",
+    "El código QR del mostrador abre un formulario sin nombre, documento, correo ni teléfono: solo franja de edad, de dónde viene la persona y las fechas. La estancia llega pendiente y solo entra en la cuenta del pueblo cuando usted la aprueba.",
   "landing.how.step4.title": "El pueblo recibe el número",
   "landing.how.step4.body":
     "Todo entra agregado, redondeado y protegido en el panel público. Nadie ve su ocupación por separado.",
-  "landing.how.image.desk":
-    "Recepción de posada con el código QR en el mostrador",
-  "landing.how.image.phone": "Huésped completando el registro en el móvil",
-  "landing.how.image.street": "Calle del pueblo en día de movimiento",
+  "landing.how.image.square":
+    "Plaza del centro de Cumuruxatiba, con el comercio y la posada del pueblo",
+  "landing.how.image.gate":
+    "Pórtico de entrada de Cumuruxatiba en el camino de acceso",
+  "landing.how.image.street": "Calle del pueblo bajo los cocoteros",
 
   // -------------------------------------------------------- Landing: anfitriões
   "landing.hosts.index": "03",
@@ -107,26 +108,24 @@ export const messagesEs: Messages = {
   "landing.hosts.benefit1.body":
     "Previsión de 30 días con rango probable para definir tarifas, equipo y compras.",
   "landing.hosts.benefit2.title":
-    "Con identificación personal o de empresa, da igual",
+    "Sin identificación fiscal, sin licencia, sin documento",
   "landing.hosts.benefit2.body":
-    "Quien alquila una casa participa igual que una posada registrada. Sin licencia turística obligatoria.",
+    "Quien alquila una casa participa igual que una posada registrada. El registro no pide ningún documento.",
   "landing.hosts.benefit3.title": "Su ocupación nunca se expone",
   "landing.hosts.benefit3.body":
     "Ningún indicador público se abre por establecimiento. Solo existe el total del pueblo.",
   "landing.hosts.benefit4.title": "Funciona con internet mala",
   "landing.hosts.benefit4.body":
     "El registro queda guardado en el dispositivo y se envía solo cuando vuelve la señal.",
-  "landing.hosts.quote":
-    "Antes adivinaba la temporada alta por el movimiento de la calle. Hoy miro la previsión de treinta días y sé cuándo llamar más gente a la cocina.",
-  "landing.hosts.quoteCaption":
-    "Testimonio de ejemplo — sustituya por un anfitrión real del pueblo.",
-  "landing.hosts.image": "Retrato de un anfitrión o posada del pueblo",
+  "landing.hosts.image":
+    "Hamaca colgada en la galería de un alojamiento del pueblo",
 
   // ---------------------------------------------------------- Landing: cadastro
   "landing.register.title": "Registre su alojamiento",
   "landing.register.body":
     "Toma cinco minutos. Cuenta cómo aloja, deja un contacto y la administración le envía por correo la invitación de acceso después de analizar la solicitud.",
   "landing.register.action": "Solicitar mi acceso",
+  "landing.register.signIn": "¿Ya tiene acceso? Ir al área del alojamiento",
   "landing.register.footnote": "Sin costo. Puede salir cuando quiera.",
 
   // ---------------------------------------------------------- Landing: comércio
@@ -163,7 +162,8 @@ export const messagesEs: Messages = {
   "landing.place.beachValue": "Cerca de 17 km",
   "landing.place.season": "Temporada alta",
   "landing.place.seasonValue": "Diciembre a febrero",
-  "landing.place.image": "Mapa del pueblo de Cumuruxatiba con los alojamientos",
+  "landing.place.image":
+    "Praia do Centro en marea baja, con los acantilados de la Costa das Baleias al fondo",
 
   // ------------------------------------------------------- Landing: privacidade
   "landing.privacy.index": "06",
@@ -180,10 +180,10 @@ export const messagesEs: Messages = {
     "Por debajo del umbral de contribuciones o de alojamientos, el valor no se publica y ningún sustituto aparece en su lugar.",
   "landing.privacy.item3.title": "La encuesta es siempre opcional",
   "landing.privacy.item3.body":
-    "Rechazar la encuesta de perfil no impide el check-in ni cambia la atención. El consentimiento se registra y es revocable.",
+    "Rechazar la encuesta de perfil no impide el check-in ni cambia la atención. El consentimiento se registra y puede revocarse a través del encargado de datos.",
   "landing.privacy.item4.title": "Derechos del titular según la LGPD",
   "landing.privacy.item4.body":
-    "Acceso, corrección y eliminación del propio registro, con retención configurada y traza de auditoría de cada operación.",
+    "El acceso, la corrección y la eliminación del propio registro los atiende el encargado de datos, en el correo al final de esta página. Cada operación sobre el registro queda en la traza de auditoría.",
   "landing.privacy.prototypeTitle": "Entorno de prototipo",
   "landing.privacy.prototypeBody":
     "Esta demostración usa solo datos ficticios. No sustituye estadística oficial ni censo, no autoriza operación real y ningún registro municipal se vuelve obligatorio sin fundamento jurídico formal de la Alcaldía de Prado.",
@@ -206,7 +206,7 @@ export const messagesEs: Messages = {
   "landing.faq.q1.question":
     "¿Necesito identificación de empresa para participar?",
   "landing.faq.q1.answer":
-    "No. Puede registrarse con identificación personal, como persona física que alquila una casa, o de empresa si tiene posada. El registro en el Observatorio no comprueba regularidad ni licencia.",
+    "No. Tampoco pedimos identificación fiscal ni licencia turística: el registro se hace con el nombre del lugar, el tipo y la capacidad. Registrarse en el Observatorio no comprueba regularidad ni licencia.",
   "landing.faq.q2.question": "¿Mis competidores verán cuántos huéspedes tengo?",
   "landing.faq.q2.answer":
     "No. Ningún indicador se abre por establecimiento. El panel publica solo el total del pueblo, redondeado y con supresión cuando pocos alojamientos contribuyen.",
@@ -231,14 +231,16 @@ export const messagesEs: Messages = {
   "landing.contact.write": "Escribir al equipo",
   "landing.contact.visit": "Pedir una visita",
   "landing.contact.email": "Correo",
-  "landing.contact.inPerson": "Atención presencial",
-  "landing.contact.inPersonValue":
-    "Martes y jueves, de 9 a 12, en la sede de la asociación de vecinos",
   "landing.contact.dpo": "Encargado de datos",
   "landing.contact.mark": "OBSERVATORIO TURÍSTICO · CUMURUXATIBA",
 
-  "landing.imagePending": "Espacio reservado para una foto",
+  "landing.license.ccBy20": "CC BY 2.0",
+  "landing.license.ccBySa30": "CC BY-SA 3.0",
+  "landing.license.ccBySa40": "CC BY-SA 4.0",
+  "landing.license.publicDomain": "Dominio público",
   "landing.photoCredit": "Foto: {author} · {license} · Wikimedia Commons",
+  "landing.photoSource":
+    "Abrir la página de la foto de {author} en Wikimedia Commons",
 
   // -------------------------------------------------------- Painel: envelope
   "analytics.index": "01",
@@ -394,7 +396,8 @@ export const messagesEs: Messages = {
   "analytics.delta.same": "al mismo nivel que la media de referencia",
   "analytics.delta.above": "{percent}% por encima de la media de referencia",
   "analytics.delta.below": "{percent}% por debajo de la media de referencia",
-  "analytics.trend.value": "{sign}{percent}% frente a los {size} días anteriores",
+  "analytics.trend.value":
+    "{sign}{percent}% frente a los {size} días anteriores",
 
   // ------------------------------------------------------- Autorregistro por cartel
   "selfService.posterRequired.title": "Cartel necesario",

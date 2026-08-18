@@ -106,5 +106,5 @@ atributos generalizados.
 - [Vite — guia](https://vite.dev/guide/)
 - [PostgreSQL — documentação](https://www.postgresql.org/docs/)
 
-Verificação: 27 de julho de 2026. Fixar versões exatas no lockfile e no
-toolchain da primeira fase.
+Verificação: 27 de julho de 2026. As versões exatas ficam fixadas no lockfile
+e no toolchain e só mudam de forma controlada.

@@ -34,8 +34,11 @@ export function HeroSection({ client }: { client?: AnalyticsClient }) {
         </h1>
         <p className="lp-hero-lead">{t("landing.hero.lead")}</p>
         <div className="lp-hero-actions">
-          {/* Promete cadastro, então leva ao pedido de acesso, não ao login. */}
-          <a className="lp-button-primary" href="/convite">
+          {/*
+            Âncora, não `/convite`: o cartão de cadastro é que leva ao pedido, e
+            entre a capa e ele estão os benefícios que explicam por que pedir.
+          */}
+          <a className="lp-button-primary" href="#cadastro">
             {t("landing.hero.primary")}
           </a>
           <a className="lp-button-ghost" href="#numeros">

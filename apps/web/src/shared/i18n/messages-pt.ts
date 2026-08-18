@@ -67,8 +67,7 @@ export const messagesPt = {
   "landing.hero.todayUnit": "pessoas-dia",
   "landing.hero.todayHint": "Gente que dorme aqui, semana a semana.",
   "landing.hero.todayPending": "Carregando",
-  "landing.hero.image":
-    "Foto da falésia e da praia de Cumuruxatiba (vertical)",
+  "landing.hero.image": "Foto da falésia e da praia de Cumuruxatiba (vertical)",
 
   // --------------------------------------------------------- Landing: ticker
   "landing.ticker.aria": "Resumo em movimento dos indicadores de hoje",
@@ -86,49 +85,49 @@ export const messagesPt = {
     "Funciona no celular, aguenta internet fraca e não pede nada que você já não pergunte na recepção.",
   "landing.how.step1.title": "Cadastre a hospedagem",
   "landing.how.step1.body":
-    "Nome do local, CPF ou CNPJ, tipo e capacidade aproximada. Pousada formal ou casa de família — os dois entram.",
+    "Nome do local, tipo de hospedagem e quantas pessoas cabem. Não pedimos CPF, CNPJ nem Cadastur. Pousada formal ou casa de família — os dois entram.",
   "landing.how.step2.title": "Abra a estadia",
   "landing.how.step2.body":
     "Chegada, saída e número de pessoas. Só isso já alimenta o indicador de presença da vila.",
-  "landing.how.step3.title": "O hóspede completa ou você aprova",
+  "landing.how.step3.title": "O hóspede preenche e você aprova",
   "landing.how.step3.body":
-    "Um QR code no balcão leva o visitante ao próprio registro. Se ele não quiser, a recepção preenche e aprova.",
+    "O QR code do balcão abre um formulário sem nome, documento, e-mail ou telefone: só faixa de idade, de onde a pessoa vem e as datas. A estadia chega pendente e só entra na conta da vila depois que você aprova.",
   "landing.how.step4.title": "A vila recebe o número",
   "landing.how.step4.body":
     "Tudo entra agregado, arredondado e protegido no painel público. Ninguém vê a sua ocupação separada.",
-  "landing.how.image.desk": "Recepção de pousada com o QR code no balcão",
-  "landing.how.image.phone": "Hóspede preenchendo o registro no celular",
-  "landing.how.image.street": "Rua da vila em dia de movimento",
+  "landing.how.image.square":
+    "Praça do centro de Cumuruxatiba, com o comércio e a pousada da vila",
+  "landing.how.image.gate":
+    "Pórtico de entrada de Cumuruxatiba na estrada de acesso",
+  "landing.how.image.street": "Rua da vila sob os coqueiros",
 
   // -------------------------------------------------------- Landing: anfitriões
   "landing.hosts.index": "03",
   "landing.hosts.kicker": "Para quem hospeda",
-  "landing.hosts.title": "Sua casa também é turismo — e agora aparece na conta.",
+  "landing.hosts.title":
+    "Sua casa também é turismo — e agora aparece na conta.",
   "landing.hosts.lead":
     "Não é fiscalização. É a primeira vez que Cumuruxatiba consegue dizer, com número, quanta gente dorme aqui em cada semana do ano.",
   "landing.hosts.benefit1.title": "Saiba quando encher a casa",
   "landing.hosts.benefit1.body":
     "Previsão de 30 dias com faixa provável para definir diária, equipe e compras.",
-  "landing.hosts.benefit2.title": "Com CPF ou CNPJ, tanto faz",
+  "landing.hosts.benefit2.title": "Sem CNPJ, sem Cadastur, sem documento",
   "landing.hosts.benefit2.body":
-    "Quem aluga uma casa participa igual a quem tem pousada registrada. Sem Cadastur obrigatório.",
+    "Quem aluga uma casa participa igual a quem tem pousada registrada. O cadastro não pede documento nenhum.",
   "landing.hosts.benefit3.title": "Sua ocupação nunca é exposta",
   "landing.hosts.benefit3.body":
     "Nenhum indicador público é aberto por estabelecimento. Só existe o total da vila.",
   "landing.hosts.benefit4.title": "Funciona com internet ruim",
   "landing.hosts.benefit4.body":
     "O registro fica salvo no aparelho e sobe sozinho quando o sinal volta.",
-  "landing.hosts.quote":
-    "Antes eu chutava a alta temporada pelo movimento da rua. Hoje eu olho a previsão de trinta dias e sei quando chamar mais gente para a cozinha.",
-  "landing.hosts.quoteCaption":
-    "Depoimento de exemplo — substitua por um anfitrião real da vila.",
-  "landing.hosts.image": "Retrato de um anfitrião ou pousada da vila",
+  "landing.hosts.image": "Rede armada na varanda de uma hospedagem da vila",
 
   // ---------------------------------------------------------- Landing: cadastro
   "landing.register.title": "Cadastre sua hospedagem",
   "landing.register.body":
     "Leva cinco minutos. Você conta como hospeda, deixa um contato, e a administração envia o convite de acesso por e-mail depois de analisar.",
   "landing.register.action": "Pedir meu acesso",
+  "landing.register.signIn": "Já tem acesso? Entrar na área da hospedagem",
   "landing.register.footnote": "Sem custo. Você pode sair quando quiser.",
 
   // ---------------------------------------------------------- Landing: comércio
@@ -165,7 +164,8 @@ export const messagesPt = {
   "landing.place.beachValue": "Cerca de 17 km",
   "landing.place.season": "Alta temporada",
   "landing.place.seasonValue": "Dezembro a fevereiro",
-  "landing.place.image": "Mapa da vila de Cumuruxatiba com as hospedagens",
+  "landing.place.image":
+    "Praia do Centro na maré baixa, com as falésias da Costa das Baleias ao fundo",
 
   // ------------------------------------------------------- Landing: privacidade
   "landing.privacy.index": "06",
@@ -182,10 +182,10 @@ export const messagesPt = {
     "Abaixo do limiar de contribuições ou de hospedagens, o valor não é publicado e nenhum substituto aparece no lugar.",
   "landing.privacy.item3.title": "Pesquisa é sempre opcional",
   "landing.privacy.item3.body":
-    "Recusar a pesquisa de perfil não impede o check-in nem muda o atendimento. O consentimento é registrado e revogável.",
+    "Recusar a pesquisa de perfil não impede o check-in nem muda o atendimento. O consentimento fica registrado e pode ser revogado pelo encarregado de dados.",
   "landing.privacy.item4.title": "Direitos do titular pela LGPD",
   "landing.privacy.item4.body":
-    "Acesso, correção e exclusão do próprio registro, com retenção configurada e trilha de auditoria de cada operação.",
+    "Acesso, correção e exclusão do próprio registro são atendidos pelo encarregado de dados, no e-mail do fim desta página. Cada operação sobre o registro fica na trilha de auditoria.",
   "landing.privacy.prototypeTitle": "Ambiente de protótipo",
   "landing.privacy.prototypeBody":
     "Esta demonstração usa somente dados fictícios. Não substitui estatística oficial nem censo, não autoriza operação real e nenhum cadastro municipal se torna obrigatório sem fundamento jurídico formal da Prefeitura de Prado.",
@@ -207,7 +207,7 @@ export const messagesPt = {
   "landing.faq.title": "Perguntas frequentes",
   "landing.faq.q1.question": "Preciso ter CNPJ para participar?",
   "landing.faq.q1.answer":
-    "Não. Você pode cadastrar com CPF, como pessoa física que aluga uma casa, ou com CNPJ, se tiver pousada. O cadastro no Observatório não comprova regularidade nem licenciamento.",
+    "Não. Também não pedimos CPF nem Cadastur: o cadastro é feito com o nome do local, o tipo e a capacidade. Participar do Observatório não comprova regularidade nem licenciamento.",
   "landing.faq.q2.question":
     "Meus concorrentes vão ver quantos hóspedes eu tenho?",
   "landing.faq.q2.answer":
@@ -232,14 +232,16 @@ export const messagesPt = {
   "landing.contact.write": "Escrever para a equipe",
   "landing.contact.visit": "Pedir uma visita",
   "landing.contact.email": "E-mail",
-  "landing.contact.inPerson": "Atendimento presencial",
-  "landing.contact.inPersonValue":
-    "Terças e quintas, 9h às 12h, na sede da associação de moradores",
   "landing.contact.dpo": "Encarregado de dados",
   "landing.contact.mark": "OBSERVATÓRIO TURÍSTICO · CUMURUXATIBA",
 
-  "landing.imagePending": "Espaço reservado para foto",
+  "landing.license.ccBy20": "CC BY 2.0",
+  "landing.license.ccBySa30": "CC BY-SA 3.0",
+  "landing.license.ccBySa40": "CC BY-SA 4.0",
+  "landing.license.publicDomain": "Domínio público",
   "landing.photoCredit": "Foto: {author} · {license} · Wikimedia Commons",
+  "landing.photoSource":
+    "Abrir a página da foto de {author} no Wikimedia Commons",
 
   // -------------------------------------------------------- Painel: envelope
   "analytics.index": "01",
@@ -433,14 +435,16 @@ export const messagesPt = {
     "A hospedagem precisa aprovar este cadastro. Se ninguém decidir em 72 horas, o pedido expira e os dados enviados são eliminados. Nada entra em estatística ou no painel público antes da aprovação.",
   "selfService.completion.continueSurvey": "Responder pesquisa voluntária",
 
-  "selfService.error.forbidden": "Este cartaz não está aceitando cadastros agora.",
+  "selfService.error.forbidden":
+    "Este cartaz não está aceitando cadastros agora.",
   "selfService.error.notFound":
     "Este cartaz não é mais válido. Peça um novo à hospedagem.",
   "selfService.error.conflict":
     "O aviso de privacidade mudou desde que o cartaz foi impresso. Peça um cartaz atualizado à hospedagem.",
   "selfService.error.unprocessable":
     "Alguns dados não são aceitos neste formulário aberto. Revise e tente de novo.",
-  "selfService.error.rateLimited": "Já houve envios demais desta rede agora há pouco.",
+  "selfService.error.rateLimited":
+    "Já houve envios demais desta rede agora há pouco.",
   "selfService.error.proofOfWorkAborted":
     "A verificação foi interrompida. Envie novamente quando quiser.",
   "selfService.error.offline":
@@ -578,7 +582,8 @@ export const messagesPt = {
   // ------------------------------------------------ Cópia de erro para hóspede
   "guestCopy.unexpectedFailure":
     "Não conseguimos falar com o serviço agora. Tente de novo em alguns instantes.",
-  "guestCopy.idempotencyInProgress": "Já recebemos este envio e estamos concluindo.",
+  "guestCopy.idempotencyInProgress":
+    "Já recebemos este envio e estamos concluindo.",
   "guestCopy.retrySeconds.one": "Tente novamente em 1 segundo.",
   "guestCopy.retrySeconds.other": "Tente novamente em {seconds} segundos.",
 

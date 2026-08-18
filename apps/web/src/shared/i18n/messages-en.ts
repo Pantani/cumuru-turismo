@@ -81,19 +81,21 @@ export const messagesEn: Messages = {
     "Works on a phone, tolerates weak internet and asks nothing you don't already ask at the front desk.",
   "landing.how.step1.title": "Register the lodging",
   "landing.how.step1.body":
-    "Name, tax ID, type and approximate capacity. A licensed inn or a family house — both are welcome.",
+    "Name of the place, type of lodging and how many people fit. We ask for no tax ID and no tourism licence. A licensed inn or a family house — both are welcome.",
   "landing.how.step2.title": "Open the stay",
   "landing.how.step2.body":
     "Arrival, departure and number of people. That alone already feeds the village presence indicator.",
-  "landing.how.step3.title": "The guest completes it, or you approve",
+  "landing.how.step3.title": "The guest fills it in and you approve",
   "landing.how.step3.body":
-    "A QR code at the desk takes the visitor to their own form. If they'd rather not, the desk fills it in and approves.",
+    "The QR code at the desk opens a form with no name, document, email or phone: only age band, where the person comes from and the dates. The stay arrives pending and only counts for the village once you approve it.",
   "landing.how.step4.title": "The village gets the number",
   "landing.how.step4.body":
     "Everything enters the public dashboard aggregated, rounded and protected. Nobody sees your occupancy on its own.",
-  "landing.how.image.desk": "Inn front desk with the QR code on the counter",
-  "landing.how.image.phone": "Guest filling in the form on a phone",
-  "landing.how.image.street": "Village street on a busy day",
+  "landing.how.image.square":
+    "Main square of Cumuruxatiba, with the village shops and inn",
+  "landing.how.image.gate":
+    "Entrance gateway to Cumuruxatiba on the access road",
+  "landing.how.image.street": "Village street under the coconut palms",
 
   // -------------------------------------------------------- Landing: anfitriões
   "landing.hosts.index": "03",
@@ -104,26 +106,23 @@ export const messagesEn: Messages = {
   "landing.hosts.benefit1.title": "Know when the house fills up",
   "landing.hosts.benefit1.body":
     "A 30-day forecast with a likely range to set rates, staff and purchases.",
-  "landing.hosts.benefit2.title": "Personal or business tax ID, either works",
+  "landing.hosts.benefit2.title": "No tax ID, no licence, no document",
   "landing.hosts.benefit2.body":
-    "Someone renting out a house takes part just like a registered inn. No mandatory tourism licence.",
+    "Someone renting out a house takes part just like a registered inn. Registration asks for no document at all.",
   "landing.hosts.benefit3.title": "Your occupancy is never exposed",
   "landing.hosts.benefit3.body":
     "No public indicator is broken down by property. Only the village total exists.",
   "landing.hosts.benefit4.title": "Works on bad internet",
   "landing.hosts.benefit4.body":
     "The record stays on the device and uploads itself when the signal returns.",
-  "landing.hosts.quote":
-    "I used to guess high season from the traffic on the street. Now I look at the thirty-day forecast and know when to call extra hands into the kitchen.",
-  "landing.hosts.quoteCaption":
-    "Sample quote — replace with a real host from the village.",
-  "landing.hosts.image": "Portrait of a host or an inn in the village",
+  "landing.hosts.image": "Hammock hung on the porch of a village lodging",
 
   // ---------------------------------------------------------- Landing: cadastro
   "landing.register.title": "Register your lodging",
   "landing.register.body":
     "It takes five minutes. You describe how you host, leave a contact, and the administration emails you the access invitation once it has reviewed the request.",
   "landing.register.action": "Request my access",
+  "landing.register.signIn": "Already have access? Go to the lodging area",
   "landing.register.footnote": "No cost. You can leave whenever you like.",
 
   // ---------------------------------------------------------- Landing: comércio
@@ -159,7 +158,8 @@ export const messagesEn: Messages = {
   "landing.place.beachValue": "About 17 km",
   "landing.place.season": "High season",
   "landing.place.seasonValue": "December to February",
-  "landing.place.image": "Map of Cumuruxatiba village with the lodgings",
+  "landing.place.image":
+    "Praia do Centro at low tide, with the Costa das Baleias cliffs behind",
 
   // ------------------------------------------------------- Landing: privacidade
   "landing.privacy.index": "06",
@@ -176,10 +176,10 @@ export const messagesEn: Messages = {
     "Below the contribution or lodging threshold, the value is not published, and no substitute appears in its place.",
   "landing.privacy.item3.title": "The survey is always optional",
   "landing.privacy.item3.body":
-    "Declining the profile survey does not block check-in or change service. Consent is recorded and revocable.",
+    "Declining the profile survey does not block check-in or change service. Consent is recorded and can be withdrawn through the data protection officer.",
   "landing.privacy.item4.title": "Data subject rights under the LGPD",
   "landing.privacy.item4.body":
-    "Access, correction and deletion of one's own record, with configured retention and an audit trail for every operation.",
+    "Access, correction and deletion of one's own record are handled by the data protection officer, at the address at the foot of this page. Every operation on a record stays in the audit trail.",
   "landing.privacy.prototypeTitle": "Prototype environment",
   "landing.privacy.prototypeBody":
     "This demo uses fictional data only. It does not replace official statistics or a census, it does not authorise real operation, and no municipal registration becomes mandatory without formal legal grounding from the Prado City Hall.",
@@ -201,7 +201,7 @@ export const messagesEn: Messages = {
   "landing.faq.title": "Frequently asked questions",
   "landing.faq.q1.question": "Do I need a company tax ID to take part?",
   "landing.faq.q1.answer":
-    "No. You can register with a personal tax ID, as an individual renting out a house, or with a company one if you run an inn. Registering with the Observatory does not prove compliance or licensing.",
+    "No. We ask for no tax ID and no tourism licence either: registration takes the name of the place, its type and its capacity. Registering with the Observatory does not prove compliance or licensing.",
   "landing.faq.q2.question": "Will my competitors see how many guests I have?",
   "landing.faq.q2.answer":
     "No. No indicator is broken down by property. The dashboard publishes only the village total, rounded and suppressed when few lodgings contribute.",
@@ -225,14 +225,16 @@ export const messagesEn: Messages = {
   "landing.contact.write": "Email the team",
   "landing.contact.visit": "Ask for a visit",
   "landing.contact.email": "Email",
-  "landing.contact.inPerson": "In-person help",
-  "landing.contact.inPersonValue":
-    "Tuesdays and Thursdays, 9am to noon, at the residents' association",
   "landing.contact.dpo": "Data protection officer",
   "landing.contact.mark": "TOURISM OBSERVATORY · CUMURUXATIBA",
 
-  "landing.imagePending": "Reserved space for a photo",
+  "landing.license.ccBy20": "CC BY 2.0",
+  "landing.license.ccBySa30": "CC BY-SA 3.0",
+  "landing.license.ccBySa40": "CC BY-SA 4.0",
+  "landing.license.publicDomain": "Public domain",
   "landing.photoCredit": "Photo: {author} · {license} · Wikimedia Commons",
+  "landing.photoSource":
+    "Open the Wikimedia Commons page for the photo by {author}",
 
   // -------------------------------------------------------- Painel: envelope
   "analytics.index": "01",
@@ -251,7 +253,8 @@ export const messagesEn: Messages = {
   "analytics.metadata.unit": "Unit",
   "analytics.metadata.mode": "Data mode",
   "analytics.coverage.published": "Estimated coverage: {ratio}%",
-  "analytics.coverage.protected": "Coverage protected by the publication policy",
+  "analytics.coverage.protected":
+    "Coverage protected by the publication policy",
   "analytics.coverage.unavailable": "Coverage unavailable",
   "analytics.unit.personDay": "Person-days",
   "analytics.unit.surveyAnswer": "Survey answers",
@@ -425,14 +428,16 @@ export const messagesEn: Messages = {
     "The accommodation must approve this registration. If no one decides within 72 hours, the request expires and the data sent is deleted. Nothing enters statistics or the public dashboard before approval.",
   "selfService.completion.continueSurvey": "Answer the voluntary survey",
 
-  "selfService.error.forbidden": "This poster is not accepting registrations right now.",
+  "selfService.error.forbidden":
+    "This poster is not accepting registrations right now.",
   "selfService.error.notFound":
     "This poster is no longer valid. Ask the accommodation for a new one.",
   "selfService.error.conflict":
     "The privacy notice changed since the poster was printed. Ask the accommodation for an updated poster.",
   "selfService.error.unprocessable":
     "Some data is not accepted in this open form. Review it and try again.",
-  "selfService.error.rateLimited": "Too many submissions from this network just now.",
+  "selfService.error.rateLimited":
+    "Too many submissions from this network just now.",
   "selfService.error.proofOfWorkAborted":
     "The verification was interrupted. Submit again whenever you like.",
   "selfService.error.offline":
@@ -572,7 +577,8 @@ export const messagesEn: Messages = {
   // ------------------------------------------------------------- Guest error copy
   "guestCopy.unexpectedFailure":
     "We could not reach the service right now. Try again in a few moments.",
-  "guestCopy.idempotencyInProgress": "We already received this submission and are finishing it up.",
+  "guestCopy.idempotencyInProgress":
+    "We already received this submission and are finishing it up.",
   "guestCopy.retrySeconds.one": "Try again in 1 second.",
   "guestCopy.retrySeconds.other": "Try again in {seconds} seconds.",
 

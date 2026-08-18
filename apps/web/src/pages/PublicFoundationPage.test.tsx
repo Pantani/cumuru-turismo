@@ -73,6 +73,9 @@ describe("capa pública do observatório", () => {
       .map((anchor) => anchor.getAttribute("href"))
       .filter((href): href is string => href?.startsWith("#") === true);
 
+    // O botão de cadastro fecha a lista porque aponta para o cartão que explica
+    // o caminho real da conta, não para a tela de login: quem ainda não tem
+    // conta não teria o que fazer em `/acesso`.
     expect(targets).toEqual([
       "#numeros",
       "#como",
@@ -80,6 +83,7 @@ describe("capa pública do observatório", () => {
       "#comercio",
       "#privacidade",
       "#sobre",
+      "#cadastro",
     ]);
     for (const target of targets) {
       expect(container.querySelector(target)).not.toBeNull();
@@ -87,20 +91,31 @@ describe("capa pública do observatório", () => {
   });
 
   // Quem chega pela capa ainda não tem conta: um CTA de cadastro apontando
-  // para a tela de login terminava numa parede de credencial.
-  it("manda todo convite ao cadastro para o pedido de acesso, não para o login", () => {
+  // para a tela de login terminava numa parede de credencial. A capa e o menu
+  // levam à seção de cadastro, e é o cartão dela que abre o pedido — o que o
+  // teste protege é que o caminho exista inteiro e não desemboque no login.
+  it("leva o convite ao cadastro até o pedido de acesso, nunca ao login", () => {
     renderPage();
 
-    for (const name of [
-      "Cadastrar minha hospedagem",
-      "Cadastrar hospedagem",
-      "Pedir meu acesso",
-    ]) {
+    for (const name of ["Cadastrar minha hospedagem", "Cadastrar hospedagem"]) {
       expect(screen.getByRole("link", { name })).toHaveAttribute(
         "href",
-        "/convite",
+        "#cadastro",
       );
     }
+
+    expect(
+      screen.getByRole("link", { name: "Pedir meu acesso" }),
+    ).toHaveAttribute("href", "/convite");
+  });
+
+  // O login continua alcançável, mas por um link que se anuncia como tal.
+  it("oferece a entrada de quem já tem conta separada do pedido", () => {
+    renderPage();
+
+    expect(
+      screen.getByRole("link", { name: /Já tem acesso\?/ }),
+    ).toHaveAttribute("href", "/acesso");
   });
 
   it("liga os guias aos PDFs servidos pela aplicação", () => {
