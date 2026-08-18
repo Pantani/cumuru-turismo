@@ -191,7 +191,7 @@ func ensureStayFixture(
 			ClientSubmissionID: clientSubmissionID,
 			PlannedArrivalOn:   civilDate(fixture.arrival),
 			PlannedDepartureOn: civilDate(fixture.departure),
-			ExpectedGuestCount: 4,
+			ExpectedGuestCount: fixture.guestCount,
 			IdempotencyKey:     fixtureKey("stay-create-" + fixture.key),
 			RequestID:          fixtureRequestID("stay-create-" + fixture.key),
 		})
@@ -265,7 +265,7 @@ func submitGroupFixture(
 		StayID:               current.ID,
 		ClientSubmissionID:   deterministicUUID("stay-group-"+fixture.key, 1),
 		PrivacyNoticeVersion: privacyNoticeVersion,
-		Visitors:             fixtureVisitors(fixture.key),
+		Visitors:             fixtureVisitors(fixture),
 		ExpectedVersion:      current.Version,
 		IdempotencyKey:       fixtureKey("stay-group-" + fixture.key),
 		RequestID:            fixtureRequestID("stay-group-" + fixture.key),
