@@ -159,7 +159,7 @@
 }
 
 .lp-section-coral .lp-accent {
-  color: var(--ink);
+  color: var(--lp-ink);
 }
 
 .lp-lead {
@@ -190,7 +190,7 @@
 }
 
 .lp-section-coral .lp-index-number {
-  color: var(--ink);
+  color: var(--lp-ink);
 }
 
 .lp-index-rule {
