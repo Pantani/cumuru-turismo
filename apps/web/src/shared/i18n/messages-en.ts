@@ -9,6 +9,7 @@ export const messagesEn: Messages = {
   "app.nav.activation": "Activation",
   "app.nav.survey": "Survey",
   "app.nav.workspace": "Lodging area",
+  "app.nav.administration": "Administration",
   "app.nav.questionnaires": "Questionnaires",
   "app.nav.quality": "Quality",
   "app.nav.aria": "Main navigation",
@@ -546,6 +547,17 @@ export const messagesEn: Messages = {
   "inviteRequest.completion.keepEmail":
     "Keep that email at hand. It is where the invitation to create your access arrives.",
   "inviteRequest.completion.back": "Back to the home page",
+
+  // ------------------------------------- Administration area: lodging record
+  "admin.accommodations.title": "Lodging records",
+  "admin.accommodations.hint":
+    "You administer the lodging records and the questions the guest answers. Registering a stay and approving a guest are acts of each lodging, in its own account.",
+  "admin.accommodations.loading": "Loading the registered lodgings…",
+  "admin.accommodations.empty":
+    "No lodging registered by this account yet. Register one or approve a request from the queue below.",
+  "admin.accommodations.onboard": "Register a lodging",
+  "admin.accommodations.send": "Hand over this lodging's access",
+  "admin.access.title": "Access for {name}",
 
   // ------------------------------------- Administration access-request queue
   "accessRequest.title": "Lodging access requests",

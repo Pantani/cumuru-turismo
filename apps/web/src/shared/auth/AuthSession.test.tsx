@@ -10,6 +10,7 @@ import AuthenticatedPage from "../../pages/AuthenticatedPage";
 import { AuthError, type AuthClient } from "../api/auth-client";
 import { inspectDraftPresence, saveDraft } from "../offline/encrypted-drafts";
 import {
+  establishmentScopes,
   renderWithSession,
   stubAuthClient,
   testSession,
@@ -92,7 +93,9 @@ describe("fronteira de autenticação local", () => {
   });
 
   it("abre o workspace mantendo o token fora do DOM", async () => {
-    renderWithSession(<AuthenticatedPage />);
+    renderWithSession(<AuthenticatedPage />, {
+      authClient: stubAuthClient(testSession(establishmentScopes)),
+    });
 
     expect(
       await screen.findByRole("heading", { name: "Suas hospedagens" }),

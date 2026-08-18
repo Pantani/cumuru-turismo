@@ -8,12 +8,12 @@ vi.mock("qrcode", () => ({ default: { toCanvas } }));
 
 import type { AccessRequest } from "../../shared/api/invite-request-client";
 import {
+  establishmentScopes,
   renderWithSession,
   stubAuthClient,
-  testAccountScopes,
   testSession,
 } from "../../test/session";
-import { OperatorWorkspace } from "../operator/OperatorWorkspace";
+import AuthenticatedPage from "../../pages/AuthenticatedPage";
 import { AccessRequestQueue } from "./AccessRequestQueue";
 
 const requestId = "019fae14-0000-7000-8000-0000000000e1";
@@ -437,7 +437,11 @@ describe("escopo da fila de pedidos de acesso", () => {
     vi.restoreAllMocks();
   });
 
-  /** Aprovar cria acomodação, então a fila custa `accommodations:onboard`. */
+  /**
+   * Aprovar cria acomodação, então a fila custa `accommodations:onboard` — o
+   * mesmo escopo que escolhe a área em `AuthenticatedPage`. Quem não o carrega
+   * abre a área da hospedagem, onde a fila não existe.
+   */
   it("não monta o painel nem consulta a fila sem o escopo de onboarding", async () => {
     const calls: Request[] = [];
     vi.stubGlobal(
@@ -447,12 +451,8 @@ describe("escopo da fila de pedidos de acesso", () => {
         return Promise.resolve(apiResponse({ items: [], next_cursor: null }));
       }),
     );
-    const withoutOnboard = testAccountScopes.filter(
-      (scope) => scope !== "accommodations:onboard",
-    );
-
-    renderWithSession(<OperatorWorkspace />, {
-      authClient: stubAuthClient(testSession(withoutOnboard)),
+    renderWithSession(<AuthenticatedPage />, {
+      authClient: stubAuthClient(testSession(establishmentScopes)),
     });
     await screen.findByRole("heading", { name: "Suas hospedagens" });
     /**
@@ -487,12 +487,13 @@ describe("escopo da fila de pedidos de acesso", () => {
       ),
     );
 
-    renderWithSession(<OperatorWorkspace />);
+    renderWithSession(<AuthenticatedPage />);
 
     expect(
       await screen.findByRole("heading", {
         name: "Pedidos de acesso de hospedagens",
       }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Estadias de/u })).toBeNull();
   });
 });

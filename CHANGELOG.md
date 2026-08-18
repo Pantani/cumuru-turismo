@@ -53,6 +53,18 @@ arquivo.
 
 ### Alterado
 
+- **o administrador deixou de ver "Suas hospedagens" e ganhou área própria.** A
+  mesma tela servia às duas autoridades: quem entrava com a conta semeada de
+  administração via a lista de hospedagens como se fossem suas, com quadro de
+  estadias, cartaz de autocadastro e fila de hóspedes. `/acesso` passa a escolher
+  a área por `accommodations:onboard`, que é o que a API tem no lugar de um papel:
+  a administração cadastra hospedagem, entrega o acesso de cada uma e decide os
+  pedidos vindos do site; a hospedagem registra estadia e decide o cadastro do
+  hóspede que chegou pelo código dela. O seed também deixou de conceder
+  `stays:write` ao administrador — registrar estadia é ato do estabelecimento —,
+  e o vínculo do administrador com o catálogo semeado continua, porque entregar
+  o acesso lê a linha da hospedagem e escreve a ativação. Sem migration e sem
+  escopo novo.
 - **as fixtures do perfil `test` passaram a povoar dois anos de operação, não
   oito semanas de estadias de uma noite.** O catálogo fictício foi de 4 para 16
   hospedagens — pelo menos três em cada categoria publicada, porque a cobertura

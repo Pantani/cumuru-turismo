@@ -1,22 +1,12 @@
-import { useAuthSession } from "../../shared/auth/AuthSession";
 import {
   accommodationCategoryLabels,
   type Accommodation,
 } from "./stay-lifecycle";
 
-/**
- * Admitting an establishment is the administrator's act: `accommodations:onboard`
- * gates POST /accommodations, and the operator does not hold it (ADR-042). The
- * gate returns `null` before mounting, and an affordance that never mounts fires
- * neither the request nor the `403`.
- */
-const ONBOARD_SCOPE = "accommodations:onboard";
-
 interface AccommodationPickerProps {
   accommodations: readonly Accommodation[];
   loading: boolean;
   onSelect: (accommodation: Accommodation) => void;
-  onStartOnboarding: () => void;
   selectedId: string | null;
 }
 
@@ -50,14 +40,14 @@ function AccommodationCard({
 }
 
 /**
- * Without the scope the empty screen states the path instead of offering a
- * button that can only answer `403`. Saying nothing would be worse than the
- * dead button: whoever lands here has an account and no lodging, and the way
- * out is the access request of ADR-042, which the administration decides.
+ * Cadastrar hospedagem é ato da administração (`accommodations:onboard`, ADR-042),
+ * e a área da hospedagem não o oferece a ninguém — nem a quem carrega o escopo,
+ * porque para esse a tela é outra. Calar seria pior que um botão morto: quem
+ * chega aqui tem conta e nenhuma hospedagem, e a saída é o pedido de acesso.
  */
-function EmptyStateGuidance() {
+function EmptyState() {
   return (
-    <>
+    <div className="empty-state">
       <p>Você ainda não tem hospedagem cadastrada nesta conta.</p>
       <p>
         Quem cadastra hospedagem na plataforma é a administração. Peça o
@@ -65,48 +55,7 @@ function EmptyStateGuidance() {
         que a administração aprovar, ela envia o link que liga a hospedagem à
         sua conta.
       </p>
-    </>
-  );
-}
-
-function EmptyState({ onStartOnboarding }: { onStartOnboarding: () => void }) {
-  const { hasScope } = useAuthSession();
-  return (
-    <div className="empty-state">
-      {hasScope(ONBOARD_SCOPE)
-        ? (
-          <>
-            <p>
-              Você ainda não tem hospedagem cadastrada. Cadastre a sua para
-              começar a registrar as estadias.
-            </p>
-            <button
-              type="button"
-              className="primary-action"
-              onClick={onStartOnboarding}
-            >
-              Cadastrar minha hospedagem
-            </button>
-          </>
-        )
-        : <EmptyStateGuidance />}
     </div>
-  );
-}
-
-function OnboardAnotherAction({
-  onStartOnboarding,
-}: {
-  onStartOnboarding: () => void;
-}) {
-  const { hasScope } = useAuthSession();
-  if (!hasScope(ONBOARD_SCOPE)) {
-    return null;
-  }
-  return (
-    <button type="button" className="ghost-action" onClick={onStartOnboarding}>
-      Cadastrar outra hospedagem
-    </button>
   );
 }
 
@@ -114,7 +63,6 @@ export function AccommodationPicker({
   accommodations,
   loading,
   onSelect,
-  onStartOnboarding,
   selectedId,
 }: AccommodationPickerProps) {
   if (loading) {
@@ -125,11 +73,10 @@ export function AccommodationPicker({
     );
   }
   if (accommodations.length === 0) {
-    return <EmptyState onStartOnboarding={onStartOnboarding} />;
+    return <EmptyState />;
   }
   return (
-    <>
-      <ul className="property-grid">
+    <ul className="property-grid">
         {accommodations.map((accommodation) => (
           <AccommodationCard
             key={accommodation.id}
@@ -137,9 +84,7 @@ export function AccommodationPicker({
             onSelect={onSelect}
             selected={accommodation.id === selectedId}
           />
-        ))}
-      </ul>
-      <OnboardAnotherAction onStartOnboarding={onStartOnboarding} />
-    </>
+      ))}
+    </ul>
   );
 }

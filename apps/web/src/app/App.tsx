@@ -233,7 +233,16 @@ function navigationEntries(
       label: "app.nav.survey",
       visible: peekSurveyCapability() !== null,
     },
-    { href: "/acesso", label: "app.nav.workspace", visible: true },
+    {
+      href: "/acesso",
+      // O rótulo segue a tela que a rota abre: administração e hospedagem são
+      // áreas diferentes atrás do mesmo endereço (ver AuthenticatedPage).
+      label:
+        authenticated && hasScope("accommodations:onboard")
+          ? "app.nav.administration"
+          : "app.nav.workspace",
+      visible: true,
+    },
     {
       href: "/questionarios",
       label: "app.nav.questionnaires",

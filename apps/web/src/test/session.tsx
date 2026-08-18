@@ -17,6 +17,20 @@ export const testAccountScopes = [
   "analytics:read:internal",
 ];
 
+/**
+ * Escopos de uma hospedagem ativada — o mesmo conjunto que
+ * `internal/activation.Scopes` concede, sem `stays:approve`, que só chega quando
+ * o autoatendimento está ligado. `testAccountScopes` descreve o administrador
+ * semeado, e é `accommodations:onboard` que separa as duas áreas
+ * (`AuthenticatedPage`), então um teste da área da hospedagem precisa começar
+ * por aqui.
+ */
+export const establishmentScopes = [
+  "accommodations:manage",
+  "stays:read:own",
+  "stays:write",
+];
+
 export function testSession(
   scopes: readonly string[] = testAccountScopes,
   mustChangePassword = false,
