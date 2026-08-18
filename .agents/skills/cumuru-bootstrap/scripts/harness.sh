@@ -302,6 +302,8 @@ validate_completion_contract() {
   local body
   local file
   local writer
+  local shell_lint_script
+  local shell_lint_body
 
   for writer in backend frontend platform; do
     for file in \
@@ -346,13 +348,19 @@ validate_completion_contract() {
   fi
 
   body="$(make_target_body lint-shell)"
-  grep -Fq $'\t@set -eu;' <<<"${body}"
-  grep -Fq "find . -type f -name '*.sh'" <<<"${body}"
-  grep -Fq 'while IFS= read -r file' <<<"${body}"
-  grep -Fq $'bash -n "$$file"' <<<"${body}"
-  grep -Fq 'SHELL_SYNTAX=PASS' <<<"${body}"
-  if grep -Eq '(^|[[:space:]])(\|\|[[:space:]]+true|-[[:space:]]*@?(bash|find))' \
-    <<<"${body}"; then
+  shell_lint_script="${PROJECT_ROOT}/deploy/scripts/lint-shell.sh"
+  grep -Fxq $'\t@bash deploy/scripts/lint-shell.sh' <<<"${body}"
+  test -f "${shell_lint_script}"
+  shell_lint_body="$(cat "${shell_lint_script}")"
+  grep -Fq 'set -euo pipefail' <<<"${shell_lint_body}"
+  grep -Fq "git ls-files -z --cached --others --exclude-standard -- '*.sh'" \
+    <<<"${shell_lint_body}"
+  grep -Fq 'while IFS= read -r -d ' <<<"${shell_lint_body}"
+  grep -Fq $'bash -n "${file}"' <<<"${shell_lint_body}"
+  grep -Fq $'test "${count}" -gt 0' <<<"${shell_lint_body}"
+  grep -Fq 'SHELL_SYNTAX=PASS' <<<"${shell_lint_body}"
+  if grep -Eq '(^|[[:space:]])(\|\|[[:space:]]+true|-[[:space:]]*@?(bash|git))' \
+    <<<"${body}"$'\n'"${shell_lint_body}"; then
     echo "SHELL_LINT_FAIL_OPEN_DRIFT=FAIL" >&2
     return 1
   fi
@@ -375,9 +383,9 @@ validate_completion_contract() {
     return 1
   fi
 
-  grep -Eq '^[[:space:]]+make post-task-quality[[:space:]]*$' \
+  grep -Eq '^[[:space:]]+(run:[[:space:]]+)?make post-task-quality[[:space:]]*$' \
     "${PROJECT_ROOT}/.github/workflows/ci.yml"
-  if grep -Eq '^[[:space:]]+make (complexity|lint)[[:space:]]*$' \
+  if grep -Eq '^[[:space:]]+(run:[[:space:]]+)?make (complexity|lint)[[:space:]]*$' \
     "${PROJECT_ROOT}/.github/workflows/ci.yml"; then
     echo "CI_QUALITY_DRIFT=separate-complexity-or-lint" >&2
     return 1
