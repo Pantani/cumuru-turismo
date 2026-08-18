@@ -154,18 +154,26 @@ const ADMIN_ACCOUNT_EMAIL = process.env.SEED_ADMIN_EMAIL ??
 const ADMIN_ACCOUNT_PASSWORD = process.env.SEED_ADMIN_PASSWORD ??
   "administracao-local-2026";
 
+/**
+ * The landing region is what proves which area the account reached, and the two
+ * areas are disjoint: `accommodations:onboard` opens the administration, whose
+ * screen has no accommodation of its own, and everyone else lands in the lodging
+ * area, which has no onboarding.
+ */
+const OPERATOR_REGION = "Suas hospedagens";
+const ADMIN_REGION = "Cadastro de hospedagens";
+
 /** The session lives in tab memory only, so every run signs in from scratch. */
 async function signIn(
   page: Page,
   email = DEMO_ACCOUNT_EMAIL,
   password = DEMO_ACCOUNT_PASSWORD,
+  region = OPERATOR_REGION,
 ) {
   await page.getByLabel("E-mail", { exact: true }).fill(email);
   await page.getByLabel("Senha", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
-  await expect(
-    page.getByRole("region", { name: "Suas hospedagens" }),
-  ).toBeVisible();
+  await expect(page.getByRole("region", { name: region })).toBeVisible();
 }
 
 /**
@@ -187,10 +195,15 @@ async function withAdministrator<T>(
   const adminPage = await context.newPage();
   try {
     await adminPage.goto("/acesso");
-    await signIn(adminPage, ADMIN_ACCOUNT_EMAIL, ADMIN_ACCOUNT_PASSWORD);
+    await signIn(
+      adminPage,
+      ADMIN_ACCOUNT_EMAIL,
+      ADMIN_ACCOUNT_PASSWORD,
+      ADMIN_REGION,
+    );
     return await admit(
       adminPage,
-      adminPage.getByRole("region", { name: "Suas hospedagens" }),
+      adminPage.getByRole("region", { name: ADMIN_REGION }),
     );
   } finally {
     await adminPage.close();
@@ -264,7 +277,7 @@ function trackAccommodationIds(page: Page) {
  */
 async function ensureWorkspace(page: Page) {
   await page.goto("/acesso");
-  const accommodations = page.getByRole("region", { name: "Suas hospedagens" });
+  const accommodations = page.getByRole("region", { name: OPERATOR_REGION });
   if (await accommodations.isVisible().catch(() => false)) {
     return accommodations;
   }
@@ -285,7 +298,7 @@ async function onboardAccommodation(
   fixture: AccommodationFixture,
 ) {
   await accommodations.getByRole("button", {
-    name: "Cadastrar outra hospedagem",
+    name: "Cadastrar hospedagem",
     exact: true,
   }).click();
   // The labels wrap their controls, so the accessible name carries the current
@@ -332,9 +345,13 @@ async function onboardAccommodation(
     status: "active",
   });
   expect(created.cadastur_id ?? null).toBeNull();
-  // The freshly created accommodation becomes the selection, and the board
-  // header is the only place its identity is surfaced.
-  await expect(stayBoardFor(page, fixture.name)).toBeVisible();
+  // The administration never opens a stay board: the newly admitted lodging
+  // becomes the selection so the only act left over it — handing over the
+  // access — is offered, and that section header is the one place its identity
+  // is surfaced.
+  await expect(
+    page.getByRole("region", { name: `Acesso da hospedagem ${fixture.name}` }),
+  ).toBeVisible();
   return created.id;
 }
 
@@ -484,9 +501,7 @@ test("percorre a jornada local sem persistir authorities", async ({
   await page.goto("/acesso");
   await signIn(page);
 
-  const accommodations = page.getByRole("region", {
-    name: "Suas hospedagens",
-  });
+  const accommodations = page.getByRole("region", { name: OPERATOR_REGION });
   // The seeded accommodation is preselected, so the board is already titled
   // after it before anything is created.
   await expect(
@@ -495,10 +510,10 @@ test("percorre a jornada local sem persistir authorities", async ({
   await expect(
     page.getByRole("region", { name: /^Estadias de / }),
   ).toBeVisible();
-  // The operator does not carry `accommodations:onboard`, so the workspace must
-  // not offer an affordance whose only possible outcome is a 403.
+  // Registering a lodging is the administration's act, and it lives in its own
+  // area: the lodging area offers no onboarding affordance at all.
   await expect(
-    accommodations.getByRole("button", { name: "Cadastrar outra hospedagem" }),
+    accommodations.getByRole("button", { name: /Cadastrar/ }),
   ).toHaveCount(0);
   // Not checked here: this operator workspace screen predates Fase 7 and has
   // its own pre-existing, unrelated color-contrast defect (`.property-capacity`

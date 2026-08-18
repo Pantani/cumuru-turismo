@@ -1,18 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
-
 import { useAuthSession } from "../../shared/auth/AuthSession";
-import { AccessRequestQueue } from "../access-request/AccessRequestQueue";
 import { AccommodationAccessPanel } from "../accommodation/AccommodationAccessPanel";
+import { useAccommodations } from "../accommodation/use-accommodations";
 import { ApprovalQueue } from "../approval/ApprovalQueue";
-import { AccommodationOnboarding } from "./AccommodationOnboarding";
 import { AccommodationPicker } from "./AccommodationPicker";
 import { StayBoard } from "./StayBoard";
 import type { Accommodation } from "./stay-lifecycle";
-import { useOperation } from "./use-operation";
 
 /**
- * Owns the accommodation list and the current selection. Extracted so the view
- * below stays declarative and the loading rules live in one place.
+ * Área da hospedagem: registra estadia e decide o cadastro do hóspede que
+ * chegou pelo código do lugar. Cadastrar hospedagem e decidir pedido de acesso
+ * são atos da administração e vivem em `features/admin`, porque a fila da
+ * ADR-042 não filtra por vínculo — quem a abre decide o pedido de qualquer
+ * hospedagem da plataforma.
  */
 function LoadFailure({ operation }: { operation: { message: string; tone: string } }) {
   if (operation.tone !== "failed") {
@@ -41,21 +40,6 @@ function LoadFailure({ operation }: { operation: { message: string; tone: string
  */
 const SELF_SERVICE_SCOPE = "stays:approve";
 
-/**
- * Aprovar um pedido cria a acomodação, então a fila custa a mesma permissão que
- * criar o cadastro à mão: `accommodations:onboard` (ADR-042). O painel devolve
- * `null` antes de montar, e painel não montado não dispara efeito nem `403`.
- */
-const ACCESS_REQUEST_SCOPE = "accommodations:onboard";
-
-function AccessRequestPanel() {
-  const { hasScope } = useAuthSession();
-  if (!hasScope(ACCESS_REQUEST_SCOPE)) {
-    return null;
-  }
-  return <AccessRequestQueue />;
-}
-
 function SelfServicePanels({ accommodation }: { accommodation: Accommodation }) {
   const { hasScope } = useAuthSession();
   if (!hasScope(SELF_SERVICE_SCOPE)) {
@@ -69,47 +53,9 @@ function SelfServicePanels({ accommodation }: { accommodation: Accommodation }) 
   );
 }
 
-function useAccommodations() {
-  const { coreClient: client } = useAuthSession();
-  const operation = useOperation();
-  const { run } = operation;
-  const [accommodations, setAccommodations] = useState<readonly Accommodation[]>(
-    [],
-  );
-  const [selected, setSelected] = useState<Accommodation | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const result = await run("Carregando suas hospedagens", () =>
-      client.listAccommodations(),
-    );
-    const items = result?.data.items ?? [];
-    setAccommodations(items);
-    setSelected((current) => current ?? items[0] ?? null);
-    setLoading(false);
-  }, [client, run]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  return { accommodations, load, loading, operation, selected, setSelected };
-}
-
 export function OperatorWorkspace() {
-  const { accommodations, load, loading, operation, selected, setSelected } =
-    useAccommodations();
-  const [onboarding, setOnboarding] = useState(false);
-
-  const handleCreated = useCallback(
-    (accommodation: Accommodation) => {
-      setOnboarding(false);
-      setSelected(accommodation);
-      void load();
-    },
-    [load, setSelected],
-  );
+  const { accommodations, loading, operation, selected, setSelected } =
+    useAccommodations("Carregando suas hospedagens");
 
   return (
     <div className="workspace">
@@ -120,18 +66,9 @@ export function OperatorWorkspace() {
           accommodations={accommodations}
           loading={loading}
           onSelect={setSelected}
-          onStartOnboarding={() => setOnboarding(true)}
           selectedId={selected?.id ?? null}
         />
-        {onboarding ? (
-          <AccommodationOnboarding
-            onCancel={() => setOnboarding(false)}
-            onCreated={handleCreated}
-          />
-        ) : null}
       </section>
-
-      <AccessRequestPanel />
 
       {selected === null ? null : (
         <>

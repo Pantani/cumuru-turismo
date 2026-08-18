@@ -51,7 +51,7 @@ Jornadas disponíveis na aplicação web:
 | Rota | Para quem | O que faz |
 | --- | --- | --- |
 | `/` | qualquer pessoa | Capa pública trilíngue e painel de indicadores anônimos |
-| `/acesso` | hospedagem | Login por e-mail e senha e área de trabalho da hospedagem |
+| `/acesso` | hospedagem ou administração | Login por e-mail e senha; a conta cai na área da hospedagem ou na da administração, conforme o escopo `accommodations:onboard` |
 | `/registro` | hóspede convidado | Registro do grupo a partir do convite nominal |
 | `/pesquisa` | hóspede convidado | Pesquisa turística opcional |
 | `/i` | hóspede sem convite | Autocadastro pelo cartaz/QR da hospedagem |
@@ -193,7 +193,10 @@ dias que passaram desde a anterior.
 Depois abra:
 
 - `http://127.0.0.1:4173/` — painel público com dados fictícios;
-- `http://127.0.0.1:4173/acesso` — jornada do operador da hospedagem.
+- `http://127.0.0.1:4173/acesso` — entrada de quem tem conta. A tela depende de
+  quem entra: o administrador cai na área da administração, que só cadastra
+  hospedagem, entrega o acesso e decide os pedidos vindos do site; a conta da
+  hospedagem cai na área dela, com as estadias e a fila de hóspedes.
 
 O bundle não carrega credencial: a entrada é por e-mail e senha. O
 administrador é `administracao@cumuru.local`, com a senha de
@@ -203,6 +206,11 @@ conta fictícia de operador é `operador@cumuru.local`, criada por
 Compose local usa `demonstracao-local-2026`). A sessão vive apenas na memória
 da aba — recarregar a página exige entrar de novo, por construção — e nada é
 gravado em `localStorage`, `sessionStorage` ou cache do service worker.
+
+O administrador não opera hospedagem nenhuma: ele não tem quadro de estadias
+nem aprova hóspede. Cadastrar a hospedagem e entregar o acesso são atos dele;
+registrar estadia e aprovar hóspede são atos de cada hospedagem, na conta que
+recebeu esse acesso.
 
 Na área da hospedagem, escolha uma hospedagem, crie uma estadia informando
 chegada, saída e número de pessoas, e use as ações oferecidas pelo próprio

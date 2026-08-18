@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -153,67 +153,35 @@ describe("área da hospedagem", () => {
     expect(screen.queryByLabelText(/Emissor OIDC/i)).toBeNull();
   });
 
-  it("convida ao cadastro quando não há hospedagem", async () => {
-    stubApi({ accommodations: [] });
-    renderWithSession(<OperatorWorkspace />);
-
-    expect(
-      await screen.findByRole("button", { name: "Cadastrar minha hospedagem" }),
-    ).toBeInTheDocument();
-  });
-
   /**
-   * Admitir um estabelecimento é ato do administrador: `accommodations:onboard`
-   * gateia `POST /accommodations` (ADR-042) e o operador fictício não o carrega.
-   * Renderizar a afordância sem condição só produziria `403`.
-   */
-  it("esconde o cadastro de outra hospedagem sem o escopo de onboarding", async () => {
-    stubApi({});
-    const withoutOnboard = testAccountScopes.filter(
-      (scope) => scope !== "accommodations:onboard",
-    );
-
-    renderWithSession(<OperatorWorkspace />, {
-      authClient: stubAuthClient(testSession(withoutOnboard)),
-    });
-
-    await screen.findByRole("button", { name: /Pousada Farol Fictícia/ });
-    expect(
-      screen.queryByRole("button", { name: "Cadastrar outra hospedagem" }),
-    ).toBeNull();
-  });
-
-  /**
-   * A tela vazia é o outro lugar que oferecia o cadastro. Sem o escopo ela
-   * precisa dizer por onde se pede o cadastro, e não oferecer um botão que só
-   * responderia `403`: quem chega aqui tem conta e nenhuma hospedagem, então
+   * Cadastrar hospedagem é ato da administração, e a área da hospedagem não o
+   * oferece mais a ninguém — nem a quem carrega `accommodations:onboard`, porque
+   * para essa conta a tela é outra (`AuthenticatedPage`). A tela vazia diz por
+   * onde se pede o cadastro: quem chega aqui tem conta e nenhuma hospedagem, e
    * uma tela sem saída seria pior que a afordância morta.
    */
-  it("orienta em vez de oferecer cadastro na tela vazia sem o escopo", async () => {
+  it("orienta em vez de oferecer cadastro na tela vazia", async () => {
     stubApi({ accommodations: [] });
-    const withoutOnboard = testAccountScopes.filter(
-      (scope) => scope !== "accommodations:onboard",
-    );
 
-    renderWithSession(<OperatorWorkspace />, {
-      authClient: stubAuthClient(testSession(withoutOnboard)),
-    });
+    renderWithSession(<OperatorWorkspace />);
 
     expect(
       await screen.findByRole("link", { name: "página de pedido de acesso" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Cadastrar minha hospedagem" }),
+      screen.queryByRole("button", { name: /Cadastrar/ }),
     ).toBeNull();
   });
 
-  it("oferece o cadastro de outra hospedagem a quem tem o escopo", async () => {
+  it("não oferece cadastro de hospedagem nem com o escopo de onboarding", async () => {
     stubApi({});
-    renderWithSession(<OperatorWorkspace />);
 
-    expect(
-      await screen.findByRole("button", { name: "Cadastrar outra hospedagem" }),
-    ).toBeInTheDocument();
+    renderWithSession(<OperatorWorkspace />, {
+      authClient: stubAuthClient(testSession(testAccountScopes)),
+    });
+
+    await screen.findByRole("button", { name: /Pousada Farol Fictícia/ });
+    expect(screen.queryByRole("button", { name: /Cadastrar/ })).toBeNull();
   });
 
   it("oferece só as transições que o servidor aceita para o estado", async () => {
@@ -285,26 +253,6 @@ describe("área da hospedagem", () => {
     expect(
       await screen.findByText(/Alguém alterou esta estadia/),
     ).toBeInTheDocument();
-  });
-
-  it("cadastra hospedagem sem pedir documento fiscal", async () => {
-    const user = userEvent.setup();
-    stubApi({ accommodations: [] });
-    renderWithSession(<OperatorWorkspace />);
-
-    await user.click(
-      await screen.findByRole("button", { name: "Cadastrar minha hospedagem" }),
-    );
-
-    const form = screen.getByRole("heading", { name: "Cadastrar hospedagem" })
-      .closest("form");
-    expect(form).not.toBeNull();
-    const scoped = within(form as HTMLFormElement);
-    expect(scoped.getByLabelText("Como o local é conhecido")).toBeInTheDocument();
-    expect(scoped.queryByLabelText(/CNPJ/i)).toBeNull();
-    expect(scoped.queryByLabelText(/CPF/i)).toBeNull();
-    expect(scoped.queryByLabelText(/Cadastur/i)).toBeNull();
-    expect(form?.textContent).toContain("Não pedimos CPF, CNPJ, Cadastur");
   });
 
   // Regressão D-02. `SELF_SERVICE_ENABLED` tem default `false` e não está em nenhum

@@ -17,6 +17,22 @@ export const testAccountScopes = [
   "analytics:read:internal",
 ];
 
+/**
+ * Recorte dos escopos de uma hospedagem: os mesmos três que
+ * `internal/activation.Scopes` sempre concede, exceto `stays:approve`, que o
+ * backend inclui incondicionalmente mas cuja rota (`POST /stays/{id}/approve`)
+ * só existe com `SELF_SERVICE_ENABLED` ligado. Este conjunto representa uma
+ * hospedagem sem o autoatendimento habilitado. `testAccountScopes` descreve o
+ * administrador semeado, e é `accommodations:onboard` que separa as duas áreas
+ * (`AuthenticatedPage`), então um teste da área da hospedagem precisa começar
+ * por aqui.
+ */
+export const establishmentScopes = [
+  "accommodations:manage",
+  "stays:read:own",
+  "stays:write",
+];
+
 export function testSession(
   scopes: readonly string[] = testAccountScopes,
   mustChangePassword = false,

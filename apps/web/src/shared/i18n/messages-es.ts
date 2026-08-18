@@ -9,6 +9,7 @@ export const messagesEs: Messages = {
   "app.nav.activation": "Activación",
   "app.nav.survey": "Encuesta",
   "app.nav.workspace": "Área del alojamiento",
+  "app.nav.administration": "Administración",
   "app.nav.questionnaires": "Cuestionarios",
   "app.nav.quality": "Calidad",
   "app.nav.aria": "Navegación principal",
@@ -554,6 +555,17 @@ export const messagesEs: Messages = {
   "inviteRequest.completion.keepEmail":
     "Tenga ese correo a mano. Por ahí llega la invitación para crear su acceso.",
   "inviteRequest.completion.back": "Volver a la página inicial",
+
+  // ------------------------------- Área de la administración: registro
+  "admin.accommodations.title": "Registro de alojamientos",
+  "admin.accommodations.hint":
+    "Usted administra el registro de los alojamientos y las preguntas del cuestionario. Registrar estadías y aprobar huéspedes son actos de cada alojamiento, en su propia cuenta.",
+  "admin.accommodations.loading": "Cargando los alojamientos registrados…",
+  "admin.accommodations.empty":
+    "Ningún alojamiento registrado por esta cuenta todavía. Registre uno o apruebe un pedido de la cola de abajo.",
+  "admin.accommodations.onboard": "Registrar alojamiento",
+  "admin.accommodations.send": "Entregar el acceso de este alojamiento",
+  "admin.access.title": "Acceso del alojamiento {name}",
 
   // -------------------------- Cola de pedidos de acceso de la administración
   "accessRequest.title": "Pedidos de acceso de alojamientos",

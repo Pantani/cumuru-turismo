@@ -19,14 +19,24 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// adminScopes is the set the administrator receives at seed time. It is not a
-// separate authorization tier, because the API has none — accommodations:onboard
-// is what stands in for one. It gates POST /accommodations and the decision
-// routes of the invite queue (ADR-042), whose listing is global, so it admits
-// establishments to the whole platform. The local demo operator no longer
-// receives it, and this list is the only seeded place that does: dropping the
-// scope here would leave a freshly seeded deployment with nobody able to admit
-// an establishment.
+// adminScopes is the set the administrator receives at seed time. The API has
+// no role column, so the hierarchy is spelled out here, scope by scope: the
+// administrator admits establishments to the platform and curates the
+// questionnaires the guest answers; it does not run a lodging. That is why
+// stays:write is absent — registering a stay is an act of the establishment,
+// and an administrator that could write one would be indistinguishable from the
+// account it just admitted.
+//
+// accommodations:onboard gates POST /accommodations and the decision routes of
+// the invite queue (ADR-042), whose listing is global. It is the only seeded
+// place that grants it: dropping it would leave a freshly seeded deployment with
+// nobody able to admit an establishment.
+//
+// accommodations:manage and stays:read:own stay for one reason, and it is the
+// administrator's own job, not the establishment's: delivering the access of a
+// newly admitted lodging reads the accommodation row for its ETag
+// (GET /accommodations/{id}) and writes the activation
+// (POST /accommodations/{id}/activation). Neither route registers a stay.
 //
 // It is deliberately not the full set of scopes the application enforces. A
 // scope gated by a feature flag is granted by that feature's own activation path,
@@ -43,7 +53,6 @@ var adminScopes = []string{
 	"accommodations:onboard",
 	"accommodations:manage",
 	"stays:read:own",
-	"stays:write",
 	"questionnaires:manage",
 	"questionnaires:approve",
 	"analytics:read:internal",
@@ -171,6 +180,12 @@ func applyAdmin(
 	return accountID, nil
 }
 
+// applyMemberships binds the administrator to the catalog rows so the access of
+// each seeded lodging can be delivered: both GET /accommodations/{id} and the
+// activation route join core.memberships, so an administrator with no membership
+// could admit an establishment it can never hand the keys to. The binding is a
+// delivery channel, not ownership — the client never offers the administrator a
+// stay board, and adminScopes withholds stays:write.
 func applyMemberships(
 	ctx context.Context,
 	repository *store.SeedRepository,
@@ -187,7 +202,7 @@ func applyMemberships(
 	if err != nil {
 		return fmt.Errorf("administrator memberships rejected: %w", err)
 	}
-	report(output, "administrator bound to the catalog accommodations")
+	report(output, "administrator bound to the catalog accommodations for access delivery")
 	return nil
 }
 

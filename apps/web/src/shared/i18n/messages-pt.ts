@@ -14,6 +14,7 @@ export const messagesPt = {
   "app.nav.activation": "Ativação",
   "app.nav.survey": "Pesquisa",
   "app.nav.workspace": "Área da hospedagem",
+  "app.nav.administration": "Administração",
   "app.nav.questionnaires": "Questionários",
   "app.nav.quality": "Qualidade",
   "app.nav.aria": "Navegação principal",
@@ -551,6 +552,17 @@ export const messagesPt = {
   "inviteRequest.completion.keepEmail":
     "Deixe esse e-mail à mão. É por ele que chega o convite para criar seu acesso.",
   "inviteRequest.completion.back": "Voltar para a página inicial",
+
+  // --------------------------------------- Área da administração: cadastro
+  "admin.accommodations.title": "Cadastro de hospedagens",
+  "admin.accommodations.hint":
+    "Você administra o cadastro das hospedagens e as perguntas do questionário. Registrar estadia e aprovar hóspede são atos de cada hospedagem, na conta dela.",
+  "admin.accommodations.loading": "Carregando as hospedagens cadastradas…",
+  "admin.accommodations.empty":
+    "Nenhuma hospedagem cadastrada por esta conta ainda. Cadastre uma ou aprove um pedido da fila abaixo.",
+  "admin.accommodations.onboard": "Cadastrar hospedagem",
+  "admin.accommodations.send": "Entregar o acesso desta hospedagem",
+  "admin.access.title": "Acesso da hospedagem {name}",
 
   // ------------------------------- Fila de pedidos de acesso da administração
   "accessRequest.title": "Pedidos de acesso de hospedagens",
