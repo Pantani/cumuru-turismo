@@ -98,7 +98,7 @@ migration_files="$(
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_organization_document.down.sql\n000002_organization_document.up.sql\n000003_self_service_and_approval.down.sql\n000003_self_service_and_approval.up.sql\n000004_rename_fnrh_failures_reason.down.sql\n000004_rename_fnrh_failures_reason.up.sql\n000005_audit_outbox_returning_grants.down.sql\n000005_audit_outbox_returning_grants.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
@@ -626,12 +626,6 @@ done
 expect_psql_failure \
   cumuru_app \
   cumuru-local-app-only \
-  "app_runtime unexpectedly selected platform.outbox_events" \
-  "SELECT count(*) FROM platform.outbox_events"
-
-expect_psql_failure \
-  cumuru_app \
-  cumuru-local-app-only \
   "app_runtime unexpectedly updated platform.outbox_events" \
   "UPDATE platform.outbox_events SET available_at = available_at"
 
@@ -841,7 +835,7 @@ cleanup_function_shape="$(
         )
         AND procedure.proconfig @> ARRAY['search_path=pg_catalog']
         AND pg_catalog.pg_get_function_result(procedure.oid)
-          = 'TABLE(idempotency_records bigint, rate_limit_buckets bigint)'
+          = 'TABLE(idempotency_records bigint, rate_limit_buckets bigint, proof_of_work_spends bigint)'
       )::integer
       FROM pg_catalog.pg_proc AS procedure
       JOIN pg_catalog.pg_namespace AS namespace
@@ -1246,7 +1240,7 @@ VALUES
     1,
     1,
     'pseudonym_not_approved',
-    'phase_not_implemented'
+    'not_implemented'
   ),
   (
     '00000000-0000-7000-8000-000000000702',
@@ -1257,7 +1251,7 @@ VALUES
     2,
     2,
     'pseudonym_not_approved',
-    'phase_not_implemented'
+    'not_implemented'
   );
 
 INSERT INTO analytics.quality_coverage (
@@ -1470,36 +1464,7 @@ psql_as cumuru_migration cumuru-local-migration-only \
     WHERE operation_key LIKE 'cleanupExpired%';
   "
 
-run_migrate down 1
-schemas_left="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="
-      SELECT count(*)
-      FROM information_schema.schemata
-      WHERE schema_name IN (
-        'identity',
-        'core',
-        'survey',
-        'analytics',
-        'public_data',
-        'platform',
-        'auth'
-      )
-    "
-)"
-test "${schemas_left}" = "0"
-
-run_migrate up 2
-final_version="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
-)"
-test "${final_version}" = "2:false"
-
-# ADR-038: the blind document must be unique, and the baseline alone must not
-# already enforce it, otherwise 000002 would be silently redundant.
+# ADR-038: o documento cego deve ser único desde a criação da baseline.
 document_guard="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
@@ -1514,30 +1479,8 @@ document_guard="$(
 )"
 test "${document_guard}" = "1:1"
 
-run_migrate down 1
-document_guard_after_rollback="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="
-      SELECT count(*)
-      FROM pg_indexes
-      WHERE schemaname = 'core'
-        AND tablename = 'organizations'
-        AND indexname = 'organizations_document_hmac_idx'
-    "
-)"
-test "${document_guard_after_rollback}" = "0"
-run_migrate up 1
-
-# ADR-039/040/041: o autoatendimento aplica-se sobre a 000002 e volta sem deixar resíduo.
-run_migrate up 1
-self_service_version="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
-)"
-test "${self_service_version}" = "3:false"
-
+# ADR-039/040/041: o autoatendimento e a aprovação já nascem na baseline.
+#
 # O CREATE em platform é reaberto só para transferir o dono da função de
 # varredura e devolvido na mesma transação. Sem a reabertura o ALTER ... OWNER
 # falha com permission denied; sem a devolução migration_admin sai da migração
@@ -1597,103 +1540,27 @@ self_service_contract="$(
 )"
 test "${self_service_contract}" = "true:true:1:1:1:3"
 
-run_migrate down 1
-self_service_rollback="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="
-      SELECT (to_regclass('platform.proof_of_work_spends') IS NULL)::text
-        || ':' || (to_regclass('auth.activation_capabilities') IS NULL)::text
-        || ':' || pg_get_userbyid(cleanup.proowner)
-        || ':' || ('proof_of_work_spends' = ANY (cleanup.proargnames))::text
-        || ':' || has_schema_privilege('migration_admin', 'platform', 'CREATE')::text
-        || ':' || (
-          SELECT count(*)
-          FROM pg_constraint
-          WHERE conrelid = 'platform.rate_limit_buckets'::regclass
-            AND conname = 'rate_limit_scope_valid'
-            AND pg_get_constraintdef(oid)
-              LIKE '%accommodation_invite_submit%'
-        )::text
-        || ':' || (
-          SELECT count(*)
-          FROM information_schema.columns
-          WHERE table_schema = 'core'
-            AND table_name = 'stays'
-            AND column_name IN ('provenance', 'approval_state', 'approved_at')
-        )::text
-      FROM pg_proc AS cleanup
-      WHERE cleanup.oid =
-        'platform.cleanup_expired_operational_records(timestamptz, integer)'::regprocedure
-    "
-)"
-test "${self_service_rollback}" = "true:true:migration_admin:false:false:0:0"
-
-# 000004 renomeia 'phase_not_implemented' para 'not_implemented'. A linha é
-# semeada aqui, ainda na 000003, porque a constraint da baseline só aceita o
-# valor antigo: é o único ponto em que a linha que a migração precisa reescrever
-# pode existir. As fixtures do começo do teste já foram removidas na limpeza.
-psql_as cumuru_migration cumuru-local-migration-only <<'SQL'
-INSERT INTO analytics.quality_snapshots (
-  id,
-  window_code,
-  updated_at,
-  incomplete_stays,
-  overdue_planned_departures,
-  silent_accommodations,
-  aggregation_failures,
-  suspected_duplicates_reason,
-  fnrh_failures_reason
-)
-VALUES (
-  '00000000-0000-7000-8000-000000000704',
-  'last_30_days',
-  TIMESTAMPTZ '2026-07-29T12:00:00Z',
-  1,
-  1,
-  1,
-  1,
-  'pseudonym_not_approved',
-  'phase_not_implemented'
-);
-SQL
-
-run_migrate up
-
-# Prova as duas metades da 000004: a linha existente foi reescrita e a constraint
-# nova recusa o vocabulário antigo. Sem a segunda metade, um DROP CONSTRAINT sem
-# o ADD de volta passaria despercebido.
-fnrh_reason_rename="$(
-  psql_as cumuru_migration cumuru-local-migration-only \
-    --tuples-only --no-align \
-    --command="
-      SELECT count(*) FILTER (WHERE fnrh_failures_reason = 'not_implemented')
-        || ':' || count(*) FILTER (
-          WHERE fnrh_failures_reason = 'phase_not_implemented'
-        )
-      FROM analytics.quality_snapshots
-    "
-)"
-test "${fnrh_reason_rename}" = "1:0"
-
+# O vocabulário de fase nunca existiu na baseline: a constraint só aceita
+# 'not_implemented' desde a criação, então a prova é que o vocabulário antigo
+# é recusado, não que uma linha existente foi reescrita.
 fnrh_reason_constraint="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="
       UPDATE analytics.quality_snapshots
         SET fnrh_failures_reason = 'phase_not_implemented'
-        WHERE id = '00000000-0000-7000-8000-000000000704'
+        WHERE id = '00000000-0000-7000-8000-000000000701'
     " 2>&1 || true
 )"
 case "${fnrh_reason_constraint}" in
   *quality_snapshots_fnrh_valid*) ;;
   *)
-    echo "a constraint nova aceitou o vocabulário antigo: ${fnrh_reason_constraint}" >&2
+    echo "a constraint aceitou o vocabulário antigo de fase: ${fnrh_reason_constraint}" >&2
     exit 1
     ;;
 esac
 
-# 000005: grant preventivo de SELECT (id) em platform.audit_events e
+# Grant preventivo de SELECT (id) em platform.audit_events e
 # platform.outbox_events para app_runtime, fechando a classe de incidente que
 # derrubou CreateActivationAccount (queries/auth.sql:140-146) antes que ela
 # morda de novo — desta vez num INSERT ... RETURNING id, o padrão real já
@@ -1787,4 +1654,33 @@ psql_as cumuru_migration cumuru-local-migration-only \
       );
   " >/dev/null
 
-echo "migrations zero-to-five, rollback to zero, reapply, reversible document uniqueness, reversible self-service and approval, fnrh reason rename, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
+# Round trip completo: a baseline única sobe, desce e reaplica de forma limpa.
+run_migrate down 1
+schemas_left="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT count(*)
+      FROM information_schema.schemata
+      WHERE schema_name IN (
+        'identity',
+        'core',
+        'survey',
+        'analytics',
+        'public_data',
+        'platform',
+        'auth'
+      )
+    "
+)"
+test "${schemas_left}" = "0"
+
+run_migrate up 1
+final_version="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="SELECT version || ':' || dirty FROM public.schema_migrations"
+)"
+test "${final_version}" = "1:false"
+
+echo "migrations zero-to-one, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
