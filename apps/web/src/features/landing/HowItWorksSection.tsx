@@ -1,6 +1,6 @@
 import { useLocale } from "../../shared/i18n/LocaleProvider";
 import { ImageSlot } from "./ImageSlot";
-import { HOW_STEPS } from "./landing-content";
+import { GATE_PHOTO, HOW_STEPS, SQUARE_PHOTO, STREET_PHOTO } from "./landing-content";
 import { SectionIndex } from "./SectionIndex";
 
 /** Número do passo com dois dígitos, como no material impresso da vila. */
@@ -28,9 +28,9 @@ export function HowItWorksSection() {
           ))}
         </ol>
         <div className="lp-how-gallery">
-          <ImageSlot caption="landing.how.image.desk" />
-          <ImageSlot caption="landing.how.image.phone" />
-          <ImageSlot caption="landing.how.image.street" />
+          <ImageSlot caption="landing.how.image.square" photo={SQUARE_PHOTO} />
+          <ImageSlot caption="landing.how.image.gate" photo={GATE_PHOTO} />
+          <ImageSlot caption="landing.how.image.street" photo={STREET_PHOTO} />
         </div>
       </div>
     </section>

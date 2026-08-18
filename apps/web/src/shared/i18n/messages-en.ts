@@ -90,9 +90,11 @@ export const messagesEn: Messages = {
   "landing.how.step4.title": "The village gets the number",
   "landing.how.step4.body":
     "Everything enters the public dashboard aggregated, rounded and protected. Nobody sees your occupancy on its own.",
-  "landing.how.image.desk": "Inn front desk with the QR code on the counter",
-  "landing.how.image.phone": "Guest filling in the form on a phone",
-  "landing.how.image.street": "Village street on a busy day",
+  "landing.how.image.square":
+    "Main square of Cumuruxatiba, with the village shops and inn",
+  "landing.how.image.gate":
+    "Entrance gateway to Cumuruxatiba on the access road",
+  "landing.how.image.street": "Village street under the coconut palms",
 
   // -------------------------------------------------------- Landing: anfitriões
   "landing.hosts.index": "03",
@@ -112,7 +114,7 @@ export const messagesEn: Messages = {
   "landing.hosts.benefit4.title": "Works on bad internet",
   "landing.hosts.benefit4.body":
     "The record stays on the device and uploads itself when the signal returns.",
-  "landing.hosts.image": "Portrait of a host or an inn in the village",
+  "landing.hosts.image": "Hammock hung on the porch of a village lodging",
 
   // ---------------------------------------------------------- Landing: cadastro
   "landing.register.title": "Register your lodging",
@@ -155,7 +157,8 @@ export const messagesEn: Messages = {
   "landing.place.beachValue": "About 17 km",
   "landing.place.season": "High season",
   "landing.place.seasonValue": "December to February",
-  "landing.place.image": "Map of Cumuruxatiba village with the lodgings",
+  "landing.place.image":
+    "Praia do Centro at low tide, with the Costa das Baleias cliffs behind",
 
   // ------------------------------------------------------- Landing: privacidade
   "landing.privacy.index": "06",
@@ -224,8 +227,13 @@ export const messagesEn: Messages = {
   "landing.contact.dpo": "Data protection officer",
   "landing.contact.mark": "TOURISM OBSERVATORY · CUMURUXATIBA",
 
-  "landing.imagePending": "Reserved space for a photo",
+  "landing.license.ccBy20": "CC BY 2.0",
+  "landing.license.ccBySa30": "CC BY-SA 3.0",
+  "landing.license.ccBySa40": "CC BY-SA 4.0",
+  "landing.license.publicDomain": "Public domain",
   "landing.photoCredit": "Photo: {author} · {license} · Wikimedia Commons",
+  "landing.photoSource":
+    "Open the Wikimedia Commons page for the photo by {author}",
 
   // -------------------------------------------------------- Painel: envelope
   "analytics.index": "01",
@@ -244,7 +252,8 @@ export const messagesEn: Messages = {
   "analytics.metadata.unit": "Unit",
   "analytics.metadata.mode": "Data mode",
   "analytics.coverage.published": "Estimated coverage: {ratio}%",
-  "analytics.coverage.protected": "Coverage protected by the publication policy",
+  "analytics.coverage.protected":
+    "Coverage protected by the publication policy",
   "analytics.coverage.unavailable": "Coverage unavailable",
   "analytics.unit.personDay": "Person-days",
   "analytics.unit.surveyAnswer": "Survey answers",
@@ -418,14 +427,16 @@ export const messagesEn: Messages = {
     "The accommodation must approve this registration. If no one decides within 72 hours, the request expires and the data sent is deleted. Nothing enters statistics or the public dashboard before approval.",
   "selfService.completion.continueSurvey": "Answer the voluntary survey",
 
-  "selfService.error.forbidden": "This poster is not accepting registrations right now.",
+  "selfService.error.forbidden":
+    "This poster is not accepting registrations right now.",
   "selfService.error.notFound":
     "This poster is no longer valid. Ask the accommodation for a new one.",
   "selfService.error.conflict":
     "The privacy notice changed since the poster was printed. Ask the accommodation for an updated poster.",
   "selfService.error.unprocessable":
     "Some data is not accepted in this open form. Review it and try again.",
-  "selfService.error.rateLimited": "Too many submissions from this network just now.",
+  "selfService.error.rateLimited":
+    "Too many submissions from this network just now.",
   "selfService.error.proofOfWorkAborted":
     "The verification was interrupted. Submit again whenever you like.",
   "selfService.error.offline":
@@ -434,7 +445,8 @@ export const messagesEn: Messages = {
   // ------------------------------------------------------------- Guest error copy
   "guestCopy.unexpectedFailure":
     "We could not reach the service right now. Try again in a few moments.",
-  "guestCopy.idempotencyInProgress": "We already received this submission and are finishing it up.",
+  "guestCopy.idempotencyInProgress":
+    "We already received this submission and are finishing it up.",
   "guestCopy.retrySeconds.one": "Try again in 1 second.",
   "guestCopy.retrySeconds.other": "Try again in {seconds} seconds.",
 
