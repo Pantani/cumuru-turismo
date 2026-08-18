@@ -45,8 +45,9 @@ deliberadamente locais e não podem ser reutilizadas em outro ambiente.
   cleanup verificável;
 - `scripts/check-generated.sh`: regenera cliente OpenAPI e código `sqlc` em
   diretório temporário e compara byte a byte;
-- `scripts/test-complexity.sh`: prova o limiar 10 em fixtures temporárias,
-  incluindo `_test.go`, e mede Go e todo código web próprio com máximo 9;
+- `scripts/test-complexity.sh`: prova cada limiar em fixtures temporárias,
+  incluindo `_test.go`, e mede Go de produção e todo código web próprio com
+  ciclomática 5 e cognitiva 8; teste Go responde a 9;
 - `scripts/smoke.sh`: testa API, web, proxy e uma rota autenticada do núcleo
   com o fake OIDC local depois de `make up` e `make seed-test-fixtures` (o
   perfil `local-demo` exige as fixtures do operador, que ficam fora do `up`
@@ -85,7 +86,7 @@ targets continuam sendo provas locais de protótipo, não autorização
 operacional.
 
 Staging e produção exigem secret manager, PostgreSQL gerenciado, TLS, backup,
-restore e provedor OIDC reais. Esses itens não são entregues pela Fase 1.
+restore e provedor OIDC reais. Nada disso é entregue pelo runtime local.
 CIDRs de proxy de staging/produção também precisam ser explícitos, mínimos e
 independentes da fixture local.
 
