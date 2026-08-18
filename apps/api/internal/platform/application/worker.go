@@ -59,7 +59,7 @@ func runWorkerWithResources(
 	closeResources func(),
 	closeResourcesOnReturn *bool,
 ) error {
-	platformStore, questionnaires, err := workerServices(pool, cfg)
+	platformStore, analyticsStore, questionnaires, err := workerServices(pool, cfg)
 	if err != nil {
 		return err
 	}
@@ -139,8 +139,9 @@ func runWorkerWithResources(
 		return errors.New("worker operations listener failed")
 	}
 	pollers := startWorkerPollers(ctx, workerPollerSpec{
-		cfg: cfg, store: platformStore, questionnaires: questionnaires,
-		logger: logger, ready: ready, outboxPending: outboxPending,
+		cfg: cfg, store: platformStore, analyticsStore: analyticsStore,
+		questionnaires: questionnaires,
+		logger:         logger, ready: ready, outboxPending: outboxPending,
 		outboxOldestAge: outboxOldestAge, cleanupFailures: cleanupFailures,
 		analyticsFailures: analyticsFailures, analyticsRuns: analyticsRuns,
 		cleanup: expiredCleanupMetrics{
@@ -164,21 +165,35 @@ func runWorkerWithResources(
 	)
 }
 
+// A reconciliation walks every stay of the published history and rewrites the
+// presence facts behind it; that is a batch, and DATABASE_TIMEOUT sizes a
+// request. Two years of a village already exceed the request budget, so the
+// analytics repository gets a store of its own and the cycle fails on real
+// trouble instead of on the clock.
+const analyticsBatchTimeout = 5 * time.Minute
+
 func workerServices(
 	pool *pgxpool.Pool,
 	cfg config.Config,
-) (*store.Store, *questionnaire.Service, error) {
+) (*store.Store, *store.Store, *questionnaire.Service, error) {
 	platformStore, err := store.NewQuestionnaire(
 		pool, cfg.DatabaseTimeout, cfg.Core, cfg.Questionnaire,
 		store.WithSelfServiceConfig(cfg.SelfService),
 	)
 	if err != nil {
-		return nil, nil, errors.New("worker repository initialization failed")
+		return nil, nil, nil, errors.New("worker repository initialization failed")
+	}
+	analyticsStore, err := store.NewQuestionnaire(
+		pool, analyticsBatchTimeout, cfg.Core, cfg.Questionnaire,
+		store.WithSelfServiceConfig(cfg.SelfService),
+	)
+	if err != nil {
+		return nil, nil, nil, errors.New("worker analytics repository initialization failed")
 	}
 	questionnaires := questionnaire.NewService(
 		store.NewQuestionnaireRepository(platformStore),
 	)
-	return platformStore, questionnaires, nil
+	return platformStore, analyticsStore, questionnaires, nil
 }
 
 // approvalSweeper is nil when the feature is off. With the feature on and no usable
@@ -217,6 +232,7 @@ func openWorkerResources(
 type workerPollerSpec struct {
 	cfg               config.Config
 	store             *store.Store
+	analyticsStore    *store.Store
 	questionnaires    *questionnaire.Service
 	logger            *slog.Logger
 	ready             prometheus.Gauge
@@ -263,7 +279,9 @@ func startFeaturePollers(pollers *pollerCoordinator, spec workerPollerSpec) {
 	if !spec.cfg.Analytics.Enabled {
 		return
 	}
-	analyticsRepository := store.NewAnalyticsRepository(spec.store, spec.cfg.Analytics)
+	analyticsRepository := store.NewAnalyticsRepository(
+		spec.analyticsStore, spec.cfg.Analytics,
+	)
 	pollers.Go(func(pollerContext context.Context) {
 		pollAnalytics(
 			pollerContext, analyticsRepository, spec.cfg.Analytics, spec.logger,

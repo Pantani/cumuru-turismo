@@ -77,9 +77,29 @@ fixture_counts() {
           '019fae13-0000-7000-8000-000000000002'),
       (SELECT count(*) FROM survey.responses),
       (SELECT count(*) FROM survey.responses
-        WHERE substring(id::text FROM 15 FOR 1) = '7')
+        WHERE substring(id::text FROM 15 FOR 1) = '7'),
+      (SELECT count(*) FROM core.stays
+        WHERE accommodation_id::text LIKE '019fae11-%'),
+      (SELECT count(*) FROM core.visitors v
+        JOIN core.stays s ON s.id = v.stay_id
+        WHERE s.accommodation_id::text LIKE '019fae11-%')
     )
   "
+}
+
+# O catálogo e o questionário são fixos; o volume de estadias acompanha a
+# janela publicada de dois anos, então ele é conferido por piso e não por
+# igualdade — amanhã a janela é outra e a contagem exata muda sozinha.
+require_minimum() {
+  local actual="$1"
+  local minimum="$2"
+  local label="$3"
+  if test "${actual}" -ge "${minimum}"; then
+    return
+  fi
+  printf '%s: got %q, want at least %q\n' \
+    "${label}" "${actual}" "${minimum}" >&2
+  return 1
 }
 
 run_local_demo() {
@@ -133,7 +153,25 @@ if grep -Eiq 'bearer|authorization|capability|cumuru-local-platform-read' \
 fi
 
 before="$(fixture_counts)"
-require_equal "${before}" "1,4,4,1,2,20,20" "fresh fixture counts"
+IFS=, read -r \
+  fresh_organizations fresh_accommodations fresh_memberships \
+  fresh_versions fresh_mappings fresh_responses fresh_v7_responses \
+  fresh_stays fresh_visitors <<<"${before}"
+require_equal \
+  "${fresh_organizations},${fresh_accommodations},${fresh_memberships}" \
+  "1,16,16" \
+  "fresh catalogue counts"
+require_equal \
+  "${fresh_versions},${fresh_mappings}" \
+  "1,2" \
+  "fresh questionnaire counts"
+require_equal \
+  "${fresh_responses}" \
+  "${fresh_v7_responses}" \
+  "survey responses carry a v7 identifier"
+require_minimum "${fresh_responses}" 500 "fresh survey responses"
+require_minimum "${fresh_stays}" 900 "fresh stays"
+require_minimum "${fresh_visitors}" 4000 "fresh visitors"
 
 psql_migration --command="
   INSERT INTO core.organizations (id, name)
@@ -189,7 +227,7 @@ reconciled="$(
         (timezone('America/Bahia', now()))::date + 35
   "
 )"
-require_equal "${reconciled}" "3" "reconciled current stays"
+require_equal "${reconciled}" "16" "reconciled current stays"
 require_equal "$(fixture_counts)" "${before}" "rollover fixture counts"
 
 canary="$(
