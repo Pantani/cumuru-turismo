@@ -3541,23 +3541,16 @@ ALTER TABLE analytics.quality_snapshots
 COMMIT;
 BEGIN;
 
--- Fecha a classe de incidente aberta em CreateActivationAccount
--- (queries/auth.sql:140-146): app_runtime tinha INSERT sem nenhum SELECT em
--- platform.audit_events e platform.outbox_events, então a PRIMEIRA query com
--- RETURNING sobre qualquer uma delas derruba a transação inteira com
--- "permission denied for table", no próprio INSERT. O incidente já mordeu
--- auth.accounts; aqui é prevenção, não reação — nenhuma query nova passa a
--- usar RETURNING nesta migração.
---
--- O escopo é o menor que evita a classe: só a coluna `id`. É a única coluna
--- que uma cláusula RETURNING precisaria projetar quando o valor já é gerado
--- pelo cliente (como acontece hoje: id vem de sqlc.arg(id) nas duas tabelas,
--- não de DEFAULT do servidor) — o padrão real já observado em
--- CreateActivationAccount, onde o Go só consumia row.ID. Nenhuma outra
--- coluna destas tabelas é concedida: actor_subject_hmac, metadata e o
--- payload do outbox continuam sem SELECT nenhum para app_runtime.
-
-GRANT SELECT (id) ON TABLE platform.audit_events TO app_runtime;
-GRANT SELECT (id) ON TABLE platform.outbox_events TO app_runtime;
+-- Reverte o grant preventivo de SELECT (id) em platform.audit_events e
+-- platform.outbox_events para app_runtime (ADR-032, terceira onda): a
+-- premissa era blindar uma futura cláusula RETURNING contra o incidente já
+-- visto em CreateActivationAccount, mas InsertAuditEvent e InsertOutboxEvent
+-- são ambas `:exec` sem RETURNING — o grant nunca teve consumidor. E,
+-- diferente de auth.accounts, privilégio de coluna aqui tem custo: o
+-- restore-drill prova que "SELECT count(*) FROM platform.audit_events" deve
+-- falhar para app_runtime, e o Postgres autoriza count(*) e outras
+-- referências sem coluna explícita com SELECT em QUALQUER coluna da tabela —
+-- SELECT (id) já bastava para o COUNT(*) passar, quebrando a garantia de
+-- least-privilege que o dump pós-restore verifica.
 
 COMMIT;
