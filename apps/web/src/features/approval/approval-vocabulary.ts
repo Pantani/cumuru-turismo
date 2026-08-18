@@ -1,5 +1,5 @@
 import type { components } from "../../generated/schema";
-import { formatCivilDate } from "../operator/stay-lifecycle";
+import { formatCivilDate, stayCivilDateOf } from "../operator/stay-lifecycle";
 
 type Schemas = components["schemas"];
 type RejectionReasonCode = Schemas["RejectStayRequest"]["reason_code"];
@@ -42,5 +42,5 @@ export function formatApprovalDeadline(expiresAt: string | null) {
   if (Number.isNaN(parsed.getTime())) {
     return null;
   }
-  return `Expira em ${formatCivilDate(expiresAt.slice(0, 10))}`;
+  return `Expira em ${formatCivilDate(stayCivilDateOf(expiresAt))}`;
 }
