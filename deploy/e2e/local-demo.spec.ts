@@ -179,6 +179,31 @@ async function withAdministrator<T>(
  * only honest source, and it beats hardcoding a fixture uuid that the seed is
  * free to change.
  */
+interface AccommodationItem {
+  id: string;
+  name: string;
+}
+
+/**
+ * Narrows the parsed body instead of trusting it. Anything that is not the
+ * listing yields no items, so a response of another shape is ignored rather
+ * than turned into a throw inside a promise nobody awaits.
+ */
+function accommodationItems(payload: unknown): AccommodationItem[] {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+  const { items } = payload as { items?: unknown };
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.filter((item): item is AccommodationItem =>
+    typeof item === "object" && item !== null &&
+    typeof (item as AccommodationItem).id === "string" &&
+    typeof (item as AccommodationItem).name === "string"
+  );
+}
+
 function trackAccommodationIds(page: Page) {
   const byName = new Map<string, string>();
   page.on("response", (response) => {
@@ -188,9 +213,14 @@ function trackAccommodationIds(page: Page) {
     ) {
       return;
     }
+    // The rejection handler below only covers a body that fails to parse. A
+    // response that parses into another shape — the error envelope of a 401,
+    // say — would throw inside the success callback instead, and that rejection
+    // has no handler at all: it would surface as an unhandled rejection and
+    // flake a run that has nothing to do with this listener. Hence the guard.
     void response.json().then(
-      (payload: { items: { id: string; name: string }[] }) => {
-        for (const item of payload.items) {
+      (payload: unknown) => {
+        for (const item of accommodationItems(payload)) {
           byName.set(item.name, item.id);
         }
       },
