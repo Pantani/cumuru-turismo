@@ -50,9 +50,8 @@ test -f "${LOCAL_ENV_FILE}" || LOCAL_ENV_FILE="${ROOT_DIR}/.env.example"
 # script tentar entrar com credencial diferente da que foi semeada assim que
 # alguém editasse o `.env` — falha real, mas relatada como se a conta não
 # existisse. O ambiente exportado continua vencendo, que é como a CI sobrescreve.
-env_file_value() {
-  sed -n "s/^$1=//p" "${LOCAL_ENV_FILE}" | tail -n 1
-}
+. "${ROOT_DIR}/deploy/scripts/lib/env-file.sh"
+cumuru_assert_env_file_parsing
 
 COMPOSE=(
   docker compose
@@ -339,7 +338,7 @@ json_field() {
 }
 
 DEMO_EMAIL="operador@cumuru.local"
-DEMO_PASSWORD="${LOCAL_DEMO_ACCOUNT_PASSWORD:-$(env_file_value LOCAL_DEMO_ACCOUNT_PASSWORD)}"
+DEMO_PASSWORD="${LOCAL_DEMO_ACCOUNT_PASSWORD:-$(cumuru_env_file_value "${LOCAL_ENV_FILE}" LOCAL_DEMO_ACCOUNT_PASSWORD)}"
 if test -z "${DEMO_PASSWORD}"; then
   fail "LOCAL_DEMO_ACCOUNT_PASSWORD is absent from the environment and from ${LOCAL_ENV_FILE}"
 fi
@@ -356,8 +355,8 @@ authorization="Authorization: Bearer ${session_token}"
 # → Hóspede: o operador fictício do local-demo administra a própria acomodação e
 # aprova a estadia do hóspede, mas quem admite um estabelecimento na plataforma é
 # o administrador do seed — é ele, e só ele, que carrega accommodations:onboard.
-ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-$(env_file_value SEED_ADMIN_EMAIL)}"
-ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:-$(env_file_value SEED_ADMIN_PASSWORD)}"
+ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-$(cumuru_env_file_value "${LOCAL_ENV_FILE}" SEED_ADMIN_EMAIL)}"
+ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:-$(cumuru_env_file_value "${LOCAL_ENV_FILE}" SEED_ADMIN_PASSWORD)}"
 if test -z "${ADMIN_EMAIL}" || test -z "${ADMIN_PASSWORD}"; then
   fail "SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are absent from the environment and from ${LOCAL_ENV_FILE}"
 fi

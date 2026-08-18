@@ -36,12 +36,29 @@ test -f "${LOCAL_ENV_FILE}" || LOCAL_ENV_FILE="${ROOT_DIR}/.env.example"
 # padrão embutido no spec enquanto o banco recebeu o valor do arquivo, e o
 # sintoma seria "senha inválida" numa conta que existe. O ambiente já exportado
 # vence, que é como a CI sobrescreve.
-env_file_value() {
-  sed -n "s/^$1=//p" "${LOCAL_ENV_FILE}" | tail -n 1
-}
-LOCAL_DEMO_ACCOUNT_PASSWORD="${LOCAL_DEMO_ACCOUNT_PASSWORD:-$(env_file_value LOCAL_DEMO_ACCOUNT_PASSWORD)}"
-SEED_ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-$(env_file_value SEED_ADMIN_EMAIL)}"
-SEED_ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:-$(env_file_value SEED_ADMIN_PASSWORD)}"
+. "${ROOT_DIR}/deploy/scripts/lib/env-file.sh"
+cumuru_assert_env_file_parsing
+
+LOCAL_DEMO_ACCOUNT_PASSWORD="${LOCAL_DEMO_ACCOUNT_PASSWORD:-$(
+  cumuru_env_file_value "${LOCAL_ENV_FILE}" LOCAL_DEMO_ACCOUNT_PASSWORD
+)}"
+SEED_ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-$(
+  cumuru_env_file_value "${LOCAL_ENV_FILE}" SEED_ADMIN_EMAIL
+)}"
+SEED_ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:-$(
+  cumuru_env_file_value "${LOCAL_ENV_FILE}" SEED_ADMIN_PASSWORD
+)}"
+# Exportar vazio é pior que não exportar: o spec resolve o padrão com `??`, que
+# só cobre ausência, não string vazia. Um valor vazio exportado desliga aquele
+# padrão e a jornada falha no login, relatando credencial errada onde o defeito
+# é configuração faltando.
+for credential in \
+  LOCAL_DEMO_ACCOUNT_PASSWORD SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD; do
+  if test -z "${!credential}"; then
+    echo "${credential} is absent from the environment and from ${LOCAL_ENV_FILE}" >&2
+    exit 1
+  fi
+done
 export LOCAL_DEMO_ACCOUNT_PASSWORD SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD
 
 COMPOSE=(
