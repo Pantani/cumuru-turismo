@@ -3538,9 +3538,6 @@ ALTER TABLE analytics.quality_snapshots
     AND fnrh_failures_reason = 'not_implemented'
   );
 
-COMMIT;
-BEGIN;
-
 -- Reverte o grant preventivo de SELECT (id) em platform.audit_events e
 -- platform.outbox_events para app_runtime (ADR-032, terceira onda): a
 -- premissa era blindar uma futura cláusula RETURNING contra o incidente já
@@ -3551,6 +3548,8 @@ BEGIN;
 -- falhar para app_runtime, e o Postgres autoriza count(*) e outras
 -- referências sem coluna explícita com SELECT em QUALQUER coluna da tabela —
 -- SELECT (id) já bastava para o COUNT(*) passar, quebrando a garantia de
--- least-privilege que o dump pós-restore verifica.
+-- least-privilege que o dump pós-restore verifica. Nenhuma instrução SQL
+-- nova aqui: o bloco BEGIN/COMMIT anterior existia só para os GRANTs
+-- removidos e não sobra vazio.
 
 COMMIT;
