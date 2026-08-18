@@ -1,7 +1,7 @@
 package localdemo
 
 import (
-	"strings"
+	"maps"
 	"testing"
 
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store"
@@ -118,18 +118,51 @@ func TestFixtureSummaryIsDerivedFromFoundationAndResponseFixtures(t *testing.T) 
 func TestDemoOperatorCanReachTheSelfServicePanels(t *testing.T) {
 	t.Parallel()
 
+	// The whole set, not the required members: a containment check stays green
+	// while a privileged scope is added beside the ones listed, and this is the
+	// account a person actually signs into on the demo. Anything granted here
+	// has to be justified here.
+	want := map[string]struct{}{
+		"platform:read":           {},
+		"accommodations:manage":   {},
+		"stays:read:own":          {},
+		"stays:write":             {},
+		"stays:approve":           {},
+		"questionnaires:manage":   {},
+		"questionnaires:approve":  {},
+		"analytics:read:internal": {},
+	}
+	granted := demoOperatorScopes(t)
+	if !maps.Equal(granted, want) {
+		t.Fatalf("demo operator scopes = %v, want %v", granted, want)
+	}
+}
+
+// accommodations:onboard is the only scope separating this fixture from the
+// seeded administrator, and nothing else in the codebase would fail if it came
+// back: the demo would simply let a lodging operator admit establishments to the
+// whole platform, because the invite queue of ADR-042 is not scoped by
+// membership. This assertion is that missing failure.
+func TestDemoOperatorCannotOnboardAccommodations(t *testing.T) {
+	t.Parallel()
+
+	if _, ok := demoOperatorScopes(t)["accommodations:onboard"]; ok {
+		t.Fatal("the demo operator must not hold accommodations:onboard")
+	}
+}
+
+func demoOperatorScopes(t *testing.T) map[string]struct{} {
+	t.Helper()
+
 	account, err := accountFixture(func(string) (string, bool) {
 		return "senha-fictícia-do-demo", true
 	})
 	if err != nil {
 		t.Fatalf("accountFixture() error = %v", err)
 	}
-	granted := strings.Join(account.Scopes, " ")
-	for _, required := range []string{
-		"accommodations:manage", "stays:read:own", "stays:write", "stays:approve",
-	} {
-		if !strings.Contains(granted, required) {
-			t.Fatalf("the demo operator lacks %s: %q", required, granted)
-		}
+	result := make(map[string]struct{}, len(account.Scopes))
+	for _, scope := range account.Scopes {
+		result[scope] = struct{}{}
 	}
+	return result
 }

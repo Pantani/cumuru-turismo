@@ -20,7 +20,13 @@ import (
 )
 
 // adminScopes is the set the administrator receives at seed time. It is not a
-// separate authorization tier, because the API has none.
+// separate authorization tier, because the API has none — accommodations:onboard
+// is what stands in for one. It gates POST /accommodations and the decision
+// routes of the invite queue (ADR-042), whose listing is global, so it admits
+// establishments to the whole platform. The local demo operator no longer
+// receives it, and this list is the only seeded place that does: dropping the
+// scope here would leave a freshly seeded deployment with nobody able to admit
+// an establishment.
 //
 // It is deliberately not the full set of scopes the application enforces. A
 // scope gated by a feature flag is granted by that feature's own activation path,

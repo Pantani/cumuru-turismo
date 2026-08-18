@@ -31,6 +31,36 @@ export CUMURU_BUILD_TIME="${build_metadata[2]}"
 LOCAL_ENV_FILE="${ROOT_DIR}/.env"
 test -f "${LOCAL_ENV_FILE}" || LOCAL_ENV_FILE="${ROOT_DIR}/.env.example"
 
+# O Compose semeia as contas a partir deste arquivo, mas o Playwright roda fora
+# dos containers e não o enxerga. Sem repassar, a jornada tentaria entrar com o
+# padrão embutido no spec enquanto o banco recebeu o valor do arquivo, e o
+# sintoma seria "senha inválida" numa conta que existe. O ambiente já exportado
+# vence, que é como a CI sobrescreve.
+. "${ROOT_DIR}/deploy/scripts/lib/env-file.sh"
+cumuru_assert_env_file_parsing
+
+LOCAL_DEMO_ACCOUNT_PASSWORD="${LOCAL_DEMO_ACCOUNT_PASSWORD:-$(
+  cumuru_env_file_value "${LOCAL_ENV_FILE}" LOCAL_DEMO_ACCOUNT_PASSWORD
+)}"
+SEED_ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-$(
+  cumuru_env_file_value "${LOCAL_ENV_FILE}" SEED_ADMIN_EMAIL
+)}"
+SEED_ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:-$(
+  cumuru_env_file_value "${LOCAL_ENV_FILE}" SEED_ADMIN_PASSWORD
+)}"
+# Exportar vazio é pior que não exportar: o spec resolve o padrão com `??`, que
+# só cobre ausência, não string vazia. Um valor vazio exportado desliga aquele
+# padrão e a jornada falha no login, relatando credencial errada onde o defeito
+# é configuração faltando.
+for credential in \
+  LOCAL_DEMO_ACCOUNT_PASSWORD SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD; do
+  if test -z "${!credential}"; then
+    echo "${credential} is absent from the environment and from ${LOCAL_ENV_FILE}" >&2
+    exit 1
+  fi
+done
+export LOCAL_DEMO_ACCOUNT_PASSWORD SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD
+
 COMPOSE=(
   docker compose
   --env-file "${LOCAL_ENV_FILE}"

@@ -457,11 +457,15 @@ describe("escopo da fila de pedidos de acesso", () => {
     await screen.findByRole("heading", { name: "Suas hospedagens" });
     /**
      * A ausência é asserida contra um evento observável, e não contra um número
-     * de ticks: este botão só aparece depois que a própria requisição da área
+     * de ticks: este link só aparece depois que a própria requisição da área
      * de trabalho resolveu e renderizou. A fila, se montasse, buscaria no mesmo
      * commit em que a área de trabalho montou — antes disto, portanto.
+     *
+     * Sem o escopo a tela vazia orienta em vez de oferecer o botão de cadastro,
+     * que só poderia responder `403`; por isso a âncora é o link do pedido de
+     * acesso, e não mais aquele botão.
      */
-    await screen.findByRole("button", { name: "Cadastrar minha hospedagem" });
+    await screen.findByRole("link", { name: "página de pedido de acesso" });
 
     expect(
       screen.queryByRole("heading", {

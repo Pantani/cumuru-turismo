@@ -1,4 +1,10 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 
 // axe's `color-contrast` rule needs real layout and paint to resolve a
 // stacking context's composed background, which jsdom never provides — the
@@ -45,7 +51,32 @@ declare global {
  */
 const AXE_CORE_ROUTE = "/__axe-core__.js";
 
+const posterAbsenceRoute =
+  /^\/api\/v1\/accommodations\/([0-9a-fA-F-]+)\/invite$/u;
+
+/**
+ * The contrast audit reads computed colour, and the grids enter through `rise`,
+ * which animates `opacity` from 0 with a stagger. Measured mid-fade, the colour
+ * read is the blend with the background rather than the token: legible text
+ * fails for being halfway into view, and the same class reports a different
+ * ratio on each run — the signature of a race, not of a palette defect.
+ *
+ * Waiting on the animations themselves settles it whatever the cause, without
+ * depending on a media query being emulated. The infinite ones (`pulse-dot`,
+ * `breathe`) never finish by definition and are skipped, or this would hang
+ * until the timeout.
+ */
+async function settleEntranceAnimations(page: Page) {
+  await page.waitForFunction(() =>
+    document.getAnimations().every((animation) =>
+      animation.effect?.getComputedTiming().iterations === Infinity ||
+      animation.playState === "finished"
+    )
+  );
+}
+
 async function expectNoColorContrastViolations(page: Page, label: string) {
+  await settleEntranceAnimations(page);
   // The site's CSP is `script-src 'self'` with no 'unsafe-inline' (proven
   // earlier in this same spec), and Playwright's addScriptTag always injects
   // an inline <script> when given a local `path`— the browser blocks that
@@ -111,14 +142,120 @@ const DEMO_ACCOUNT_EMAIL = "operador@cumuru.local";
 const DEMO_ACCOUNT_PASSWORD = process.env.LOCAL_DEMO_ACCOUNT_PASSWORD ??
   "demonstracao-local-2026";
 
+// The hierarchy is Administrator -> Establishment -> Guest. The local demo
+// operator runs its own lodging, but admitting an establishment into the
+// platform is the seeded administrator's act: it is the only account carrying
+// `accommodations:onboard`, which gates POST /accommodations and the decision
+// routes of the invite queue (ADR-042). These fallbacks mirror `.env.example`
+// the same way the demo password above does, and the same way
+// `deploy/scripts/test-self-service-full-stack.sh` does.
+const ADMIN_ACCOUNT_EMAIL = process.env.SEED_ADMIN_EMAIL ??
+  "administracao@cumuru.local";
+const ADMIN_ACCOUNT_PASSWORD = process.env.SEED_ADMIN_PASSWORD ??
+  "administracao-local-2026";
+
 /** The session lives in tab memory only, so every run signs in from scratch. */
-async function signIn(page: Page) {
-  await page.getByLabel("E-mail", { exact: true }).fill(DEMO_ACCOUNT_EMAIL);
-  await page.getByLabel("Senha", { exact: true }).fill(DEMO_ACCOUNT_PASSWORD);
+async function signIn(
+  page: Page,
+  email = DEMO_ACCOUNT_EMAIL,
+  password = DEMO_ACCOUNT_PASSWORD,
+) {
+  await page.getByLabel("E-mail", { exact: true }).fill(email);
+  await page.getByLabel("Senha", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Suas hospedagens" }),
   ).toBeVisible();
+}
+
+/**
+ * Runs the admission steps in a tab of its own instead of swapping the account
+ * of the operator's tab. The session lives in tab memory only — the token is a
+ * React ref, never storage — so a second tab is already a disjoint session,
+ * while signing the administrator in and out of the operator's tab would
+ * discard the state the later steps depend on and cost a re-login per
+ * admission. A tab of this same context, rather than a context of its own,
+ * because `browser.newContext()` inherits neither `baseURL` nor the `pt-BR`
+ * locale that playwright.local.config.ts pins, and the journey asserts
+ * Portuguese text against relative URLs. The tab is closed here, and the
+ * end-of-journey assertion that the context persisted no cookie covers both.
+ */
+async function withAdministrator<T>(
+  context: BrowserContext,
+  admit: (page: Page, accommodations: Locator) => Promise<T>,
+): Promise<T> {
+  const adminPage = await context.newPage();
+  try {
+    await adminPage.goto("/acesso");
+    await signIn(adminPage, ADMIN_ACCOUNT_EMAIL, ADMIN_ACCOUNT_PASSWORD);
+    return await admit(
+      adminPage,
+      adminPage.getByRole("region", { name: "Suas hospedagens" }),
+    );
+  } finally {
+    await adminPage.close();
+  }
+}
+
+/**
+ * Reads the accommodation ids off the listing the workspace already fetches.
+ * The interface deliberately surfaces no identifier — an earlier assertion in
+ * this journey proves it never asks for one — so the network response is the
+ * only honest source, and it beats hardcoding a fixture uuid that the seed is
+ * free to change.
+ */
+interface AccommodationItem {
+  id: string;
+  name: string;
+}
+
+/**
+ * Narrows the parsed body instead of trusting it. Anything that is not the
+ * listing yields no items, so a response of another shape is ignored rather
+ * than turned into a throw inside a promise nobody awaits.
+ */
+function accommodationItems(payload: unknown): AccommodationItem[] {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+  const { items } = payload as { items?: unknown };
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.filter((item): item is AccommodationItem =>
+    typeof item === "object" && item !== null &&
+    typeof (item as AccommodationItem).id === "string" &&
+    typeof (item as AccommodationItem).name === "string"
+  );
+}
+
+function trackAccommodationIds(page: Page) {
+  const byName = new Map<string, string>();
+  page.on("response", (response) => {
+    if (
+      response.request().method() !== "GET" ||
+      new URL(response.url()).pathname !== "/api/v1/accommodations"
+    ) {
+      return;
+    }
+    // The rejection handler below only covers a body that fails to parse. A
+    // response that parses into another shape — the error envelope of a 401,
+    // say — would throw inside the success callback instead, and that rejection
+    // has no handler at all: it would surface as an unhandled rejection and
+    // flake a run that has nothing to do with this listener. Hence the guard.
+    void response.json().then(
+      (payload: unknown) => {
+        for (const item of accommodationItems(payload)) {
+          byName.set(item.name, item.id);
+        }
+      },
+      () => undefined,
+    );
+  });
+  return async (name: string) => {
+    await expect.poll(() => byName.get(name)).toBeDefined();
+    return byName.get(name) as string;
+  };
 }
 
 /**
@@ -230,6 +367,7 @@ test("percorre a jornada local sem persistir authorities", async ({
   context,
   page,
 }) => {
+  const accommodationIdFor = trackAccommodationIds(page);
   const consoleErrors: string[] = [];
   const failedAPIResponses: string[] = [];
   // A política que o NAVEGADOR recebeu, não a que o nginx pretende enviar. O
@@ -250,10 +388,17 @@ test("percorre a jornada local sem persistir authorities", async ({
   // 404 declarado no contrato, não falha. Tolerar 404 em geral cegaria o gate
   // inteiro; aqui só este caminho, só com este status, e só antes de o cartaz
   // existir. Depois de emitido, um 404 nesta mesma rota volta a ser falha.
-  const posterAbsenceRoute = /^\/api\/v1\/accommodations\/[0-9a-fA-F-]+\/invite$/u;
   const declaredPosterAbsences: string[] = [];
   const declaredPosterConsoleErrors: string[] = [];
-  let posterIssued = false;
+  // A emissão é por acomodação, então a tolerância também precisa ser. Um único
+  // booleano bastava quando a jornada visitava uma hospedagem só; com o acervo
+  // fictício atual o operador abre várias, e emitir o cartaz da primeira
+  // passaria a acusar como falha a ausência legítima de cartaz na seguinte.
+  const postersIssued = new Set<string>();
+  const posterAbsence = (pathname: string) => {
+    const id = posterAbsenceRoute.exec(pathname)?.[1];
+    return id !== undefined && !postersIssued.has(id);
+  };
 
   // O navegador registra o mesmo 404 duas vezes: uma na rede e uma no console.
   // Aceitá-lo na rede e proibi-lo no console faria o spec se contradizer sobre
@@ -267,8 +412,7 @@ test("percorre a jornada local sem persistir authorities", async ({
     const location = message.location().url;
     const pathname = location === "" ? "" : new URL(location).pathname;
     if (
-      !posterIssued &&
-      posterAbsenceRoute.test(pathname) &&
+      posterAbsence(pathname) &&
       message.text().includes("404")
     ) {
       declaredPosterConsoleErrors.push(`${pathname} ${message.text()}`);
@@ -283,9 +427,8 @@ test("percorre a jornada local sem persistir authorities", async ({
     const pathname = new URL(response.url()).pathname;
     const entry = `${response.status()} ${pathname}`;
     if (
-      !posterIssued &&
       response.status() === 404 &&
-      posterAbsenceRoute.test(pathname)
+      posterAbsence(pathname)
     ) {
       declaredPosterAbsences.push(entry);
       return;
@@ -352,50 +495,79 @@ test("percorre a jornada local sem persistir authorities", async ({
   await expect(
     page.getByRole("region", { name: /^Estadias de / }),
   ).toBeVisible();
+  // The operator does not carry `accommodations:onboard`, so the workspace must
+  // not offer an affordance whose only possible outcome is a 403.
+  await expect(
+    accommodations.getByRole("button", { name: "Cadastrar outra hospedagem" }),
+  ).toHaveCount(0);
   // Not checked here: this operator workspace screen predates Fase 7 and has
   // its own pre-existing, unrelated color-contrast defect (`.property-capacity`
   // muted text at ~2.67:1 against the panel background in styles.css) that axe
   // caught the moment this rule was turned on. Flagged separately; the four
   // Fase 7 screens below are what this debt item asked for.
 
-  const familyName = "Casa Horizonte Fictícia E2E";
-  const formalName = "Pousada Mar Azul Fictícia E2E";
+  const admittedFamilyName = "Casa Horizonte Fictícia E2E";
+  const admittedFormalName = "Pousada Mar Azul Fictícia E2E";
 
-  const familyAccommodationId = await onboardAccommodation(
-    page,
-    accommodations,
-    {
-      capacity: 7,
-      category: "family_hosting",
-      name: familyName,
-    },
+  // Admission is the administrator's act, so it is proved in the
+  // administrator's own tab. Both categories still go through the same
+  // onboarding form and the same POST /accommodations contract.
+  const { admittedFamilyId, admittedFormalId } = await withAdministrator(
+    context,
+    async (adminPage, adminAccommodations) => ({
+      admittedFamilyId: await onboardAccommodation(
+        adminPage,
+        adminAccommodations,
+        { capacity: 7, category: "family_hosting", name: admittedFamilyName },
+      ),
+      admittedFormalId: await onboardAccommodation(
+        adminPage,
+        adminAccommodations,
+        { capacity: 12, category: "formal_lodging", name: admittedFormalName },
+      ),
+    }),
   );
-  const familyStayId = await createStayForAccommodation(
+  expect(admittedFormalId).not.toBe(admittedFamilyId);
+
+  // Admitting is not operating. POST /accommodations grants the creator a
+  // manager membership and nothing else (InsertOnboardingManagerMembership),
+  // and the listing joins core.memberships, so what the administrator admitted
+  // stays with the administrator until somebody is made a member of it. The
+  // operator's own establishments are the ones the local demo fixture granted
+  // it, and the journey below operates those.
+  await ensureWorkspace(page);
+  await expect(
+    accommodations.getByRole("button", { name: admittedFormalName }),
+  ).toHaveCount(0);
+  await expect(
+    accommodations.getByRole("button", { name: admittedFamilyName }),
+  ).toHaveCount(0);
+
+  // The fixture seeds no stay for this one, so the board below carries only
+  // what this journey puts on it.
+  const operatedName = "Casa Silenciosa Fictícia";
+  const secondOperatedName = "Pousada Farol Fictícia";
+
+  await accommodations.getByRole("button", { name: operatedName }).click();
+  const operatedStayId = await createStayForAccommodation(
     page,
-    familyName,
-    familyAccommodationId,
+    operatedName,
+    await accommodationIdFor(operatedName),
   );
 
-  const formalAccommodationId = await onboardAccommodation(
+  await accommodations.getByRole("button", { name: secondOperatedName }).click();
+  const secondStayId = await createStayForAccommodation(
     page,
-    accommodations,
-    {
-      capacity: 12,
-      category: "formal_lodging",
-      name: formalName,
-    },
+    secondOperatedName,
+    await accommodationIdFor(secondOperatedName),
   );
-  const formalStayId = await createStayForAccommodation(
-    page,
-    formalName,
-    formalAccommodationId,
-  );
-  expect(formalAccommodationId).not.toBe(familyAccommodationId);
-  expect(formalStayId).not.toBe(familyStayId);
+  expect(secondStayId).not.toBe(operatedStayId);
+
+  await accommodations.getByRole("button", { name: operatedName }).click();
 
   // The card offers only the transitions the server accepts for the current
   // state; a draft stay can be invited, never checked out.
-  const board = stayBoardFor(page, formalName);
+  const board = stayBoardFor(page, operatedName);
   const draftCard = board.getByRole("listitem").first();
   await expect(draftCard.getByRole("button", { name: "Gerar convite" }))
     .toBeVisible();
@@ -456,7 +628,7 @@ test("percorre a jornada local sem persistir authorities", async ({
   // A jornada terminou na pesquisa; a área do operador precisa ser reaberta e a
   // hospedagem reselecionada antes de o painel do cartaz existir.
   const workspace = await ensureWorkspace(page);
-  await workspace.getByRole("button", { name: formalName }).click();
+  await workspace.getByRole("button", { name: operatedName }).click();
 
   const posterPanel = page.getByRole("region", {
     name: "Cartaz de autocadastro",
@@ -472,7 +644,14 @@ test("percorre a jornada local sem persistir authorities", async ({
   await posterPanel.getByRole("button", { name: "Emitir cartaz" }).click();
   const posterResponse = await posterResponsePromise;
   expect(posterResponse.status()).toBe(201);
-  posterIssued = true;
+  // Sem o id real no conjunto, `posterAbsence` seguiria tolerando 404 daquela
+  // acomodação pelo resto da jornada: a exceção viraria permissão. Um padrão
+  // que não casa é defeito a relatar, não vazio a registrar.
+  const issuedPosterPath = new URL(posterResponse.url()).pathname;
+  const issuedPosterId = posterAbsenceRoute.exec(issuedPosterPath)?.[1];
+  expect(issuedPosterId, `rota do cartaz não casou: ${issuedPosterPath}`)
+    .toBeDefined();
+  postersIssued.add(issuedPosterId as string);
 
   const poster = await posterResponse.json() as { url: string };
   const posterURL = new URL(poster.url);
@@ -534,7 +713,7 @@ test("percorre a jornada local sem persistir authorities", async ({
 
   // A sessão vive só na memória da aba, então voltar exige entrar de novo.
   const workspaceAgain = await ensureWorkspace(page);
-  await workspaceAgain.getByRole("button", { name: formalName }).click();
+  await workspaceAgain.getByRole("button", { name: operatedName }).click();
 
   const queue = page.getByRole("region", { name: "Aguardando aprovação" });
   await expect(queue).toBeVisible();

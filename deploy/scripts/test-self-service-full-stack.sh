@@ -46,6 +46,13 @@ export CUMURU_BUILD_TIME="${build_metadata[2]}"
 LOCAL_ENV_FILE="${ROOT_DIR}/.env"
 test -f "${LOCAL_ENV_FILE}" || LOCAL_ENV_FILE="${ROOT_DIR}/.env.example"
 
+# O Compose semeia a partir deste mesmo arquivo. Repetir um padrão aqui faria o
+# script tentar entrar com credencial diferente da que foi semeada assim que
+# alguém editasse o `.env` — falha real, mas relatada como se a conta não
+# existisse. O ambiente exportado continua vencendo, que é como a CI sobrescreve.
+. "${ROOT_DIR}/deploy/scripts/lib/env-file.sh"
+cumuru_assert_env_file_parsing
+
 COMPOSE=(
   docker compose
   --env-file "${LOCAL_ENV_FILE}"
@@ -331,7 +338,10 @@ json_field() {
 }
 
 DEMO_EMAIL="operador@cumuru.local"
-DEMO_PASSWORD="${LOCAL_DEMO_ACCOUNT_PASSWORD:-demonstracao-local-2026}"
+DEMO_PASSWORD="${LOCAL_DEMO_ACCOUNT_PASSWORD:-$(cumuru_env_file_value "${LOCAL_ENV_FILE}" LOCAL_DEMO_ACCOUNT_PASSWORD)}"
+if test -z "${DEMO_PASSWORD}"; then
+  fail "LOCAL_DEMO_ACCOUNT_PASSWORD is absent from the environment and from ${LOCAL_ENV_FILE}"
+fi
 
 login_payload="$(web_request POST /api/v1/auth/login \
   "{\"email\":\"${DEMO_EMAIL}\",\"password\":\"${DEMO_PASSWORD}\"}" "")"
@@ -340,6 +350,24 @@ if test -z "${session_token}"; then
   fail "could not open a session for ${DEMO_EMAIL}; the proof-of-work pair cannot be exercised"
 fi
 authorization="Authorization: Bearer ${session_token}"
+
+# Duas sessões, duas autoridades. A hierarquia é Administrador → Estabelecimento
+# → Hóspede: o operador fictício do local-demo administra a própria acomodação e
+# aprova a estadia do hóspede, mas quem admite um estabelecimento na plataforma é
+# o administrador do seed — é ele, e só ele, que carrega accommodations:onboard.
+ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-$(cumuru_env_file_value "${LOCAL_ENV_FILE}" SEED_ADMIN_EMAIL)}"
+ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:-$(cumuru_env_file_value "${LOCAL_ENV_FILE}" SEED_ADMIN_PASSWORD)}"
+if test -z "${ADMIN_EMAIL}" || test -z "${ADMIN_PASSWORD}"; then
+  fail "SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are absent from the environment and from ${LOCAL_ENV_FILE}"
+fi
+
+admin_login_payload="$(web_request POST /api/v1/auth/login \
+  "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" "")"
+admin_session_token="$(json_field "${admin_login_payload}" token 2>/dev/null || true)"
+if test -z "${admin_session_token}"; then
+  fail "could not open a session for ${ADMIN_EMAIL}; the approval queue cannot be exercised"
+fi
+admin_authorization="Authorization: Bearer ${admin_session_token}"
 
 # Duas acomodações distintas, uma por cartaz. O controle de desafio alheio
 # precisa de dois convites vivos ao mesmo tempo, e a rotação sobre a mesma
@@ -714,26 +742,30 @@ expect_status \
   "$(request_status "access request queue without a session" GET \
     /api/v1/accommodation-access-requests '' '')"
 
-onboard_scope_sql() {
-  "${COMPOSE[@]}" exec -T -e PGPASSWORD=cumuru-local-migration-only postgres \
-    psql -U cumuru_migration -d cumuru -tA -c "$1" >/dev/null
-}
-
-onboard_scope_sql "UPDATE auth.accounts
-   SET scopes = array_remove(scopes, 'accommodations:onboard')
-   WHERE email = '${DEMO_EMAIL}'"
+# O 403 sai da sessão real do operador, sem mexer em auth.accounts: ele
+# administra a própria acomodação e aprova a estadia do hóspede, e é exatamente
+# por não carregar accommodations:onboard que a fila lhe é negada. Uma versão que
+# removesse o escopo por SQL para depois devolvê-lo provaria só o middleware e
+# continuaria verde se o seed voltasse a conceder o escopo ao operador.
 expect_status \
-  "listAccommodationAccessRequests for a session without accommodations:onboard" "403" \
+  "listAccommodationAccessRequests for the operator session" "403" \
   "$(web_request GET /api/v1/accommodation-access-requests "" \
     '--output /dev/null --write-out %{http_code}' "${authorization}")"
-onboard_scope_sql "UPDATE auth.accounts
-   SET scopes = array_append(scopes, 'accommodations:onboard')
-   WHERE email = '${DEMO_EMAIL}'
-     AND NOT ('accommodations:onboard' = ANY (scopes))"
+
+# A recusa vale para o par inteiro: aprovar equivale a cadastrar à mão, então
+# criar a acomodação diretamente tem de custar ao operador a mesma recusa.
+expect_status \
+  "createAccommodation for the operator session" "403" \
+  "$(web_request POST /api/v1/accommodations \
+    "$(printf '%s' '{"name":"Pousada Vetada Fictícia",' \
+      '"category":"formal_lodging","capacity":8,' \
+      '"client_submission_id":"019fae30-0000-7000-8000-0000000000ff"}')" \
+    '--output /dev/null --write-out %{http_code}' "${authorization}" \
+    "Idempotency-Key: self-service-full-stack-operator-onboard")"
 
 queue_page="$(web_request GET \
   '/api/v1/accommodation-access-requests?approval_state=pending' "" "" \
-  "${authorization}")"
+  "${admin_authorization}")"
 approved_item="$(queue_item "${queue_page}" "${approved_request_id}" 2>/dev/null || true)"
 if test -z "${approved_item}"; then
   fail "the pending queue does not list the request just created; listAccommodationAccessRequests is not reading the channel: ${queue_page}"
@@ -747,7 +779,7 @@ fi
 # accommodation_id não pode existir.
 approval="$(web_request POST \
   "/api/v1/accommodation-access-requests/${approved_request_id}/approve" '{}' "" \
-  "${authorization}" \
+  "${admin_authorization}" \
   "If-Match: \"${approved_version}\"" \
   "Idempotency-Key: self-service-full-stack-access-approve")"
 approved_state="$(json_value "${approval}" approval_state 2>/dev/null || true)"
@@ -767,7 +799,7 @@ esac
 # aprovação deliberadamente NÃO faz sozinha.
 approved_accommodation_etag="$(web_request GET \
   "/api/v1/accommodations/${created_accommodation}" "" \
-  "--output /dev/null --dump-header -" "${authorization}" |
+  "--output /dev/null --dump-header -" "${admin_authorization}" |
   tr -d '\r' | sed -n 's/^[Ee][Tt][Aa][Gg]: //p')"
 if test -z "${approved_accommodation_etag}"; then
   fail "the accommodation created by the approval is not readable at /accommodations/${created_accommodation}; the approved request points at nothing"
@@ -777,7 +809,7 @@ expect_status \
   "$(web_request POST "/api/v1/accommodations/${created_accommodation}/activation" \
     '{"email":"ativacao-pedida@exemplo.invalid","display_name":"Responsável Fictícia"}' \
     '--output /dev/null --write-out %{http_code}' \
-    "${authorization}" \
+    "${admin_authorization}" \
     "If-Match: ${approved_accommodation_etag}" \
     "Idempotency-Key: self-service-full-stack-access-activation")"
 
@@ -794,7 +826,7 @@ fi
 
 rejected_queue="$(web_request GET \
   '/api/v1/accommodation-access-requests?approval_state=pending' "" "" \
-  "${authorization}")"
+  "${admin_authorization}")"
 rejected_item="$(queue_item "${rejected_queue}" "${rejected_request_id}" 2>/dev/null || true)"
 if test -z "${rejected_item}"; then
   fail "the pending queue does not list the request about to be refused: ${rejected_queue}"
@@ -816,7 +848,7 @@ fi
 rejection="$(web_request POST \
   "/api/v1/accommodation-access-requests/${rejected_request_id}/reject" \
   '{"reason_code":"not_a_lodging"}' "" \
-  "${authorization}" \
+  "${admin_authorization}" \
   "If-Match: \"${rejected_version}\"" \
   "Idempotency-Key: self-service-full-stack-access-reject")"
 for field in contact_name contact_email contact_phone; do
