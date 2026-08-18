@@ -244,6 +244,8 @@ export const messagesEs: Messages = {
   "landing.license.ccBySa40": "CC BY-SA 4.0",
   "landing.license.publicDomain": "Dominio público",
   "landing.photoCredit": "Foto: {author} · {license} · Wikimedia Commons",
+  "landing.photoSource":
+    "Abrir la página de la foto de {author} en Wikimedia Commons",
 
   // -------------------------------------------------------- Painel: envelope
   "analytics.index": "01",

@@ -245,6 +245,8 @@ export const messagesPt = {
   "landing.license.ccBySa40": "CC BY-SA 4.0",
   "landing.license.publicDomain": "Domínio público",
   "landing.photoCredit": "Foto: {author} · {license} · Wikimedia Commons",
+  "landing.photoSource":
+    "Abrir a página da foto de {author} no Wikimedia Commons",
 
   // -------------------------------------------------------- Painel: envelope
   "analytics.index": "01",

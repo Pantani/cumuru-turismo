@@ -42,8 +42,13 @@ export function ImageSlot({
           author: photo.author,
           license: t(photo.license),
         })}
-        <a href={photo.sourceUrl} rel="noreferrer" target="_blank">
-          ↗
+        <a
+          aria-label={t("landing.photoSource", { author: photo.author })}
+          href={photo.sourceUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <span aria-hidden="true">↗</span>
         </a>
       </figcaption>
     </figure>
