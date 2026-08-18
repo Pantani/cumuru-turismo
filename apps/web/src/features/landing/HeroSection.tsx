@@ -3,6 +3,7 @@ import { useLocale } from "../../shared/i18n/LocaleProvider";
 import { usePresenceFormat } from "../analytics/presence-format";
 import { usePublicSummary } from "../analytics/public-summary";
 import { ImageSlot } from "./ImageSlot";
+import { HERO_PHOTO } from "./landing-content";
 import { todayHeadline } from "./summary-values";
 
 /**
@@ -19,7 +20,7 @@ export function HeroSection({ client }: { client?: AnalyticsClient }) {
   return (
     <section className="lp-hero" id="topo">
       <div className="lp-hero-art">
-        <ImageSlot caption="landing.hero.image" />
+        <ImageSlot caption="landing.hero.image" photo={HERO_PHOTO} />
       </div>
       <div className="lp-hero-veil" aria-hidden="true" />
       <div className="lp-hero-body">

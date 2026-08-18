@@ -237,6 +237,7 @@ export const messagesEs: Messages = {
   "landing.contact.mark": "OBSERVATORIO TURÍSTICO · CUMURUXATIBA",
 
   "landing.imagePending": "Espacio reservado para una foto",
+  "landing.photoCredit": "Foto: {author} · {license} · Wikimedia Commons",
 
   // -------------------------------------------------------- Painel: envelope
   "analytics.index": "01",

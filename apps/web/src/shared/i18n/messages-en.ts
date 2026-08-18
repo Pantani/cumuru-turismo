@@ -231,6 +231,7 @@ export const messagesEn: Messages = {
   "landing.contact.mark": "TOURISM OBSERVATORY · CUMURUXATIBA",
 
   "landing.imagePending": "Reserved space for a photo",
+  "landing.photoCredit": "Photo: {author} · {license} · Wikimedia Commons",
 
   // -------------------------------------------------------- Painel: envelope
   "analytics.index": "01",
