@@ -114,5 +114,5 @@ repositório ou com digest diferente.
 | OIDC institucional | `BLOCKED` por seleção/governança |
 | OTLP externo | `UNVERIFIED` |
 | backup e restore | `UNVERIFIED` até teste real |
-| Fases 3 e 4 fora de `local|test` | `BLOCKED` pela configuração atual |
+| `questionnaire` e `analytics` fora de `local|test` | `BLOCKED` pela configuração atual |
 | dados reais/piloto/release | `BLOCKED` pelos gates externos |

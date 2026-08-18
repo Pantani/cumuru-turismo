@@ -59,7 +59,7 @@ Política de retry:
 - circuit breaker em memória por instância;
 - reconciliação periódica corrige perda de sinal.
 
-Na Fase 3, o cleanup idempotente de texto livre remove ciphertext, nonce e
+No questionário, o cleanup idempotente de texto livre remove ciphertext, nonce e
 versão da chave depois de `erase_after`, limitado a 24 horas em `local|test`.
 O job não copia conteúdo para log, audit ou outbox. Publicação e submissão de
 pergunta livre falham fechadas quando cifra AES-GCM-256 ou cleanup não estão

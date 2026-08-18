@@ -83,7 +83,7 @@ targets continuam sendo provas locais de protótipo, não autorização
 operacional.
 
 Staging e produção exigem secret manager, PostgreSQL gerenciado, TLS, backup,
-restore e provedor OIDC reais. Esses itens não são entregues pela Fase 1.
+restore e provedor OIDC reais. Nada disso é entregue pelo runtime local.
 CIDRs de proxy de staging/produção também precisam ser explícitos, mínimos e
 independentes da fixture local.
 

@@ -10,7 +10,9 @@ auditabilidade.
 
 ## Regras de trabalho
 
-1. Implemente uma fase por vez, seguindo `docs/09-roadmap-e-aceite.md`.
+1. Implemente uma onda por vez, seguindo a ordem do harness em
+   `.agents/skills/cumuru-bootstrap/references/phase-matrix.md`. Os critérios
+   de aceite por funcionalidade estão em `docs/09-roadmap-e-aceite.md`.
 2. Antes de codificar, registre decisões novas ou divergentes em
    `docs/decisoes/` como ADR.
 3. Não mude o contrato público silenciosamente. Atualize OpenAPI, testes e
@@ -97,7 +99,7 @@ auditabilidade.
 
 ## Gates obrigatórios
 
-Antes de considerar uma fase concluída:
+Antes de considerar uma entrega concluída:
 
 ```text
 go test ./...
@@ -121,14 +123,14 @@ handoff.
 
 ## Evidência de conclusão
 
-Ao finalizar uma fase, informe:
+Ao finalizar uma entrega, informe:
 
 - requisitos atendidos;
 - arquivos principais alterados;
 - migrações adicionadas;
 - testes executados e resultados;
 - riscos ou pontos não verificados;
-- próxima fase segura.
+- próximo passo seguro.
 
 ## Harness: Cumuru Bootstrap
 

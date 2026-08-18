@@ -1,27 +1,70 @@
 # Observatório Turístico de Cumuruxatiba
 
-Blueprint técnico, funcional e de governança para uma plataforma de registro de
-estadias, pesquisa de perfil turístico, previsão de fluxo e publicação de
-indicadores anônimos.
+Plataforma de registro de estadias, pesquisa de perfil turístico, previsão de
+fluxo e publicação de indicadores anônimos. Este repositório contém o blueprint
+técnico, funcional e de governança e a implementação de referência.
 
-## Situação do projeto
+## Estado atual
 
-As Fases 1, 2, 3 e 4 estão implementadas com gate técnico local `PASS`. A Fase
-4 inclui domínio, handlers, worker, dashboards público e interno e jornada
-real em Chromium. Todas permanecem exclusivamente como protótipo
-`PROTOTYPE_ONLY`; os gates externos continuam bloqueando as fases seguintes.
+O sistema roda de ponta a ponta em ambiente local com dados fictícios: uma
+hospedagem se cadastra, registra estadias, o hóspede responde à pesquisa, o
+worker agrega presença e o painel público mostra os indicadores anônimos.
 
-Essa conclusão técnica não autoriza operação real: os gates externos permanecem
-obrigatórios. Antes de tornar qualquer cadastro municipal obrigatório, cumpra o
-gate jurídico descrito em
-[`docs/06-legal-e-governanca.md`](docs/06-legal-e-governanca.md).
-Cumuruxatiba é distrito do Município de Prado; portanto, a iniciativa deve ser
-formalmente patrocinada pela Prefeitura de Prado ou por entidade com competência
-e delegação válidas.
+| Funcionalidade | O que entrega | Estado |
+| --- | --- | --- |
+| `platform` | Saúde, prontidão, build, observabilidade e CI | implementada |
+| `core` | Hospedagens, estadias, grupos, convite nominal e auditoria | implementada |
+| `questionnaire` | Autoria e versionamento do questionário e pesquisa pública | implementada |
+| `analytics` | Presença, cobertura, supressão, publicação anônima e painéis | implementada |
+| `self-service` | Autocadastro por cartaz/QR, ativação de conta e fila de aprovação | implementada |
+| `fnrh` | Envio à FNRH Digital | não implementada; bloqueada por gates externos |
+
+**Todo o runtime opera como `PROTOTYPE_ONLY`.** Use exclusivamente dados,
+identidades e credenciais fictícios. Os gates locais (`make ci`) provam código,
+contrato, banco, privilégios e navegador real — nada mais. Eles não autorizam
+deploy, release, uso com dados reais nem obrigação municipal.
+
+O que continua pendente e não pode ser inferido do código:
+
+- **base legal e patrocínio institucional.** Cumuruxatiba é distrito do
+  Município de Prado; a iniciativa precisa ser patrocinada pela Prefeitura de
+  Prado ou por entidade com competência e delegação válidas. Antes de tornar
+  qualquer cadastro obrigatório, cumpra o gate descrito em
+  [`docs/06-legal-e-governanca.md`](docs/06-legal-e-governanca.md);
+- **base legal do canal aberto de autocadastro.** O formulário público coleta
+  sem operador identificado e sem contato com o titular; enquanto essa base não
+  existir, o canal só pode receber dados fictícios;
+- **infraestrutura real:** provedor OIDC institucional, KMS/secret manager,
+  PostgreSQL gerenciado, TLS, DNS, backup, restore e staging/produção;
+- **FNRH:** autorização formal, documentação oficial vigente, homologação e
+  política de credencial por estabelecimento;
+- **piloto controlado** de 5 a 10 hospedagens por 30 a 60 dias, com suporte,
+  canal do titular, restore e incidente simulados.
+
+Os critérios de aceite por funcionalidade estão em
+[`docs/09-roadmap-e-aceite.md`](docs/09-roadmap-e-aceite.md).
+
+## O que o sistema faz hoje
+
+Jornadas disponíveis na aplicação web:
+
+| Rota | Para quem | O que faz |
+| --- | --- | --- |
+| `/` | qualquer pessoa | Capa pública trilíngue e painel de indicadores anônimos |
+| `/acesso` | hospedagem | Login por e-mail e senha e área de trabalho da hospedagem |
+| `/registro` | hóspede convidado | Registro do grupo a partir do convite nominal |
+| `/pesquisa` | hóspede convidado | Pesquisa turística opcional |
+| `/i` | hóspede sem convite | Autocadastro pelo cartaz/QR da hospedagem |
+| `/ativacao` | hospedagem convidada | Ativação da conta por capability de uso único |
+| `/questionarios` | administração | Autoria, revisão e publicação das versões do questionário |
+| `/qualidade` | administração | Painel interno de cobertura e qualidade dos dados |
+
+`/registro`, `/pesquisa`, `/i` e `/ativacao` só funcionam com a capability no
+fragmento da URL: abertas diretamente, permanecem bloqueadas por construção.
 
 ## Resultado pretendido
 
-O sistema deverá:
+O sistema deve:
 
 - registrar estadias e grupos sem contar a mesma pessoa duas vezes;
 - permitir autopreenchimento pelo hóspede ou operação pela hospedagem;
@@ -36,17 +79,17 @@ O sistema deverá:
 
 ## Participação local com ou sem CNPJ
 
-O Observatório local foi desenhado para os dois casos: uma pousada formal e
-uma pessoa física que aluga uma casa podem cadastrar o local, registrar
-estadias e participar dos indicadores sem informar CPF, CNPJ, Cadastur ou
-chave FNRH. No protótipo, o cadastro pede somente nome do local, tipo de
-hospedagem e capacidade aproximada. Esses dados não comprovam regularidade,
-licenciamento ou enquadramento jurídico.
+O Observatório foi desenhado para os dois casos: uma pousada formal e uma
+pessoa física que aluga uma casa podem cadastrar o local, registrar estadias e
+participar dos indicadores sem informar CPF, CNPJ, Cadastur ou chave FNRH. O
+cadastro pede somente nome do local, tipo de hospedagem e capacidade
+aproximada. Esses dados não comprovam regularidade, licenciamento ou
+enquadramento jurídico.
 
-A integração FNRH é uma trilha separada e opcional. Quando a Fase 5 e seus
-gates externos forem autorizados, cada meio de hospedagem elegível deverá usar
-sua própria chave oficial; o Observatório não emite nem compartilha essa
-credencial. Consulte a decisão completa em
+A integração FNRH é uma trilha separada e opcional. Quando ela for autorizada,
+cada meio de hospedagem elegível deverá usar sua própria chave oficial; o
+Observatório não emite nem compartilha essa credencial. Consulte a decisão
+completa em
 [`ADR-035`](docs/decisoes/ADR-035-participacao-local-sem-cnpj-e-onboarding-prototipo.md).
 
 Materiais simples para apresentação e treinamento:
@@ -54,104 +97,335 @@ Materiais simples para apresentação e treinamento:
 - [`Guia do Observatório para a Prefeitura (PDF)`](apps/web/public/guias/observatorio-prefeitura.pdf);
 - [`Guia para gerar a chave FNRH (PDF)`](apps/web/public/guias/chave-fnrh-hospedagens.pdf).
 
-## Stack de referência
+## Stack
 
-| Camada | Escolha |
-|---|---|
-| API e workers | Go 1.26.x, biblioteca padrão `net/http` |
-| Banco | PostgreSQL 17+ |
-| Acesso ao banco | `pgx/v5` e SQL explícito, gerado com `sqlc` |
-| Front-end | React 19.2, TypeScript e Vite |
-| Dados remotos no front | TanStack Query |
-| Formulários | React Hook Form + Zod |
-| Gráficos | Apache ECharts |
-| Autenticação | E-mail e senha local (Argon2id, sessão opaca) e OIDC/OAuth 2.1 em paralelo |
-| Contrato | OpenAPI 3.1 |
-| Observabilidade | OpenTelemetry, métricas Prometheus e logs JSON |
-| Implantação | Contêineres OCI; serviço gerenciado de PostgreSQL |
+| Camada | Escolha | Versão fixada |
+|---|---|---|
+| API e workers | Go, biblioteca padrão `net/http` | 1.26.6 |
+| Banco | PostgreSQL | 17.10 |
+| Acesso ao banco | `pgx/v5` e SQL explícito gerado com `sqlc` | `sqlc` 1.31.1 |
+| Migrations | `golang-migrate` | 4.19.1 |
+| Front-end | React, TypeScript e Vite | React 19.2.8, TS 7.0.2, Vite 8.1.5 |
+| Dados remotos no front | TanStack Query | — |
+| Formulários | React Hook Form + Zod | — |
+| Gráficos | Apache ECharts e SVG próprio | — |
+| Autenticação | E-mail e senha local (Argon2id, sessão opaca) e OIDC/OAuth 2.1 | — |
+| Contrato | OpenAPI | 3.1, documento `0.7.0` |
+| Geração do cliente | `openapi-typescript` e Redocly CLI | 7.13.0 e 2.41.0 |
+| Observabilidade | OpenTelemetry, métricas Prometheus e logs JSON | — |
+| Implantação | Contêineres OCI; PostgreSQL gerenciado | — |
 
-As versões exatas devem ser travadas no primeiro commit e atualizadas de forma
+As versões exatas ficam travadas no lockfile e no toolchain e só mudam de forma
 controlada. Não use Create React App.
 
 ## Por que esta arquitetura
 
-- **Monólito modular:** uma implantação para API e worker, com limites de domínio
-  claros; menor custo operacional que microsserviços.
+- **Monólito modular:** uma implantação para API e worker, com limites de
+  domínio claros; menor custo operacional que microsserviços.
 - **PostgreSQL como infraestrutura principal:** dados, idempotência,
   `transactional outbox`, jobs e agregados no mesmo sistema transacional.
 - **Front-end estático:** distribuído por CDN, rápido e barato.
 - **Integrações por adaptadores:** a FNRH pode mudar de versão sem contaminar o
   domínio principal.
-- **Privacidade por construção:** o dashboard nunca consulta respostas brutas ou
-  tabelas de identidade.
+- **Privacidade por construção:** o painel público nunca consulta respostas
+  brutas ou tabelas de identidade.
 
 ## Vocabulário de funcionalidades
 
-O código é nomeado por **funcionalidade**, nunca pela fase que a entregou. Fase
-é ordem de entrega e vive só no harness (`prompts/BOOTSTRAP-CODEX.md` e
-`phase-matrix.md`); quem lê o código não precisa saber em que onda cada coisa
-nasceu. Os quatro nomes abaixo são os mesmos no back-end, no front-end, na
-configuração e no contrato:
+O código é nomeado por **funcionalidade**, nunca pela ordem em que foi
+entregue. Os mesmos nomes valem no back-end, no front-end, na configuração, no
+contrato e nos alvos de teste:
 
-| Funcionalidade | O que é | Config Go | Client web | Variável de ambiente | Entregue na |
-| --- | --- | --- | --- | --- | --- |
-| `platform` | Saúde, prontidão e build | — | `platform-client.ts` | — | Fase 1 |
-| `core` | Hospedagens, estadias e convite nominal | `CoreConfig` | `core-client.ts` | sempre ativa | Fase 2 |
-| `questionnaire` | Autoria do questionário e pesquisa pública | `QuestionnaireConfig` | `questionnaire-client.ts` | `QUESTIONNAIRE_ENABLED` | Fase 3 |
-| `analytics` | Métricas públicas e dashboard | `AnalyticsConfig` | `analytics-client.ts` | `ANALYTICS_ENABLED` | Fase 4 |
-| `self-service` | Autocadastro por cartaz, ativação e aprovação | `SelfServiceConfig` | `self-service-client.ts` | `SELF_SERVICE_ENABLED` | Fase 7 |
+| Funcionalidade | Config Go | Client web | Variável de ambiente | Alvo de integração |
+| --- | --- | --- | --- | --- |
+| `platform` | — | `platform-client.ts` | — | `make migration-test` |
+| `core` | `CoreConfig` | `core-client.ts` | sempre ativa | `make core-integration` |
+| `questionnaire` | `QuestionnaireConfig` | `questionnaire-client.ts` | `QUESTIONNAIRE_ENABLED` | `make questionnaire-integration` |
+| `analytics` | `AnalyticsConfig` | `analytics-client.ts` | `ANALYTICS_ENABLED` | `make analytics-integration` |
+| `self-service` | `SelfServiceConfig` | `self-service-client.ts` | `SELF_SERVICE_ENABLED` | `make self-service-integration` |
 
 No `contracts/openapi.yaml`, a extensão `x-cumuru-feature` marca a
 funcionalidade dona de cada operação, com o valor `deferred` para o que ainda
 não foi implementado.
-
-Os alvos de teste seguem o mesmo vocabulário: `make core-integration`,
-`make questionnaire-integration`, `make analytics-full-stack`,
-`make self-service-integration`.
 
 Todo client web é construído sobre um único transporte,
 `apps/web/src/shared/api/http-client.ts`, que concentra sessão, cabeçalhos,
 contrato de resposta e a classe de erro `ApiError`. Não existe classe de erro
 por funcionalidade: quem trata falha de API captura `ApiError` e nada mais.
 
+Ordem de entrega e retomada de trabalho são vocabulário do harness, não do
+código: veja [`prompts/BOOTSTRAP-CODEX.md`](prompts/BOOTSTRAP-CODEX.md).
+
+## Como rodar na sua máquina
+
+Pré-requisitos: Go, Node/npm e Docker com o daemon ativo.
+
+```bash
+cp .env.example .env
+make setup
+make up
+```
+
+`make up` constrói e inicia PostgreSQL, migrations, API, worker e web. Ele usa
+`compose.local.yaml` para executar o comando Go `/app/local-demo`, que aplica
+fixtures fictícias idempotentes pelos serviços de domínio, semeia a conta local
+de demonstração e espera a primeira publicação anônima. Nenhum arquivo SQL de
+fixtures é montado ou executado.
+
+Depois abra:
+
+- `http://127.0.0.1:4173/` — painel público com dados fictícios;
+- `http://127.0.0.1:4173/acesso` — jornada do operador da hospedagem.
+
+O bundle não carrega credencial: a entrada é por e-mail e senha. A conta
+fictícia é `operador@cumuru.local`, com a senha definida em
+`LOCAL_DEMO_ACCOUNT_PASSWORD` (o Compose local usa `demonstracao-local-2026`).
+A sessão vive apenas na memória da aba — recarregar a página exige entrar de
+novo, por construção — e nada é gravado em `localStorage`, `sessionStorage` ou
+cache do service worker.
+
+Na área da hospedagem, escolha uma hospedagem, crie uma estadia informando
+chegada, saída e número de pessoas, e use as ações oferecidas pelo próprio
+cartão da estadia — só aparecem as transições que o servidor aceita naquele
+estado. Nenhum identificador ou ETag é digitado: ambos vêm da própria listagem.
+O botão **Abrir registro neste navegador** mantém a capability somente em
+memória, remove-a da URL e conduz ao registro e à pesquisa.
+
+Para parar sem apagar o volume:
+
+```bash
+make down
+```
+
+Outros modos de execução:
+
+| Comando | O que faz |
+| --- | --- |
+| `make dev` | Alias de `make up`; stack Compose comprovada, sem hot reload |
+| `make docker-dev` | Stack com hot reload em `http://127.0.0.1:5173`, projeto `cumuru-dev` |
+| `make dev-web` | Só o Vite; pressupõe uma API local respondendo em `127.0.0.1:8080` |
+| `make seed` | Semeia administrador e catálogo; idempotente, não repõe senha trocada |
+| `make docker-status` / `make docker-logs` | Estado e logs da stack local |
+| `make docker-rm` | **Destrutivo:** derruba as stacks e apaga volumes, banco incluído |
+| `make help` | Lista todos os targets públicos com descrição |
+
+Reversão destrutiva de uma migration só é aceita em banco local descartável e
+exige confirmação explícita:
+
+```bash
+ALLOW_DESTRUCTIVE_MIGRATION_DOWN=yes make migrate-down-local
+```
+
+## Comandos de desenvolvimento
+
+O ciclo curto, sem Docker:
+
+```bash
+make test-unit      # Go short + Vitest
+make typecheck      # typecheck estrito do web
+make lint           # shell, go vet, Staticcheck e lint do web
+make complexity     # complexidade ciclomática e cognitiva
+make check          # gate local sequencial, sem Docker nem scanners
+```
+
+Depois de qualquer tarefa que altera código, o owner executa
+`make post-task-quality`, que roda `make complexity` e `make lint`
+sequencialmente e só então emite `POST_TASK_QUALITY=PASS`. Um `DONE` ou handoff
+sem esse marcador e sem o exit code zero registrado no artifact é inválido.
+
+O gate de complexidade exige, sem nenhuma suppression:
+
+- Go de produção e código gerado: ciclomática ≤ 5 e cognitiva ≤ 8;
+- Go de teste: ciclomática e cognitiva ≤ 9, porque um teste table-driven perde
+  legibilidade quando as asserções viram helpers;
+- web, testes incluídos: ciclomática ≤ 5 e cognitiva ≤ 8.
+
+Regeneração de artefatos derivados (nunca edite os arquivos gerados à mão):
+
+```bash
+make generate         # cliente TypeScript do OpenAPI + queries sqlc
+make generated-check  # prova que o gerado é reprodutível
+make openapi-lint
+```
+
+## Gate completo e CI
+
+`make ci` é a referência única local e executa sequencialmente as mesmas provas
+da CI; use os targets isolados quando quiser reexecutar apenas uma delas.
+`make compose-config` e `make smoke-local` leem os overlays locais do Compose,
+então o `.env` precisa existir.
+
+```bash
+make ci
+```
+
+```text
+openapi-lint             generated-check           compose-config
+prod-config-example      migration-test            local-restore-drill
+local-demo-test          core-integration          core-proxy-test
+questionnaire-integration questionnaire-proxy-test analytics-integration
+analytics-proxy-test     self-service-integration  test
+test-backend-race        typecheck                 post-task-quality
+infra-validation         build                     images
+core-full-stack          analytics-benchmark       self-service-full-stack
+local-demo-e2e           smoke-local               sbom
+scan                     image-scan
+```
+
+Na GitHub Actions esses mesmos gates rodam em paralelo, um job por prova.
+`.github/workflows/ci.yml` define os jobs e `.github/actions/setup` instala em
+cada um somente a cadeia de ferramentas que ele usa — Go, Node, `.tools/bin`,
+Terraform, ripgrep, Chromium ou `.env` —, o que evita pagar `npm ci` num job que
+só compila Go. O job `ci` é a porta única: depende de todos os outros e falha
+quando qualquer um não termina em `success`, inclusive se for pulado ou
+cancelado. É esse o check que a proteção de branch deve exigir. Ao adicionar um
+gate, adicione nos dois lugares.
+
+Antes do primeiro E2E local, instale o browser fixado pelo Playwright com
+`npx playwright install chromium`.
+
+### O que cada prova cobre
+
+| Prova | O que garante |
+| --- | --- |
+| `migration-test` | Migrations, grants e papéis em PostgreSQL real, com `zero → 1 → zero → 1` |
+| `local-restore-drill` | `pg_dump`/`pg_restore` em base isolada, comparando schema, ownership, grants e dados |
+| `core-integration` | Domínio do núcleo sob o papel runtime `cumuru_app`, em PostgreSQL efêmero |
+| `*-proxy-test` | Sobrescrita de headers e ausência de capability ou dado de erro nos logs de Nginx/Vite |
+| `*-full-stack` | API, worker e web construídos em projeto descartável, com teardown verificado |
+| `analytics-benchmark` | Duas recomposições determinísticas de três anos, com tempo, heap e hardware registrados |
+| `local-demo-e2e` | Jornada operador → convite → grupo → pesquisa em Chromium, sem authority em cache |
+| `smoke` / `smoke-local` | Publicação, séries públicas, preferências e ao menos uma acomodação do operador |
+| `sbom` / `scan` / `image-scan` | CycloneDX, dependências, filesystem, segredos e imagens; falha em HIGH/CRITICAL |
+
+`make local-restore-drill` é estritamente local: não comprova backup contínuo,
+PITR, RPO, RTO, custódia, retenção, reaplicação de exclusões ou restore
+institucional.
+
+## Notas de implementação
+
+### Núcleo (`core`)
+
+A baseline `000001_initial_schema` materializa acomodações, memberships,
+estadias, grupos, convites, comandos de estado, autenticação local e o
+onboarding sem CNPJ, CPF, Cadastur ou chave FNRH. Toda a cadeia pré-lançamento
+está consolidada nesse único par de migrations, e a suíte exige exatamente esse
+par.
+
+Nome, documento, contato, referência externa e texto livre são rejeitados no
+núcleo. Mutação, outbox e auditoria são atômicas; convites são guardados como
+HMAC; a presença usa o intervalo `[entrada, saída)`; rascunhos offline usam
+IndexedDB e nunca `localStorage`.
+
+### Questionário (`questionnaire`)
+
+Versões seguem `draft → privacy_review → approved → published → retired`.
+Versão publicada é imutável e editar clona uma nova versão, de modo que
+respostas antigas preservam a semântica com que foram coletadas.
+
+A pesquisa é opcional e usa `Survey-Capability`. O header aparece somente
+quando a submissão de grupo chega a `pre_registered` e existe uma versão
+`tourism_profile` publicada; sua ausência não falha cadastro ou check-in. O
+mesmo POST e seu replay exato devolvem o mesmo segredo sem persistir plaintext.
+Local e teste exigem keyrings independentes, TTL máximo de 24 horas e cleanup
+de texto livre habilitado.
+
+### Analytics (`analytics`)
+
+O papel `public_runtime` consulta somente quatro views `security_barrier` em
+`public_data`; a API usa um `PUBLIC_DATABASE_URL` separado para essa superfície
+e não recebe acesso às tabelas-base.
+
+Os indicadores são células pré-agregadas com catálogo tipado, política
+`prototype-v1`, arredondamento mínimo de 10 e supressão com `k >= 10` e pelo
+menos três acomodações. Preferências elegíveis usam somente respostas
+estruturadas, consentidas e não sensíveis. Texto livre criptografado, IDs,
+contagens de amostra e motivos de supressão não entram no contrato público.
+
+O backend reconcilia presença incremental e integral, publica releases
+imutáveis e serve a última válida durante falha. Os painéis usam as operações
+tipadas e preservam estados protegidos, indisponíveis e `N/A`.
+
+### Autoatendimento (`self-service`)
+
+O cartaz/QR da hospedagem abre um canal sem operador identificado. Ele coleta
+apenas dado generalizado: nome, documento, e-mail, telefone e `role='minor'`
+são rejeitados, e a identidade só é preenchida pelo próprio titular depois da
+aprovação, pelo convite nominal do núcleo.
+
+A estadia autocadastrada nasce sem membership autora, com proveniência
+`self_service`, e não entra em `analytics.presence_days` nem em `public_data`
+antes da aprovação. Aprovação e rejeição são idempotentes, respeitam `If-Match`
+e exigem operação própria: um operador com `update_stay` não aprova. A rejeição
+exige motivo de lista fechada; rejeição e expiração eliminam os dados do
+autocadastro, e a pendência expira em 72 horas com auditoria. O canal é
+protegido por rate limit e proof-of-work, sem serviço de terceiro e sem cookie.
+A capability de ativação é de uso único e revogável; o token trafega no
+fragmento da URL e nunca em log, trace, métrica, audit ou outbox.
+
+### Imagens, proveniência e rede local
+
+`make images` aplica a tag determinística `0.2.0` às duas imagens runtime:
+`cumuru-api:0.2.0`, compartilhada por API e worker, e `cumuru-web:0.2.0`. A CI
+substitui a tag pelo SHA exato do commit. Versão, revisão e instante
+reprodutível da fonte são derivados por
+`deploy/scripts/with-build-metadata.sh`: usa commit e timestamp quando há um
+checkout limpo; sem SCM, usa hash determinístico da fonte e o
+`SOURCE_DATE_EPOCH` versionado em `deploy/build-metadata.env`. Builds sem esses
+`ldflags` são rejeitados no startup.
+
+`make image-scan` exporta as imagens para tar e executa Trivy fixado por
+digest, sem montar o socket Docker no scanner. `make sbom` gera CycloneDX para
+Go, npm e ambas as imagens e publica `artifacts/sbom/image-manifest.json`.
+
+No Compose, o web usa `/api/v1` no mesmo origin e é a única entrada para a API:
+o serviço `api` não publica porta no host. Nginx mantém access log desligado,
+descarta error log na location de capability, remove `Referer`/`Forwarded` e
+sobrescreve `X-Forwarded-For`/`X-Real-IP` com o socket remoto. Web e PostgreSQL
+publicam portas apenas em `127.0.0.1`. O proxy web local usa `172.30.0.10` e
+`COMPOSE_TRUSTED_PROXY_CIDRS=172.30.0.10/32`; nenhuma subnet inteira é
+confiável. API e Vite executados nativamente no host usam
+`TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`. Overlays de migration, integration
+e full-stack usam subnets disjuntas para não colidir com a stack local.
+
+`.env.example` inicializa TTLs, limites, CORS e os keyrings com fixtures
+públicas e independentes, exclusivamente para `local`/`test`. Elas não são
+segredos e não podem ser promovidas.
+
 ## Mapa da documentação
 
-1. [`docs/00-visao-e-escopo.md`](docs/00-visao-e-escopo.md)
-2. [`docs/01-arquitetura.md`](docs/01-arquitetura.md)
-3. [`docs/02-dominios-e-fluxos.md`](docs/02-dominios-e-fluxos.md)
-4. [`docs/03-modelo-de-dados.md`](docs/03-modelo-de-dados.md)
-5. [`docs/04-api-e-idempotencia.md`](docs/04-api-e-idempotencia.md)
-6. [`docs/05-privacidade-e-seguranca.md`](docs/05-privacidade-e-seguranca.md)
-7. [`docs/06-legal-e-governanca.md`](docs/06-legal-e-governanca.md)
-8. [`docs/07-dashboard-e-previsao.md`](docs/07-dashboard-e-previsao.md)
-9. [`docs/08-operacao-e-resiliencia.md`](docs/08-operacao-e-resiliencia.md)
-10. [`docs/09-roadmap-e-aceite.md`](docs/09-roadmap-e-aceite.md)
-11. [`docs/10-questionario-inicial.md`](docs/10-questionario-inicial.md)
-12. [`docs/11-decisoes-tecnicas.md`](docs/11-decisoes-tecnicas.md)
-13. [`contracts/openapi.yaml`](contracts/openapi.yaml)
-14. [`database/schema.sql`](database/schema.sql)
-15. [`prompts/BOOTSTRAP-CODEX.md`](prompts/BOOTSTRAP-CODEX.md)
-16. [`Guia do Observatório para a Prefeitura`](apps/web/public/guias/observatorio-prefeitura.pdf)
-17. [`Guia para gerar a chave FNRH`](apps/web/public/guias/chave-fnrh-hospedagens.pdf)
-
-## Como começar com o Codex
-
-1. Copie este diretório para o repositório definitivo.
-2. Abra o diretório como workspace.
-3. Entregue ao Codex o conteúdo de
-   [`prompts/BOOTSTRAP-CODEX.md`](prompts/BOOTSTRAP-CODEX.md).
-4. Peça a execução por fases, nunca o sistema inteiro em uma única alteração.
-5. Exija que cada fase termine com testes, migrações, documentação e critérios de
-   aceite verificados.
+| Documento | Conteúdo |
+| --- | --- |
+| [`docs/00-visao-e-escopo.md`](docs/00-visao-e-escopo.md) | Problema, público e escopo |
+| [`docs/01-arquitetura.md`](docs/01-arquitetura.md) | Componentes, módulos e fronteiras |
+| [`docs/02-dominios-e-fluxos.md`](docs/02-dominios-e-fluxos.md) | Estados, jornadas e regras de domínio |
+| [`docs/03-modelo-de-dados.md`](docs/03-modelo-de-dados.md) | Schemas, tabelas e papéis do PostgreSQL |
+| [`docs/04-api-e-idempotencia.md`](docs/04-api-e-idempotencia.md) | Contrato HTTP, repetição e concorrência |
+| [`docs/05-privacidade-e-seguranca.md`](docs/05-privacidade-e-seguranca.md) | Minimização, criptografia e ameaças |
+| [`docs/06-legal-e-governanca.md`](docs/06-legal-e-governanca.md) | Base legal, papéis LGPD e gates jurídicos |
+| [`docs/07-dashboard-e-previsao.md`](docs/07-dashboard-e-previsao.md) | Métricas, supressão e previsão |
+| [`docs/08-operacao-e-resiliencia.md`](docs/08-operacao-e-resiliencia.md) | Jobs, outbox, retries e incidentes |
+| [`docs/09-roadmap-e-aceite.md`](docs/09-roadmap-e-aceite.md) | Estado por funcionalidade e critérios de aceite |
+| [`docs/10-questionario-inicial.md`](docs/10-questionario-inicial.md) | Perguntas de referência da pesquisa |
+| [`docs/11-decisoes-tecnicas.md`](docs/11-decisoes-tecnicas.md) | Escolhas de stack e referências |
+| [`docs/12-infraestrutura-e-deploy.md`](docs/12-infraestrutura-e-deploy.md) | Terraform, Ansible, ambientes e gates de infra |
+| [`docs/decisoes/`](docs/decisoes/) | ADRs numerados; toda decisão divergente vira ADR |
+| [`contracts/openapi.yaml`](contracts/openapi.yaml) | Contrato público, fonte do cliente gerado |
+| [`database/schema.sql`](database/schema.sql) | Schema de referência |
+| [`CHANGELOG.md`](CHANGELOG.md) | Mudanças do contrato e da plataforma |
+| [`AGENTS.md`](AGENTS.md) | Regras para agentes de implementação |
+| [`apps/api/README.md`](apps/api/README.md) | Processos, configuração e superfícies do backend |
+| [`apps/web/README.md`](apps/web/README.md) | SPA, proxies, service worker e idiomas |
+| [`deploy/README.md`](deploy/README.md) | Compose, infraestrutura e provas de deploy |
 
 ## Harness de execução
 
-O repositório inclui o skill Codex `cumuru-bootstrap` para executar o prompt por
-fase com estudo paralelo, implementação com ownership e QA incremental. Como
-skills e agentes novos são descobertos no início da sessão, abra uma nova tarefa
-no diretório raiz antes do primeiro uso.
-
-Comandos de inspeção:
+O repositório inclui o harness `cumuru-bootstrap`, que organiza a implementação
+em ondas com estudo paralelo, ownership por owner e QA incremental. Ordem de
+entrega, gates externos e retomada vivem só ali —
+[`prompts/BOOTSTRAP-CODEX.md`](prompts/BOOTSTRAP-CODEX.md) e
+`.agents/skills/cumuru-bootstrap/references/phase-matrix.md` —, nunca no código
+da aplicação.
 
 ```bash
 make harness-validate
@@ -162,285 +436,11 @@ make harness-prompt PHASE=1
 make harness-snapshot PHASE=1
 ```
 
-O `dry-run` não altera a aplicação. Enquanto este diretório não estiver em um
-repositório Git, o harness permite estudos paralelos, mas limita a implementação
-a um único writer por vez e não promete worktrees ou rollback por commit.
-Antes de reexecutar uma fase ampla, `harness-snapshot` preserva o plano, os
-artifacts e o QA atuais em `attempts/` e fecha o gate da fase como
-`UNVERIFIED` até a nova validação.
-
-Para iniciar no Codex:
-
-```text
-$cumuru-bootstrap Execute a Fase 1, com estudo antes da implementação.
-```
-
-## Plataforma — fundação técnica
-
-A implementação da fundação opera exclusivamente como `PROTOTYPE_ONLY`: use
-somente dados, identidades e credenciais fictícios. Governança, provedor OIDC
-institucional, KMS, backup/restore e infraestrutura de staging/produção ainda
-não foram verificados. O contrato OpenAPI é um contrato-alvo; a extensão
-`x-cumuru-feature` distingue operações futuras das três operações
-entregues pela fundação.
-
-Versões principais fixadas:
-
-- Go 1.26.6;
-- PostgreSQL 17.10;
-- React e React DOM 19.2.8;
-- TypeScript 7.0.2;
-- Vite 8.1.5;
-- `sqlc` 1.31.1 e `golang-migrate` 4.19.1;
-- `openapi-typescript` 7.13.0 e Redocly CLI 2.41.0.
-
-Pré-requisitos locais: Go, Node/npm e Docker com o daemon ativo.
-
-```bash
-cp .env.example .env
-make install
-make tools
-make generate
-make generated-check
-make migration-test
-make local-restore-drill
-make local-demo-test
-make local-demo-e2e
-make core-integration
-make core-proxy-test
-make core-full-stack
-make complexity
-make up
-make smoke
-```
-
-`make up` constrói e inicia PostgreSQL, migrations, API, worker e web. O target
-usa `compose.local.yaml` para executar o comando Go `/app/local-demo`, que
-aplica fixtures fictícias idempotentes pelos serviços de domínio, semeia a conta
-local de demonstração e espera a primeira publicação anônima. Nenhum arquivo SQL
-de fixtures é montado ou executado.
-
-O bundle não carrega credencial: a entrada é por e-mail e senha em
-`/acesso`. A conta fictícia é `operador@cumuru.local`, com a senha definida em
-`LOCAL_DEMO_ACCOUNT_PASSWORD` (o Compose local usa
-`demonstracao-local-2026`). A sessão vive apenas na memória da aba — recarregar
-a página exige entrar de novo, por construção — e nada é gravado em
-`localStorage`, `sessionStorage` ou cache do service worker.
-Abra:
-
-- `http://127.0.0.1:4173/` para o dashboard fictício;
-- `http://127.0.0.1:4173/acesso` para a jornada do operador.
-
-Na área da hospedagem, escolha uma hospedagem, crie uma estadia informando
-chegada, saída e número de pessoas, e use as ações oferecidas pelo próprio
-cartão da estadia — só aparecem as transições que o servidor aceita naquele
-estado. Nenhum identificador ou ETag é digitado: ambos vêm da própria listagem.
-O botão **Abrir registro neste navegador** mantém a capability somente em
-memória, remove-a da URL e conduz ao registro e à pesquisa. As rotas
-`/registro` e `/pesquisa` abertas diretamente continuam bloqueadas por design.
-
-`make smoke` exige publicação, séries públicas, preferências e ao menos uma
-acomodação do operador; lista vazia ou endpoint público `4xx/5xx` falha.
-`make analytics-remediation` reúne o check de código gerado, as guardas dos builds
-web, PostgreSQL fresh/persistente, rollover, colisão fail-closed, full-stack e
-a jornada completa em Chromium, inclusive Service Worker e Cache API sem
-authority material. Antes do primeiro E2E local, instale o browser fixado pelo
-Playwright com `npx playwright install chromium`.
-
-Para parar sem apagar o volume:
-
-```bash
-make down
-```
-
-Reversão destrutiva de uma migration só é aceita em banco local descartável e
-exige confirmação explícita:
-
-```bash
-ALLOW_DESTRUCTIVE_MIGRATION_DOWN=yes make migrate-down-local
-```
-
-O gate completo é `make ci`, que executa sequencialmente todos os targets
-abaixo. Localmente ele é a referência única; use os targets isolados quando
-quiser reexecutar apenas uma prova. `make compose-config` e `make smoke-local`
-leem os overlays locais do Compose, então o `.env` da seção anterior precisa
-existir:
-
-```bash
-make ci
-```
-
-```text
-openapi-lint          generated-check       compose-config
-prod-config-example   migration-test        local-restore-drill
-local-demo-test       core-integration    core-proxy-test
-questionnaire-integration    questionnaire-proxy-test     analytics-integration
-analytics-proxy-test     self-service-integration    test
-test-backend-race     typecheck             post-task-quality
-infra-validation      build                 images
-core-full-stack     analytics-benchmark      self-service-full-stack
-local-demo-e2e        smoke-local           sbom
-scan                  image-scan
-```
-
-Na GitHub Actions esses mesmos gates rodam em paralelo, um job por prova, em
-vez de um job sequencial único. `.github/workflows/ci.yml` define os jobs e
-`.github/actions/setup` instala em cada um somente a cadeia de ferramentas que
-ele usa — Go, Node, `.tools/bin`, Terraform, ripgrep, Chromium ou `.env` —, o
-que evita pagar `npm ci` num job que só compila Go. O job `ci` é a porta única:
-depende de todos os outros e falha quando qualquer um não termina em `success`,
-inclusive se for pulado ou cancelado. É esse o check que a proteção de branch
-deve exigir.
-
-`make ci` e o workflow cobrem o mesmo conjunto de provas; ao adicionar um gate,
-adicione nos dois.
-
-`make local-restore-drill` cria uma base PostgreSQL descartável, aplica a
-migration consolidada, grava apenas canários fictícios, executa `pg_dump` e
-`pg_restore` em outra base isolada e compara schema, ownership, grants e dados.
-O cleanup remove dump, base restaurada, containers, rede e volume temporários.
-Essa prova é estritamente local: não comprova backup contínuo, PITR, RPO, RTO,
-custódia, retenção, reaplicação de exclusões ou restore institucional.
-
-## Núcleo (`core`) — contrato e onboarding local
-
-A baseline `000001_initial_schema` materializa acomodações, memberships,
-estadias, grupos, convites, comandos de estado e o onboarding local contratado
-na versão `0.6.0`, sem exigir CNPJ, CPF, Cadastur ou chave FNRH. Consumidores só
-podem ser considerados integrados depois do QA cruzar OpenAPI, PostgreSQL, Go,
-cliente gerado e React.
-
-O recorte continua `PROTOTYPE_ONLY`: nome, documento, contato, referência
-externa e texto livre são rejeitados; questionário, analytics, dashboard e
-FNRH permanecem fora do núcleo. O gate `make complexity` exige complexidade
-ciclomática e cognitiva no máximo 9 por função, inclui testes e código gerado e
-não admite suppressions.
-
-Depois de cada tarefa que altera código, o owner executa
-`make post-task-quality`, que roda `make complexity` e `make lint`
-sequencialmente e só então emite `POST_TASK_QUALITY=PASS`. Um `DONE` ou handoff
-sem esse marcador e sem o exit code zero registrado no artifact é inválido.
-
-`make images` aplica a tag determinística `0.2.0` às duas imagens runtime
-distintas: `cumuru-api:0.2.0`, compartilhada por API e worker, e
-`cumuru-web:0.2.0`. A CI substitui a tag pelo SHA exato do commit. Versão,
-revisão e instante reprodutível da fonte são derivados por
-`deploy/scripts/with-build-metadata.sh`: usa commit e timestamp quando há um
-checkout limpo; sem SCM, usa hash determinístico da fonte e o
-`SOURCE_DATE_EPOCH` versionado em `deploy/build-metadata.env`.
-
-`make image-scan` exporta as imagens para tar e executa Trivy 0.69.3 fixado por
-digest, sem montar o socket Docker no scanner. O ref `tag@sha256` é
-materializado e conferido antes de qualquer inspeção, portanto o fluxo também
-funciona em um runner sem cache e falha se o registry ou digest não puder ser
-validado. O gate falha em findings HIGH ou CRITICAL. `make sbom` gera
-CycloneDX para Go, npm e ambas as imagens e publica
-`artifacts/sbom/image-manifest.json` com os IDs/digests e a revisão exata. O
-target `make scan` continua cobrindo dependências, filesystem e segredos; as
-ferramentas executadas em container também são fixadas por digest.
-
-No Compose, o web usa `/api/v1` no mesmo origin e é a única entrada para a API:
-o serviço `api` não publica porta no host. Nginx mantém access log desligado,
-descarta error log na location de capability, remove `Referer`/`Forwarded` e
-sobrescreve `X-Forwarded-For`/`X-Real-IP` com o socket remoto. O smoke usa
-somente o fake OIDC local para provar uma rota autenticada do núcleo pelo
-proxy. Web e PostgreSQL publicam portas apenas em `127.0.0.1`.
-
-O proxy web local usa `172.30.0.10` e
-`COMPOSE_TRUSTED_PROXY_CIDRS=172.30.0.10/32`; nenhuma subnet inteira é
-confiável. API e Vite executados nativamente no host usam
-`TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`.
-
-Overlays de migration, integration e full-stack usam subnets disjuntas para
-não colidir com a stack local.
-
-`.env.example` inicializa todos os TTLs, limites, CORS e os cinco keyrings da
-o núcleo com fixtures públicas e independentes, exclusivamente para
-`local`/`test`. Elas não são segredos e não podem ser promovidas. O target
-`make core-integration` cria PostgreSQL e porta efêmeros, aplica migrations
-com `cumuru_migration` e executa a suíte tagged sob o papel runtime
-`cumuru_app`, falhando se qualquer DSN estiver ausente ou apontar para outro
-papel.
-
-`make core-proxy-test` usa upstreams locais controlados para provar
-sobrescrita de headers e ausência de capability/dados de erro em stdout e
-stderr de Nginx/Vite. `make core-full-stack` constrói API, worker e web em
-projeto descartável, valida timezone, service worker, proxy e rota autenticada,
-derruba/restaura a API para o canário de logs e confirma a remoção de
-containers, rede e volume.
-
-Toda a cadeia pré-lançamento — incluindo onboarding local, autenticação por
-e-mail e senha e rotação da senha semeada — está consolidada no único par
-`000001_initial_schema`. A suíte exige exatamente esse par e exercita
-`zero → 1 → zero → 1`, grants, categorias fechadas e isolamento de tenant
-fictício.
-
-## Questionário (`questionnaire`) — contrato congelado
-
-O contrato `0.4.0`, o trecho do questionário incorporado à migration consolidada
-`000001_initial_schema`, as queries `sqlc` e o cliente TypeScript gerado
-materializam a fronteira compartilhada do questionário. Isso ainda não declara
-domínio, handlers ou UI concluídos.
-
-A pesquisa é opcional e usa `Survey-Capability`. O header aparece somente
-quando a submissão de grupo chega a `pre_registered` e existe uma versão
-`tourism_profile` publicada; sua ausência não falha cadastro ou check-in. O
-mesmo POST e seu replay exato devolvem o mesmo segredo sem persistir plaintext.
-
-Local e teste exigem keyrings independentes, TTL máximo de 24 horas e cleanup
-de texto livre habilitado. O questionário permanece `PROTOTYPE_ONLY`.
-
-```bash
-make openapi-lint
-make generated-check
-make migration-test
-make questionnaire-integration
-make questionnaire-proxy-test
-```
-
-## Analytics (`analytics`) — publicação materializada
-
-O contrato `0.5.2`, o trecho de analytics incorporado à migration consolidada
-`000001_initial_schema`, as queries `sqlc` e o cliente TypeScript gerado
-estabelecem analytics e publicação anônima. O papel `public_runtime` consulta
-somente quatro views `security_barrier` em `public_data`; a API usa um
-`PUBLIC_DATABASE_URL` separado para essa superfície e não recebe acesso às
-tabelas-base.
-
-Os indicadores são células pré-agregadas com catálogo tipado, política
-`prototype-v1`, arredondamento mínimo de 10 e supressão com `k >= 10` e pelo
-menos três acomodações. Preferências elegíveis usam somente respostas
-estruturadas, consentidas e não sensíveis. Texto livre criptografado, IDs,
-contagens de amostra e motivos de supressão não entram no contrato público.
-
-O backend reconcilia presença incremental e integral, publica releases
-imutáveis e serve a última válida durante falha. Os dashboards usam as
-operações tipadas e preservam estados protegidos, indisponíveis e `N/A`. Os
-targets abaixo validam contrato, migrations e privilégios em PostgreSQL real,
-HTTP runtime, frontend, recomposição e cleanup Compose com fixtures fictícias:
-
-```bash
-make openapi-lint
-make generated-check
-make migration-test
-make analytics-integration
-make analytics-proxy-test
-make analytics-full-stack
-make analytics-benchmark
-make local-demo-test
-make local-demo-e2e
-make analytics-remediation
-```
-
-Esses targets de analytics são gates locais `PROTOTYPE_ONLY`. O benchmark
-registra duas recomposições determinísticas de três anos, tempo, heap e
-hardware, depois que o full-stack prova a preservação do último snapshot
-válido. A remediação adicional prova build padrão sem identidade fake, seed
-fresh e persistente sem sobrescrever colisões, duas execuções concorrentes
-serializadas, rollover das fixtures, dashboard com presença/cobertura e o fluxo
-operador → convite → grupo → pesquisa em Chromium, sem persistir authorities
-no navegador ou no cache do Service Worker. Eles não autorizam deploy, release
-ou uso com dados reais.
+O `dry-run` não altera a aplicação. Antes de reexecutar uma onda ampla,
+`harness-snapshot` preserva o plano, os artifacts e o QA atuais em `attempts/` e
+fecha o gate como `UNVERIFIED` até a nova validação. Como skills e agentes novos
+são descobertos no início da sessão, abra uma nova tarefa no diretório raiz
+antes do primeiro uso.
 
 ## Princípios não negociáveis
 
@@ -451,7 +451,7 @@ ou uso com dados reais.
 - Toda escrita repetível é idempotente.
 - Nenhum segredo da FNRH é armazenado em texto puro.
 - Falha na integração externa não perde o registro local.
-- O total público nunca é somado diretamente pelo navegador a partir de registros
-  individuais.
+- O total público nunca é somado diretamente pelo navegador a partir de
+  registros individuais.
 - Um administrador não pode transformar uma pergunta comum em dado sensível sem
   revisão do encarregado de dados.
