@@ -73,6 +73,9 @@ describe("capa pública do observatório", () => {
       .map((anchor) => anchor.getAttribute("href"))
       .filter((href): href is string => href?.startsWith("#") === true);
 
+    // O botão de cadastro fecha a lista porque aponta para o cartão que explica
+    // o caminho real da conta, não para a tela de login: quem ainda não tem
+    // conta não teria o que fazer em `/acesso`.
     expect(targets).toEqual([
       "#numeros",
       "#como",
@@ -80,6 +83,7 @@ describe("capa pública do observatório", () => {
       "#comercio",
       "#privacidade",
       "#sobre",
+      "#cadastro",
     ]);
     for (const target of targets) {
       expect(container.querySelector(target)).not.toBeNull();

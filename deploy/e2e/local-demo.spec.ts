@@ -316,6 +316,28 @@ test("percorre a jornada local sem persistir authorities", async ({
   // ~2.6:1) that CommerceSection renders; it predates this change, is
   // outside Fase 7 scope, and fixing it needs the same design sign-off.
 
+  // The route header and the section index are both stuck to the top, so an
+  // anchor that ignores them parks the section behind the bars and the reader
+  // lands mid-paragraph. The section bar has no fixed height either — it wraps
+  // when the locale lengthens the labels — so this is checked against the bar's
+  // measured edge, not a constant. jsdom has no layout and cannot prove it.
+  await page.getByRole("link", { name: "Números", exact: true }).click();
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const bar = document.querySelector(".lp-section-nav");
+        const section = document.querySelector("#numeros");
+        if (!bar || !section) {
+          throw new Error("landing sem barra de seções ou sem #numeros");
+        }
+        return Math.abs(
+          section.getBoundingClientRect().top -
+            bar.getBoundingClientRect().bottom,
+        );
+      }),
+    )
+    .toBeLessThan(1);
+
   await page.goto("/acesso");
   await signIn(page);
 

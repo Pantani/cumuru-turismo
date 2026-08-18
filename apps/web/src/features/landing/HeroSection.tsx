@@ -34,7 +34,7 @@ export function HeroSection({ client }: { client?: AnalyticsClient }) {
         </h1>
         <p className="lp-hero-lead">{t("landing.hero.lead")}</p>
         <div className="lp-hero-actions">
-          <a className="lp-button-primary" href="/acesso">
+          <a className="lp-button-primary" href="#cadastro">
             {t("landing.hero.primary")}
           </a>
           <a className="lp-button-ghost" href="#numeros">
