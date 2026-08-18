@@ -180,6 +180,16 @@ conta local de demonstração e espera a primeira publicação anônima. Nenhum
 arquivo SQL de fixtures é montado ou executado. Sem ele o painel público sobe
 vazio e `make smoke` falha por ausência de dado, não por bug.
 
+O conjunto fictício é uma vila inteira em operação, e não um exemplo mínimo: 16
+hospedagens de todas as categorias e portes, dois anos de estadias de vários
+dias com alta e baixa temporada, cerca de 8800 hóspedes com faixas etárias e
+residências variadas e cerca de 950 respostas de pesquisa. É esse volume que faz
+todas as janelas da capa — 30, 90, 365 e 730 dias, mês civil, previsão e
+preferências — abrirem com gráfico em vez de aviso de dado insuficiente, e que
+deixa alguns poucos dias protegidos, que é como a supressão aparece na prática.
+A primeira aplicação leva cerca de 20 segundos; as seguintes só acrescentam os
+dias que passaram desde a anterior.
+
 Depois abra:
 
 - `http://127.0.0.1:4173/` — painel público com dados fictícios;

@@ -64,10 +64,15 @@ func NewLocalDemoRepository(
 	return &LocalDemoRepository{pool: pool, timeout: timeout}
 }
 
+// AcquireRunLock serializes concurrent seeders on a session advisory lock. The
+// wait budget is explicit and separate from the statement timeout: a second
+// seeder has to outwait a whole run in progress, which is a batch, while the
+// statements it later issues stay on the request budget.
 func (r *LocalDemoRepository) AcquireRunLock(
 	ctx context.Context,
+	wait time.Duration,
 ) (func() error, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	connection, err := r.pool.Acquire(ctx)
 	if err != nil {

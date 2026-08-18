@@ -18,6 +18,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// DATABASE_TIMEOUT is shaped for a request; two years of fixtures are a batch.
+// The full reconciliation that closes the seed, and the wait of a second seeder
+// on the run lock, both outlast a request by design — borrowing the request
+// budget would abort the publication halfway and leave the cover without a
+// series to read.
+const seedBatchTimeout = 10 * time.Minute
+
 type servicesAt func(time.Time) fixtureServices
 
 type analyticsPublisher interface {
@@ -100,7 +107,7 @@ func loadFixtures(
 	)
 	return executeWithRunLock(
 		func() (func() error, error) {
-			return provisioner.AcquireRunLock(ctx)
+			return provisioner.AcquireRunLock(ctx, seedBatchTimeout)
 		},
 		func() error {
 			return loadFixturesLocked(
@@ -231,14 +238,18 @@ func fixtureSummary(
 	fixtures []stayFixture,
 ) string {
 	responses := 0
+	visitors := int32(0)
 	for _, fixture := range fixtures {
+		visitors += fixture.guestCount
 		if fixture.responseCategory != "" {
 			responses++
 		}
 	}
 	return fmt.Sprintf(
-		"organizations=1 accommodations=%d responses=%d",
+		"organizations=1 accommodations=%d stays=%d visitors=%d responses=%d",
 		len(foundation.Accommodations),
+		len(fixtures),
+		visitors,
 		responses,
 	)
 }
@@ -322,7 +333,7 @@ func publishAnalytics(
 ) error {
 	platformStore, err := store.NewQuestionnaire(
 		pool,
-		cfg.DatabaseTimeout,
+		seedBatchTimeout,
 		cfg.Core,
 		cfg.Questionnaire,
 	)

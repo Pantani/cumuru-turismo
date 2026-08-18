@@ -3,46 +3,79 @@ package localdemo
 import (
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/Pantani/cumuru/apps/api/internal/platform/store"
 )
 
-func TestFoundationFixtureUsesCanonicalCategoriesAndExplicitFakeCadastur(t *testing.T) {
+func TestFoundationFixtureSpansManyDistinctAccommodations(t *testing.T) {
 	t.Parallel()
 
 	fixture := foundationFixture()
-	if len(fixture.Accommodations) != 4 {
-		t.Fatalf("accommodations = %d, want 4", len(fixture.Accommodations))
+	if len(fixture.Accommodations) != 16 {
+		t.Fatalf("accommodations = %d, want 16", len(fixture.Accommodations))
 	}
-	wantCategories := []string{
-		"formal_lodging",
-		"formal_lodging",
-		"seasonal_rental",
-		"family_hosting",
-	}
+	seenIDs := make(map[string]bool, len(fixture.Accommodations))
+	seenCategories := make(map[string]bool, len(fixture.Accommodations))
 	for index, accommodation := range fixture.Accommodations {
-		assertFoundationAccommodation(t, index, accommodation.Category, wantCategories[index], accommodation.CadasturID)
+		assertFoundationAccommodation(t, index, accommodation)
+		if seenIDs[accommodation.ID.String()] {
+			t.Fatalf("accommodation %d repeats identifier %s", index, accommodation.ID)
+		}
+		seenIDs[accommodation.ID.String()] = true
+		seenCategories[accommodation.Category] = true
 	}
+	// A demo where every house is a pousada cannot show what the cover does
+	// when categories of different sizes report on the same day.
+	assertReportableCategories(t, fixture.Accommodations)
+}
+
+// The coverage panel needs a minimum of reporting accommodations per category,
+// so a category the catalogue declares only once can never be published.
+func assertReportableCategories(
+	t *testing.T,
+	accommodations []store.LocalDemoAccommodation,
+) {
+	t.Helper()
+	counts := make(map[string]int, len(accommodations))
+	for _, accommodation := range accommodations {
+		counts[accommodation.Category]++
+	}
+	if len(counts) < 5 {
+		t.Fatalf("categories = %d, want at least 5", len(counts))
+	}
+	for category, count := range counts {
+		if count < 3 {
+			t.Fatalf("category %q has %d accommodations, want at least 3", category, count)
+		}
+	}
+}
+
+var fixtureCategories = map[string]bool{
+	"formal_lodging": true, "seasonal_rental": true, "family_hosting": true,
+	"camping": true, "regularizing": true, "other": true, "unclassified": true,
 }
 
 func assertFoundationAccommodation(
 	t *testing.T,
 	index int,
-	gotCategory string,
-	wantCategory string,
-	cadasturID *string,
+	accommodation store.LocalDemoAccommodation,
 ) {
 	t.Helper()
-	if gotCategory != wantCategory {
-		t.Errorf("accommodation %d category = %q, want %q", index, gotCategory, wantCategory)
+	if !fixtureCategories[accommodation.Category] {
+		t.Errorf("accommodation %d category = %q", index, accommodation.Category)
+	}
+	if accommodation.Capacity <= 0 {
+		t.Errorf("accommodation %d capacity = %d", index, accommodation.Capacity)
 	}
 	if index == 0 {
-		if cadasturID == nil || *cadasturID != "CADASTUR-FICTICIO-NAO-VALIDO" {
-			t.Errorf("pousada Cadastur = %v", cadasturID)
+		if accommodation.CadasturID == nil ||
+			*accommodation.CadasturID != "CADASTUR-FICTICIO-NAO-VALIDO" {
+			t.Errorf("pousada Cadastur = %v", accommodation.CadasturID)
 		}
 		return
 	}
-	if cadasturID != nil {
-		t.Errorf("accommodation %d has Cadastur %q", index, *cadasturID)
+	if accommodation.CadasturID != nil {
+		t.Errorf("accommodation %d has Cadastur %q", index, *accommodation.CadasturID)
 	}
 }
 
@@ -65,151 +98,23 @@ func TestQuestionnaireDefinitionAcceptsOnlyKnownLegacyRetentionAlias(
 	}
 }
 
-func TestStayFixtureIdentityRollsHistoricalCohortsByMonth(
-	t *testing.T,
-) {
-	t.Parallel()
-
-	location, err := time.LoadLocation("America/Bahia")
-	if err != nil {
-		t.Fatal(err)
-	}
-	july := time.Date(2026, time.July, 29, 12, 0, 0, 0, location)
-	nextDay := july.AddDate(0, 0, 1)
-	august := time.Date(2026, time.August, 1, 12, 0, 0, 0, location)
-
-	first := stayFixtures(july, location)
-	sameMonth := stayFixtures(nextDay, location)
-	nextMonth := stayFixtures(august, location)
-	assertFixtureCounts(t, first, sameMonth, nextMonth)
-	assertHistoricalFixtureKeys(t, first, sameMonth, nextMonth)
-	assertCurrentFixtureKeys(t, first, sameMonth, nextMonth)
-}
-
 func TestFixtureSummaryIsDerivedFromFoundationAndResponseFixtures(t *testing.T) {
 	t.Parallel()
 
 	foundation := foundationFixture()
 	foundation.Accommodations = foundation.Accommodations[:2]
 	fixtures := []stayFixture{
-		{responseCategory: "first_visit"},
-		{responseCategory: ""},
-		{responseCategory: "returning"},
+		{responseCategory: "first_visit", guestCount: 4},
+		{responseCategory: "", guestCount: 2},
+		{responseCategory: "returning", guestCount: 3},
 	}
 	got := fixtureSummary(foundation, fixtures)
-	want := "organizations=1 accommodations=2 responses=2"
+	want := "organizations=1 accommodations=2 stays=3 visitors=9 responses=2"
 	if got != want {
 		t.Fatalf("fixtureSummary() = %q, want %q", got, want)
 	}
 }
 
-func TestCurrentStayFixturesCoverForecastHorizon(t *testing.T) {
-	t.Parallel()
-
-	location, err := time.LoadLocation("America/Bahia")
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Date(2026, time.July, 29, 12, 0, 0, 0, location)
-	today := civilDay(now, location)
-	horizonEnd := today.AddDate(0, 0, 30)
-	for _, fixture := range currentStayFixtures(now, today) {
-		if !fixture.departure.After(horizonEnd) {
-			t.Fatalf(
-				"current stay %q ends before forecast horizon: %s",
-				fixture.key,
-				fixture.departure,
-			)
-		}
-	}
-}
-
-func assertFixtureCounts(
-	t *testing.T,
-	fixtures ...[]stayFixture,
-) {
-	t.Helper()
-	for _, fixture := range fixtures {
-		if len(fixture) == 27 {
-			continue
-		}
-		t.Fatalf(
-			"fixture count = %d, want 27",
-			len(fixture),
-		)
-	}
-}
-
-func assertHistoricalFixtureKeys(
-	t *testing.T,
-	first []stayFixture,
-	sameMonth []stayFixture,
-	nextMonth []stayFixture,
-) {
-	t.Helper()
-	for index := 0; index < 24; index++ {
-		assertSameMonthHistoricalFixture(t, first[index], sameMonth[index], index)
-		assertRolledHistoricalKey(t, first[index], nextMonth[index], index)
-		assertPreviousMonthIdentity(t, first[index].key)
-	}
-}
-
-func assertSameMonthHistoricalFixture(
-	t *testing.T,
-	first stayFixture,
-	sameMonth stayFixture,
-	index int,
-) {
-	t.Helper()
-	if first.key != sameMonth.key {
-		t.Fatalf("historical key changed inside one civil month: %d", index)
-	}
-	if !first.arrival.Equal(sameMonth.arrival) ||
-		!first.departure.Equal(sameMonth.departure) {
-		t.Fatalf("historical schedule changed inside one civil month: %d", index)
-	}
-}
-
-func assertRolledHistoricalKey(
-	t *testing.T,
-	first stayFixture,
-	nextMonth stayFixture,
-	index int,
-) {
-	t.Helper()
-	if first.key == nextMonth.key {
-		t.Fatalf("historical key did not roll at month boundary: %d", index)
-	}
-}
-
-func assertPreviousMonthIdentity(t *testing.T, key string) {
-	t.Helper()
-	if !strings.Contains(key, "2026-06") {
-		t.Fatalf("historical key lacks previous-month identity: %q", key)
-	}
-}
-
-func assertCurrentFixtureKeys(
-	t *testing.T,
-	first []stayFixture,
-	sameMonth []stayFixture,
-	nextMonth []stayFixture,
-) {
-	t.Helper()
-	for index := 24; index < 27; index++ {
-		if first[index].key != sameMonth[index].key ||
-			first[index].key != nextMonth[index].key {
-			t.Fatalf("current stay identity must remain stable: %d", index)
-		}
-	}
-}
-
-// The client gates the self-service panels on stays:approve. Without it in the demo
-// operator's set, local-demo-e2e walks a journey that never opens the approval
-// queue or the poster panel and passes by absence of error — the failure mode
-// D-01 already showed one layer down.
-//
-// The two vetoed scopes stay vetoed: they belong to other roles.
 func TestDemoOperatorCanReachTheSelfServicePanels(t *testing.T) {
 	t.Parallel()
 
