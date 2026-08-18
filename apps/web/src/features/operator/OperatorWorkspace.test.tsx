@@ -162,6 +162,60 @@ describe("área da hospedagem", () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * Admitir um estabelecimento é ato do administrador: `accommodations:onboard`
+   * gateia `POST /accommodations` (ADR-042) e o operador fictício não o carrega.
+   * Renderizar a afordância sem condição só produziria `403`.
+   */
+  it("esconde o cadastro de outra hospedagem sem o escopo de onboarding", async () => {
+    stubApi({});
+    const withoutOnboard = testAccountScopes.filter(
+      (scope) => scope !== "accommodations:onboard",
+    );
+
+    renderWithSession(<OperatorWorkspace />, {
+      authClient: stubAuthClient(testSession(withoutOnboard)),
+    });
+
+    await screen.findByRole("button", { name: /Pousada Farol Fictícia/ });
+    expect(
+      screen.queryByRole("button", { name: "Cadastrar outra hospedagem" }),
+    ).toBeNull();
+  });
+
+  /**
+   * A tela vazia é o outro lugar que oferecia o cadastro. Sem o escopo ela
+   * precisa dizer por onde se pede o cadastro, e não oferecer um botão que só
+   * responderia `403`: quem chega aqui tem conta e nenhuma hospedagem, então
+   * uma tela sem saída seria pior que a afordância morta.
+   */
+  it("orienta em vez de oferecer cadastro na tela vazia sem o escopo", async () => {
+    stubApi({ accommodations: [] });
+    const withoutOnboard = testAccountScopes.filter(
+      (scope) => scope !== "accommodations:onboard",
+    );
+
+    renderWithSession(<OperatorWorkspace />, {
+      authClient: stubAuthClient(testSession(withoutOnboard)),
+    });
+
+    expect(
+      await screen.findByRole("link", { name: "página de pedido de acesso" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Cadastrar minha hospedagem" }),
+    ).toBeNull();
+  });
+
+  it("oferece o cadastro de outra hospedagem a quem tem o escopo", async () => {
+    stubApi({});
+    renderWithSession(<OperatorWorkspace />);
+
+    expect(
+      await screen.findByRole("button", { name: "Cadastrar outra hospedagem" }),
+    ).toBeInTheDocument();
+  });
+
   it("oferece só as transições que o servidor aceita para o estado", async () => {
     stubApi({ stays: [stay({ status: "pre_registered" })] });
     renderWithSession(<OperatorWorkspace />);

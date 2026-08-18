@@ -91,9 +91,17 @@ func (f *developmentFake) IsFixtureCredential(token string) bool {
 func developmentFixture(token string) (string, []string, bool) {
 	switch token {
 	case DevelopmentPlatformToken:
+		// No accommodations:onboard here, and the token name says why: this is
+		// cumuru-local-platform-read, and its three siblings below each carry a
+		// single scope on purpose. Onboarding admits an establishment to the whole
+		// platform — the invite queue of ADR-042 filters by state, never by
+		// membership — so granting it to a bearer string would hand back over this
+		// door the power the local demo operator no longer has through its
+		// password account, in the very runtime where that separation is
+		// demonstrated. The separate subject below answers a different question:
+		// who the audit trail names. Neither substitutes for the other.
 		return DevelopmentPlatformSubject, []string{
 			"platform:read",
-			"accommodations:onboard",
 			"accommodations:manage",
 			"stays:read:own",
 			"stays:write",

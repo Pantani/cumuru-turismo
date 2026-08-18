@@ -27,7 +27,6 @@ func assertDevelopmentFakeAccepted(t *testing.T, environment string) {
 	}
 	for _, scope := range []string{
 		"platform:read",
-		"accommodations:onboard",
 		"accommodations:manage",
 		"stays:read:own",
 		"stays:write",
@@ -35,6 +34,12 @@ func assertDevelopmentFakeAccepted(t *testing.T, environment string) {
 		if !principal.HasScope(scope) {
 			t.Errorf("development principal lacks %s", scope)
 		}
+	}
+	// The bearer fixture must not be a second way to admit an establishment: the
+	// local demo operator lost accommodations:onboard on its password account,
+	// and the chain verifier accepts both credentials on the same runtime.
+	if principal.HasScope("accommodations:onboard") {
+		t.Error("development principal must not hold accommodations:onboard")
 	}
 }
 
