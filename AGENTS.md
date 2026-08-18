@@ -67,7 +67,13 @@ auditabilidade.
 - Go na última versão patch suportada da linha 1.26.
 - `net/http` e roteamento da biblioteca padrão.
 - Contexto com timeout em toda chamada ao banco ou rede.
-- SQL explícito; queries geradas por `sqlc`.
+- SQL explícito; queries geradas por `sqlc`. Exceção deliberada: testes de
+  integração em `apps/api/internal/platform/store/*_postgres_test.go` usam
+  `pgxpool` com SQL inline para inspecionar estado interno (dumps
+  `to_jsonb`, varredura de colunas por `information_schema`, identificador de
+  tabela/coluna resolvido em runtime) — padrões que não têm forma fixa
+  compatível com o modelo estático de arquivos `.sql` do `sqlc`. Não migrar
+  arquivo a arquivo; ver nota no topo desses arquivos de teste.
 - IDs UUIDv7 gerados no cliente ou servidor.
 - Horários em UTC; datas civis da estadia interpretadas em `America/Bahia`.
 - Erros HTTP no formato `application/problem+json`.
