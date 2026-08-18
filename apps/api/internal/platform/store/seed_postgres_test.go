@@ -5,6 +5,9 @@
 // write password_hash, and the accommodation upsert is scoped to the declared
 // organization. Neither claim is observable without executing the statements,
 // and nothing else in the suite does.
+//
+// SQL inline via pgxpool é convenção deliberada nestes testes de integração
+// (não migrar para sqlc); ver AGENTS.md, seção "Padrões de backend".
 package store_test
 
 import (
