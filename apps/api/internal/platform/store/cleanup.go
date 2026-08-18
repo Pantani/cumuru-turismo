@@ -75,6 +75,13 @@ func (s *Store) ExpireAccommodationAccessRequests(
 	if err != nil {
 		return 0, ErrUnavailable
 	}
+	// inTransactionWithOptions bounds its own ctx, but the closure below uses
+	// this one. An HTTP handler would inherit the request deadline; the worker
+	// inherits none, so without this bound the sweep UPDATE and the audit
+	// inserts would hang until the pool gives up. Same reason
+	// CleanupExpiredOperationalRecords above applies it.
+	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
 	var expired int64
 	err = s.inTransaction(ctx, func(q generated.Querier) error {
 		rows, sweepErr := q.ExpireAccommodationAccessRequests(

@@ -145,7 +145,7 @@ export function LodgingFields(props: FieldProps) {
         label={t("inviteRequest.field.capacity")}
         maxLength={5}
         onChange={onChange}
-        pattern="\d+"
+        pattern="[0-9]+"
         required
         value={form.capacity}
       />
