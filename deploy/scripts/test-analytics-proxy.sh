@@ -15,6 +15,7 @@ const publicOperations = new Map([
   ["/public/summary", ["#/components/parameters/IfNoneMatch"]],
   ["/public/presence", [
     "#/components/parameters/PresenceWindow",
+    "#/components/parameters/PresenceMonth",
     "#/components/parameters/IfNoneMatch",
   ]],
   ["/public/preferences", [
@@ -471,7 +472,7 @@ VALUES
     1,
     repeat('a', 64),
     'presence',
-    'recent_30_days',
+    'observed_daily',
     DATE '2026-07-28',
     DATE '2026-07-29',
     'person_day',

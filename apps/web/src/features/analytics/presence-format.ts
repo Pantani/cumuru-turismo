@@ -87,6 +87,18 @@ function deltaText(t: Translate, percent: number): string {
   return t(key, { percent: Math.abs(rounded) });
 }
 
+/**
+ * Um percentual com sinal explícito: sem o "+" um aumento de dez por cento lê
+ * como um valor absoluto, e é justamente a direção que interessa aqui.
+ */
+function signedPercentText(t: Translate, percent: number): string {
+  const rounded = Math.round(percent);
+  return t("analytics.percent.signed", {
+    percent: rounded,
+    sign: rounded > 0 ? "+" : "",
+  });
+}
+
 function trendText(t: Translate, percent: number, size: number): string {
   const rounded = Math.round(percent);
   return t("analytics.trend.value", {
@@ -143,11 +155,14 @@ function slotLinesOf(
 }
 
 export interface PresenceFormat {
+  band(lower: number, upper: number): string;
   count(value: number): string;
   date(value: string): string;
   dateTime(value: string): string;
   day(value: string): string;
   delta(percent: number): string;
+  plainPercent(percent: number): string;
+  signedPercent(percent: number): string;
   slotLines(point: PresencePoint, average: number | null): string[];
   trend(percent: number, size: number): string;
   weekdayName(weekday: number): string;
@@ -155,12 +170,18 @@ export interface PresenceFormat {
 
 export function presenceFormat(tag: string, t: Translate): PresenceFormat {
   const formatters = formattersFor(tag);
+  const count = (value: number) => formatters.count.format(value);
   return {
-    count: (value) => formatters.count.format(value),
+    band: (lower, upper) =>
+      t("analytics.value.band", { lower: count(lower), upper: count(upper) }),
+    count,
     date: (value) => formatters.date.format(civilDate(value)),
     dateTime: (value) => formatters.dateTime.format(new Date(value)),
     day: (value) => formatters.day.format(civilDate(value)),
     delta: (percent) => deltaText(t, percent),
+    plainPercent: (percent) =>
+      t("analytics.percent.plain", { percent: Math.round(percent) }),
+    signedPercent: (percent) => signedPercentText(t, percent),
     slotLines: (point, average) => slotLinesOf(t, point, average),
     trend: (percent, size) => trendText(t, percent, size),
     weekdayName: (weekday) => formatters.weekday.format(weekdayDate(weekday)),

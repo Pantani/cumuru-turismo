@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Pantani/cumuru/apps/api/internal/analytics"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store/generated"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -18,6 +19,20 @@ type publicAnalyticsQueries struct {
 func (f *publicAnalyticsQueries) ListCurrentPresenceCells(
 	context.Context,
 	string,
+) ([]generated.PublicDataCurrentPresence, error) {
+	return f.presence, nil
+}
+
+func (f *publicAnalyticsQueries) ListCurrentPresenceCellsForRecentDays(
+	context.Context,
+	generated.ListCurrentPresenceCellsForRecentDaysParams,
+) ([]generated.PublicDataCurrentPresence, error) {
+	return f.presence, nil
+}
+
+func (f *publicAnalyticsQueries) ListCurrentPresenceCellsInRange(
+	context.Context,
+	generated.ListCurrentPresenceCellsInRangeParams,
 ) ([]generated.PublicDataCurrentPresence, error) {
 	return f.presence, nil
 }
@@ -36,7 +51,7 @@ func TestPublicPresenceMapsOnlyProtectedSnapshotFields(t *testing.T) {
 		Time: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC), Valid: true,
 	}
 	queries := &publicAnalyticsQueries{presence: []generated.PublicDataCurrentPresence{{
-		PeriodSelector: "recent_30_days",
+		PeriodSelector: analytics.PresenceObservedSelector,
 		PeriodStart:    asOf, PeriodEnd: nextDate(asOf), Unit: "person_day",
 		Kind: "observed", Status: "protected", AsOfOn: asOf,
 		DataMode: "prototype_fixtures", PrivacyPolicyVersion: "prototype-v1",
@@ -45,7 +60,8 @@ func TestPublicPresenceMapsOnlyProtectedSnapshotFields(t *testing.T) {
 	}}}
 	subject := &PublicAnalyticsRepository{queries: queries, timeout: time.Second}
 
-	got, err := subject.Presence(context.Background(), "recent_30_days")
+	slice, _ := analytics.ResolvePresenceWindow("recent_30_days", "")
+	got, err := subject.Presence(context.Background(), slice)
 	if err != nil {
 		t.Fatalf("Presence() error = %v", err)
 	}
@@ -62,16 +78,28 @@ func TestPublicPresenceRejectsKindMismatchedWithWindow(t *testing.T) {
 
 	asOf := pgtype.Date{Time: time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC), Valid: true}
 	for _, test := range []struct {
-		name   string
-		window string
-		kind   string
+		name     string
+		window   string
+		month    string
+		selector string
+		kind     string
 	}{
-		{name: "forecast in recent window", window: "recent_30_days", kind: "forecast"},
-		{name: "observed in future window", window: "next_30_days", kind: "observed"},
+		{
+			name: "forecast in recent window", window: "recent_30_days",
+			selector: analytics.PresenceObservedSelector, kind: "forecast",
+		},
+		{
+			name: "forecast in a civil month", window: "month", month: "2026-07",
+			selector: analytics.PresenceObservedSelector, kind: "forecast",
+		},
+		{
+			name: "observed in future window", window: "next_30_days",
+			selector: analytics.PresenceForecastSelector, kind: "observed",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			queries := &publicAnalyticsQueries{presence: []generated.PublicDataCurrentPresence{{
-				PeriodSelector: test.window,
+				PeriodSelector: test.selector,
 				PeriodStart:    asOf, PeriodEnd: nextDate(asOf), Unit: "person_day",
 				Kind: test.kind, Status: "protected", AsOfOn: asOf,
 				DataMode: "prototype_fixtures", PrivacyPolicyVersion: "prototype-v1",
@@ -80,7 +108,11 @@ func TestPublicPresenceRejectsKindMismatchedWithWindow(t *testing.T) {
 			}}}
 			subject := &PublicAnalyticsRepository{queries: queries, timeout: time.Second}
 
-			if _, err := subject.Presence(context.Background(), test.window); err == nil {
+			slice, ok := analytics.ResolvePresenceWindow(test.window, test.month)
+			if !ok {
+				t.Fatalf("ResolvePresenceWindow(%q, %q) rejected", test.window, test.month)
+			}
+			if _, err := subject.Presence(context.Background(), slice); err == nil {
 				t.Fatal("Presence() error = nil")
 			}
 		})
@@ -156,7 +188,8 @@ func TestPublicMethodologyIncludesNormalAndFallbackForecastBounds(t *testing.T) 
 		ComplementarySuppression:       true,
 		RoundingBase:                   10,
 		RoundingMode:                   "stable-half-up",
-		AllowedPresenceWindows:         []string{"recent_30_days", "next_30_days"},
+		PresenceHistoryDays:            analytics.PresenceHistoryDays,
+		AllowedPresenceWindows:         analytics.AllowedPresenceWindows(),
 		AllowedPreferencePeriods:       []string{"last_complete_month"},
 	}}
 	subject := &PublicAnalyticsRepository{queries: queries, timeout: time.Second}

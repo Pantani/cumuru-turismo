@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState, type CSSProperties, type ReactNode } from "react";
 
 import type { components } from "../../generated/schema";
@@ -10,12 +10,20 @@ import {
 } from "../../shared/api/analytics-client";
 import { coverageText } from "./coverage";
 import { usePresenceFormat, type PresenceFormat } from "./presence-format";
-import { PresenceChart } from "./PresenceChart";
+import {
+  clampMonth,
+  monthRange,
+  monthWithin,
+  shiftMonth,
+  type MonthRange,
+} from "./presence-months";
+import { PresenceChart, weekendBandsVisible } from "./PresenceChart";
 import { PUBLIC_STALE_TIME, usePublicSummary } from "./public-summary";
 import {
   centralValue,
   percentFromAverage,
   seriesStats,
+  forecastTotals,
   weekdayAverages,
   type PresencePoint,
   type SeriesStats,
@@ -114,11 +122,54 @@ function PointValue({
   );
 }
 
+/**
+ * O acumulado previsto para o horizonte. É a pergunta de quem dimensiona
+ * equipe e estoque — "quantas pessoas-dia o mês inteiro traz" — e o dia a dia
+ * sozinho obriga o leitor a somar trinta números de cabeça.
+ */
+function ForecastTotalCard({
+  copy,
+  predicted,
+}: {
+  copy: Copy;
+  predicted: readonly PresencePoint[];
+}) {
+  const { format, t } = copy;
+  const totals = forecastTotals(predicted);
+  return (
+    <article className="summary-card" data-kind="forecast">
+      <p className="metric-label">{t("analytics.summary.forecastTotal")}</p>
+      <p className="metric-kind">{t("analytics.kind.forecast")}</p>
+      {totals === null ? (
+        <span className="data-state data-state-unavailable">
+          {t("analytics.state.unavailable")}
+        </span>
+      ) : (
+        <span className="forecast-value">
+          <strong>
+            {t("analytics.value.central", {
+              value: format.count(totals.central),
+            })}
+          </strong>
+          <span>{format.band(totals.lower, totals.upper)}</span>
+        </span>
+      )}
+      <p className="metric-hint">
+        {totals === null
+          ? t("analytics.summary.forecastTotalNone")
+          : t("analytics.summary.forecastTotalHint", { count: totals.days })}
+      </p>
+    </article>
+  );
+}
+
 function SummaryCards({
   copy,
+  predicted,
   summary,
 }: {
   copy: Copy;
+  predicted: readonly PresencePoint[];
   summary: Schemas["PublicSummary"];
 }) {
   const { format, t } = copy;
@@ -145,6 +196,7 @@ function SummaryCards({
         <PointValue point={peak} t={t} />
         <p className="metric-hint">{t("analytics.summary.peakHint")}</p>
       </article>
+      <ForecastTotalCard copy={copy} predicted={predicted} />
     </section>
   );
 }
@@ -155,25 +207,62 @@ interface StatTile {
   value: ReactNode;
 }
 
-/** "combined" is composed in the client; the contract still serves one window. */
-type DisplayWindow = PresenceWindow | "combined";
+/** Janelas que recortam a série observada; o mês civil pede a data junto. */
+type HistoryWindow = Exclude<PresenceWindow, "next_30_days">;
 
-/** Names the scope of the tiles, which is never the forecast half of a join. */
-const WINDOW_SCOPES: Record<DisplayWindow, MessageKey> = {
-  recent_30_days: "analytics.window.scope.recent",
-  next_30_days: "analytics.window.scope.next",
+/**
+ * O que o gráfico mostra, escolhido separadamente do quanto de histórico é
+ * carregado. Antes as duas perguntas dividiam um `<select>` só, e por isso
+ * "últimos 30 dias" e "com previsão" não podiam ser respondidas juntas para
+ * nenhuma janela além de trinta dias.
+ */
+type SeriesView = "observed" | "combined" | "forecast";
+
+interface HistorySelection {
+  window: HistoryWindow;
+  month: string;
+}
+
+const HISTORY_WINDOWS: readonly HistoryWindow[] = [
+  "recent_30_days",
+  "recent_90_days",
+  "recent_365_days",
+  "recent_730_days",
+  "month",
+];
+
+const HISTORY_LABELS: Record<HistoryWindow, MessageKey> = {
+  recent_30_days: "analytics.history.recent30",
+  recent_90_days: "analytics.history.recent90",
+  recent_365_days: "analytics.history.recent365",
+  recent_730_days: "analytics.history.recent730",
+  month: "analytics.history.month",
+};
+
+const SERIES_VIEWS: readonly SeriesView[] = ["observed", "combined", "forecast"];
+
+const VIEW_LABELS: Record<SeriesView, MessageKey> = {
+  observed: "analytics.view.observed",
+  combined: "analytics.view.combined",
+  forecast: "analytics.view.forecast",
+};
+
+/** Nomeia o escopo dos indicadores, que nunca é a metade prevista de uma junção. */
+const VIEW_SCOPES: Record<SeriesView, MessageKey> = {
+  observed: "analytics.window.scope.recent",
   combined: "analytics.window.scope.combined",
+  forecast: "analytics.window.scope.next",
 };
 
 function displayedSeries(
-  window: DisplayWindow,
+  view: SeriesView,
   observed: readonly PresencePoint[],
   predicted: readonly PresencePoint[],
 ): readonly PresencePoint[] {
-  if (window === "recent_30_days") {
+  if (view === "observed") {
     return observed;
   }
-  if (window === "next_30_days") {
+  if (view === "forecast") {
     return predicted;
   }
   return [...observed, ...predicted];
@@ -185,11 +274,11 @@ function displayedSeries(
  * there is how the forecast sits against what was actually measured.
  */
 function referenceSeries(
-  window: DisplayWindow,
+  view: SeriesView,
   observed: readonly PresencePoint[],
   predicted: readonly PresencePoint[],
 ): readonly PresencePoint[] {
-  return window === "next_30_days" ? predicted : observed;
+  return view === "forecast" ? predicted : observed;
 }
 
 function DayValue({
@@ -227,12 +316,61 @@ function averageTile(copy: Copy, stats: SeriesStats): StatTile {
   };
 }
 
+/**
+ * O acumulado soma apenas os dias publicados. Quando algum dia foi suprimido a
+ * soma é um piso, e dizê-lo é obrigatório: apresentar parcial como total é
+ * exatamente o que a política de publicação proíbe.
+ */
 function totalTile(copy: Copy, stats: SeriesStats): StatTile {
   const { format, t } = copy;
   return {
     label: t("analytics.tile.total"),
     value: t("analytics.value.observed", { value: format.count(stats.total) }),
-    hint: t("analytics.tile.totalHint"),
+    hint:
+      stats.withheld === 0
+        ? t("analytics.tile.totalHint")
+        : t("analytics.tile.totalPartialHint", { count: stats.withheld }),
+  };
+}
+
+function medianTile(copy: Copy, stats: SeriesStats): StatTile {
+  const { format, t } = copy;
+  return {
+    label: t("analytics.tile.median"),
+    value:
+      stats.median === null
+        ? t("analytics.empty")
+        : t("analytics.value.observed", {
+            value: format.count(Math.round(stats.median)),
+          }),
+    hint: t("analytics.tile.medianHint"),
+  };
+}
+
+function weekendTile(copy: Copy, stats: SeriesStats): StatTile {
+  const { format, t } = copy;
+  const lift = stats.weekendLiftPercent;
+  return {
+    label: t("analytics.tile.weekend"),
+    value: lift === null ? t("analytics.empty") : format.signedPercent(lift),
+    hint:
+      lift === null
+        ? t("analytics.tile.weekendNone")
+        : t("analytics.tile.weekendHint"),
+  };
+}
+
+function variationTile(copy: Copy, stats: SeriesStats): StatTile {
+  const { format, t } = copy;
+  const variation = stats.variationPercent;
+  return {
+    label: t("analytics.tile.variation"),
+    value:
+      variation === null ? t("analytics.empty") : format.plainPercent(variation),
+    hint:
+      variation === null
+        ? t("analytics.tile.variationNone")
+        : t("analytics.tile.variationHint"),
   };
 }
 
@@ -299,35 +437,39 @@ function publishedTile(copy: Copy, stats: SeriesStats): StatTile {
   };
 }
 
-function statTiles(copy: Copy, stats: SeriesStats): StatTile[] {
+/** O nível da janela: o que um dia comum foi, e o quanto os extremos se afastam. */
+function levelTiles(copy: Copy, stats: SeriesStats): StatTile[] {
   return [
     averageTile(copy, stats),
+    medianTile(copy, stats),
     peakTile(copy, stats),
     troughTile(copy, stats),
+  ];
+}
+
+/** O ritmo e o alcance: para onde a janela anda e sobre quanto ela se apoia. */
+function rhythmTiles(copy: Copy, stats: SeriesStats): StatTile[] {
+  return [
     trendTile(copy, stats),
+    weekendTile(copy, stats),
+    variationTile(copy, stats),
     totalTile(copy, stats),
     publishedTile(copy, stats),
   ];
 }
 
-function WindowStats({
-  copy,
-  stats,
-  window,
+function StatList({
+  className,
+  label,
+  tiles,
 }: {
-  copy: Copy;
-  stats: SeriesStats;
-  window: DisplayWindow;
+  className: string;
+  label: string;
+  tiles: readonly StatTile[];
 }) {
-  const { t } = copy;
   return (
-    <ul
-      className="stat-grid"
-      aria-label={t("analytics.stats.aria", {
-        scope: t(WINDOW_SCOPES[window]),
-      })}
-    >
-      {statTiles(copy, stats).map((tile) => (
+    <ul className={className} aria-label={label}>
+      {tiles.map((tile) => (
         <li className="stat-tile" key={tile.label}>
           <p className="metric-label">{tile.label}</p>
           <p className="stat-value">{tile.value}</p>
@@ -335,6 +477,37 @@ function WindowStats({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Duas listas em vez de uma malha de nove: com tudo no mesmo peso, "quantos
+ * dias foram publicados" competia visualmente com "quantas pessoas por dia".
+ */
+function WindowStats({
+  copy,
+  stats,
+  view,
+}: {
+  copy: Copy;
+  stats: SeriesStats;
+  view: SeriesView;
+}) {
+  const { t } = copy;
+  const scope = t(VIEW_SCOPES[view]);
+  return (
+    <>
+      <StatList
+        className="stat-grid"
+        label={t("analytics.stats.aria", { scope })}
+        tiles={levelTiles(copy, stats)}
+      />
+      <StatList
+        className="stat-strip"
+        label={t("analytics.stats.rhythmAria", { scope })}
+        tiles={rhythmTiles(copy, stats)}
+      />
+    </>
   );
 }
 
@@ -674,7 +847,7 @@ function DashboardPlaceholder({
   );
 }
 
-function SeriesLegend({ t }: { t: Translate }) {
+function SeriesLegend({ days, t }: { days: number; t: Translate }) {
   return (
     <p className="legend" aria-label={t("analytics.legend.aria")}>
       <span className="legend-observed">{t("analytics.legend.observed")}</span>
@@ -684,27 +857,189 @@ function SeriesLegend({ t }: { t: Translate }) {
       <span className="legend-trend">
         {t("analytics.legend.trend", { days: SMOOTH_DAYS })}
       </span>
-      <span className="legend-weekend">{t("analytics.legend.weekend")}</span>
+      {weekendBandsVisible(days) ? (
+        <span className="legend-weekend">{t("analytics.legend.weekend")}</span>
+      ) : null}
     </p>
   );
 }
 
+/**
+ * Controle segmentado em vez de `<select>`: as opções são poucas, fixas e
+ * comparáveis entre si, e um menu fechado escondia justamente a informação de
+ * que existe mais de trinta dias de histórico para pedir.
+ */
+function SegmentedControl<Option extends string>({
+  label,
+  onChange,
+  options,
+  optionLabel,
+  value,
+}: {
+  label: string;
+  onChange: (next: Option) => void;
+  options: readonly Option[];
+  optionLabel: (option: Option) => string;
+  value: Option;
+}) {
+  return (
+    <div className="segmented" role="group" aria-label={label}>
+      {options.map((option) => (
+        <button
+          aria-pressed={option === value}
+          className="segment"
+          key={option}
+          onClick={() => onChange(option)}
+          type="button"
+        >
+          {optionLabel(option)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MonthPicker({
+  copy,
+  month,
+  onChange,
+  range,
+}: {
+  copy: Copy;
+  month: string;
+  onChange: (next: string) => void;
+  range: MonthRange;
+}) {
+  const { t } = copy;
+  const step = (offset: number) =>
+    onChange(clampMonth(shiftMonth(month, offset), range));
+  return (
+    <div className="month-picker">
+      <button
+        type="button"
+        className="month-step"
+        disabled={month === range.min}
+        onClick={() => step(-1)}
+        aria-label={t("analytics.history.monthPrevious")}
+      >
+        ‹
+      </button>
+      <label className="month-field">
+        <span className="visually-hidden">{t("analytics.history.monthLabel")}</span>
+        <input
+          type="month"
+          value={month}
+          min={range.min}
+          max={range.max}
+          onChange={(event) =>
+            monthWithin(event.target.value, range) &&
+            onChange(event.target.value)
+          }
+        />
+      </label>
+      <button
+        type="button"
+        className="month-step"
+        disabled={month === range.max}
+        onClick={() => step(1)}
+        aria-label={t("analytics.history.monthNext")}
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Escolher o mês civil sem data é escolher nada. A data mais recente do
+ * histórico é o padrão porque é a que o leitor acabou de ver nas outras
+ * janelas.
+ */
+function nextHistory(
+  current: HistorySelection,
+  window: HistoryWindow,
+  range: MonthRange,
+): HistorySelection {
+  if (window !== "month") {
+    return { ...current, window };
+  }
+  return { window, month: current.month === "" ? range.max : current.month };
+}
+
+interface PeriodControlsProps {
+  copy: Copy;
+  history: HistorySelection;
+  onHistoryChange: (next: HistorySelection) => void;
+  onViewChange: (next: SeriesView) => void;
+  range: MonthRange;
+  view: SeriesView;
+}
+
+/**
+ * Duas perguntas separadas: quanto histórico carregar e o que desenhar. Juntas
+ * num controle só, escolher "com previsão" custava voltar para trinta dias.
+ */
+function PeriodControls({
+  copy,
+  history,
+  onHistoryChange,
+  onViewChange,
+  range,
+  view,
+}: PeriodControlsProps) {
+  const { t } = copy;
+  return (
+    <div className="period-controls">
+      <div className="period-field">
+        <span className="period-label">{t("analytics.history.label")}</span>
+        <SegmentedControl
+          label={t("analytics.history.label")}
+          onChange={(window) => onHistoryChange(nextHistory(history, window, range))}
+          options={HISTORY_WINDOWS}
+          optionLabel={(window) => t(HISTORY_LABELS[window])}
+          value={history.window}
+        />
+        {history.window === "month" ? (
+          <MonthPicker
+            copy={copy}
+            month={history.month}
+            onChange={(month) => onHistoryChange({ ...history, month })}
+            range={range}
+          />
+        ) : null}
+      </div>
+      <div className="period-field">
+        <span className="period-label">{t("analytics.view.label")}</span>
+        <SegmentedControl
+          label={t("analytics.view.label")}
+          onChange={onViewChange}
+          options={SERIES_VIEWS}
+          optionLabel={(option) => t(VIEW_LABELS[option])}
+          value={view}
+        />
+      </div>
+    </div>
+  );
+}
+
 interface PresenceSectionProps {
+  controls: PeriodControlsProps;
   displayed: readonly PresencePoint[];
   copy: Copy;
   observed: readonly PresencePoint[];
-  onWindowChange: (next: DisplayWindow) => void;
+  stale: boolean;
   stats: SeriesStats;
-  window: DisplayWindow;
+  view: SeriesView;
 }
 
 function PresenceSection({
+  controls,
   displayed,
   copy,
   observed,
-  onWindowChange,
+  stale,
   stats,
-  window,
+  view,
 }: PresenceSectionProps) {
   const { t } = copy;
   return (
@@ -714,24 +1049,17 @@ function PresenceSection({
           <p className="section-kicker">{t("analytics.presence.kicker")}</p>
           <h3 id="presence-title">{t("analytics.presence.title")}</h3>
         </div>
-        <label>
-          {t("analytics.window.label")}
-          <select
-            value={window}
-            onChange={(event) =>
-              onWindowChange(event.target.value as DisplayWindow)
-            }
-          >
-            <option value="recent_30_days">{t("analytics.window.recent")}</option>
-            <option value="next_30_days">{t("analytics.window.next")}</option>
-            <option value="combined">{t("analytics.window.combined")}</option>
-          </select>
-        </label>
+        <p className="series-status" role="status" aria-live="polite">
+          {stale ? t("analytics.updating") : ""}
+        </p>
       </div>
-      <SeriesLegend t={t} />
-      <WindowStats copy={copy} stats={stats} window={window} />
-      <PresenceChart series={displayed} stats={stats} />
-      <WeekdayPattern copy={copy} series={observed} />
+      <PeriodControls {...controls} />
+      <SeriesLegend days={displayed.length} t={t} />
+      <WindowStats copy={copy} stats={stats} view={view} />
+      <div className="presence-panels">
+        <PresenceChart series={displayed} stats={stats} />
+        <WeekdayPattern copy={copy} series={observed} />
+      </div>
       <details className="series-details">
         <summary>{t("analytics.details")}</summary>
         <PresenceTable copy={copy} series={displayed} stats={stats} />
@@ -740,12 +1068,19 @@ function PresenceSection({
   );
 }
 
-function usePublicAnalytics(client: AnalyticsClient) {
+function usePublicAnalytics(client: AnalyticsClient, history: HistorySelection) {
   const summary = usePublicSummary(client);
   const presence = useQuery({
-    queryKey: ["analytics", "public", "presence", "recent_30_days"],
-    queryFn: () => client.getPresence("recent_30_days"),
+    queryKey: ["analytics", "public", "presence", history.window, history.month],
+    queryFn: () =>
+      client.getPresence(history.window, history.month || undefined),
     staleTime: PUBLIC_STALE_TIME,
+    // Um mês sem data escolhida não nomeia documento; o seletor preenche a
+    // data assim que a metodologia diz qual histórico existe.
+    enabled: history.window !== "month" || history.month !== "",
+    // A janela anterior fica na tela enquanto a nova carrega: apagar o painel
+    // inteiro a cada troca faria "ver o ano passado" piscar a página.
+    placeholderData: keepPreviousData,
   });
   const forecast = useQuery({
     queryKey: ["analytics", "public", "presence", "next_30_days"],
@@ -770,8 +1105,12 @@ export function AnalyticsDashboard({
 }: AnalyticsDashboardProps) {
   const { t } = useLocale();
   const format = usePresenceFormat();
-  const [window, setWindow] = useState<DisplayWindow>("recent_30_days");
-  const sources = usePublicAnalytics(client);
+  const [history, setHistory] = useState<HistorySelection>({
+    window: "recent_30_days",
+    month: "",
+  });
+  const [view, setView] = useState<SeriesView>("observed");
+  const sources = usePublicAnalytics(client, history);
   const queries = Object.values(sources);
   const copy: Copy = { format, t };
 
@@ -795,10 +1134,15 @@ export function AnalyticsDashboard({
       />
     );
   }
+  const methodology = loaded.methodology.data;
+  const range = monthRange(
+    methodology.metadata.period.start,
+    methodology.presence_history_days,
+  );
   const observed = loaded.observed.data.series;
   const predicted = loaded.predicted.data.series;
-  const displayed = displayedSeries(window, observed, predicted);
-  const stats = seriesStats(referenceSeries(window, observed, predicted));
+  const displayed = displayedSeries(view, observed, predicted);
+  const stats = seriesStats(referenceSeries(view, observed, predicted));
 
   return (
     <section className="analytics-dashboard" aria-labelledby="analytics-title">
@@ -811,17 +1155,29 @@ export function AnalyticsDashboard({
         <span className="prototype-badge">{t("analytics.prototypeBadge")}</span>
       </div>
       <MetadataPanel copy={copy} metadata={loaded.summary.data.metadata} />
-      <SummaryCards copy={copy} summary={loaded.summary.data} />
+      <SummaryCards
+        copy={copy}
+        predicted={predicted}
+        summary={loaded.summary.data}
+      />
       <PresenceSection
+        controls={{
+          copy,
+          history,
+          onHistoryChange: setHistory,
+          onViewChange: setView,
+          range,
+          view,
+        }}
         displayed={displayed}
         copy={copy}
         observed={observed}
-        onWindowChange={setWindow}
+        stale={sources.presence.isFetching}
         stats={stats}
-        window={window}
+        view={view}
       />
       <Preferences preferences={loaded.preferences.data} t={t} />
-      <Methodology methodology={loaded.methodology.data} t={t} />
+      <Methodology methodology={methodology} t={t} />
     </section>
   );
 }

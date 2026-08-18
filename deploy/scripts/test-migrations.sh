@@ -98,18 +98,18 @@ migration_files="$(
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_presence_history_window.down.sql\n000002_presence_history_window.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
 
-run_migrate up 1
+run_migrate up 2
 actual_migration_state="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${actual_migration_state}" = "1:false"
+test "${actual_migration_state}" = "2:false"
 
 psql_as cumuru_migration cumuru-local-migration-only <<'SQL'
 INSERT INTO core.organizations (id, name)
@@ -1317,7 +1317,7 @@ psql_as cumuru_migration cumuru-local-migration-only \
 expect_psql_failure \
   cumuru_migration \
   cumuru-local-migration-only \
-  "recent presence cell unexpectedly accepted forecast kind" \
+  "observed presence cell unexpectedly accepted forecast kind" \
   "INSERT INTO public_data.metric_cells (
      publication_version,
      cell_key,
@@ -1334,7 +1334,7 @@ expect_psql_failure \
      170,
      repeat('2', 64),
      'presence',
-     'recent_30_days',
+     'observed_daily',
      DATE '2026-07-28',
      DATE '2026-07-29',
      'person_day',
@@ -1654,8 +1654,9 @@ psql_as cumuru_migration cumuru-local-migration-only \
       );
   " >/dev/null
 
-# Round trip completo: a baseline única sobe, desce e reaplica de forma limpa.
-run_migrate down 1
+# Round trip completo: a baseline e a janela histórica sobem, descem e
+# reaplicam de forma limpa.
+run_migrate down 2
 schemas_left="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
@@ -1675,12 +1676,12 @@ schemas_left="$(
 )"
 test "${schemas_left}" = "0"
 
-run_migrate up 1
+run_migrate up 2
 final_version="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${final_version}" = "1:false"
+test "${final_version}" = "2:false"
 
-echo "migrations zero-to-one, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
+echo "migrations zero-to-two, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
