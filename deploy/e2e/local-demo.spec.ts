@@ -306,11 +306,15 @@ test("percorre a jornada local sem persistir authorities", async ({
     page.getByText("Não foi possível carregar os indicadores públicos."),
   ).toHaveCount(0);
   // Not checked here: the landing page has a pre-existing, unrelated
-  // color-contrast defect (coral index numbers/accents on cream backgrounds,
-  // e.g. `.lp-index-number`, `.lp-step-number`, `.lp-accent` in styles.css) that
-  // axe caught the moment this rule was turned on. It predates this change,
-  // is outside Fase 7 scope, and fixing brand colors needs design sign-off —
-  // flagged separately rather than silently scoped out.
+  // color-contrast defect that axe caught the moment this rule was turned
+  // on. The `sand`/`clay` light sections (`.lp-accent`, `.lp-index-number`,
+  // `.lp-step-number` in landing.css) were fixed by reusing the `--lp-ink`
+  // token the section's own heading already uses — see
+  // shared/theme/landing-accent-contrast.test.ts. The `coral` section has
+  // its own separate, still-open instance of the same class of defect
+  // (`.lp-section-coral .lp-index-number` resolves to `--ink` on `--coral`,
+  // ~2.6:1) that CommerceSection renders; it predates this change, is
+  // outside Fase 7 scope, and fixing it needs the same design sign-off.
 
   await page.goto("/acesso");
   await signIn(page);

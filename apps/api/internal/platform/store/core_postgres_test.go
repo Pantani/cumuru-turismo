@@ -1142,18 +1142,44 @@ func assertRateBucketsArePseudonymous(
 	}
 }
 
+// Migration 000005 narrowed app_runtime's privilege on these two append-only
+// tables from "nothing" to "SELECT (id) only" — the minimum RETURNING id
+// needs, closing the incident class that broke CreateActivationAccount
+// (queries/auth.sql). That grant is column-scoped, so it makes count(*)
+// succeed too: PostgreSQL's privilege check for count(*) doesn't reference
+// any column, so table-level readability (which any granted column implies)
+// is enough. This asserts the narrower invariant migration 000005 actually
+// established — id is readable, sensitive columns are not — instead of the
+// stale "nothing is readable" claim the grant intentionally superseded. The
+// column-level proof (catalog + functional + limit) already lives in
+// deploy/scripts/test-migrations.sh; this exercises the same boundary
+// through the application's own runtime pool.
 func assertRuntimeCannotReadAppendOnlyTables(
 	t *testing.T,
 	ctx context.Context,
 	pool *pgxpool.Pool,
 ) {
 	t.Helper()
-	for _, table := range []string{"platform.audit_events", "platform.outbox_events"} {
-		var value int
-		err := pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&value)
+	var auditCount int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM platform.audit_events").Scan(&auditCount); err != nil {
+		t.Errorf("runtime count(*) platform.audit_events error = %v, want nil (id is granted)", err)
+	}
+	var outboxCount int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM platform.outbox_events").Scan(&outboxCount); err != nil {
+		t.Errorf("runtime count(*) platform.outbox_events error = %v, want nil (id is granted)", err)
+	}
+
+	sensitiveColumns := map[string]string{
+		"platform.audit_events":  "metadata",
+		"platform.outbox_events": "event_type",
+	}
+	for table, column := range sensitiveColumns {
+		var value string
+		query := "SELECT " + column + " FROM " + table + " LIMIT 1"
+		err := pool.QueryRow(ctx, query).Scan(&value)
 		var postgresError *pgconn.PgError
 		if !errors.As(err, &postgresError) || postgresError.Code != "42501" {
-			t.Errorf("runtime SELECT %s error = %v, want insufficient_privilege", table, err)
+			t.Errorf("runtime SELECT %s.%s error = %v, want insufficient_privilege", table, column, err)
 		}
 	}
 }
