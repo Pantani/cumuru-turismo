@@ -98,19 +98,29 @@ export function formatCivilDate(value: string) {
   }).format(parsed);
 }
 
+/**
+ * Civil dates of a stay belong to the observatory, not to UTC: an instant past
+ * 21:00 in America/Bahia is already the next day in UTC, and slicing the
+ * timestamp would name a day the guest never saw.
+ */
+const civilDateParts = new Intl.DateTimeFormat("en", {
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: "America/Bahia",
+  year: "numeric",
+});
+
+/** The `YYYY-MM-DD` an instant falls on, read in the observatory's timezone. */
+export function stayCivilDateOf(instant: Date) {
+  const parts = civilDateParts.formatToParts(instant);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
 /** Default civil dates for a new stay, in the observatory's own timezone. */
 export function defaultStayDates(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en", {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone: "America/Bahia",
-    year: "numeric",
-  }).formatToParts(now);
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    Number(parts.find((part) => part.type === type)?.value ?? "0");
-  const base = new Date(
-    Date.UTC(value("year"), value("month") - 1, value("day")),
-  );
+  const base = new Date(`${stayCivilDateOf(now)}T00:00:00Z`);
   const civilDateAt = (offset: number) => {
     const date = new Date(base);
     date.setUTCDate(date.getUTCDate() + offset);
