@@ -1,7 +1,6 @@
 package localdemo
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Pantani/cumuru/apps/api/internal/platform/store"
