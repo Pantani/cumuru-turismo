@@ -1,5 +1,7 @@
 //go:build integration
 
+// SQL inline via pgxpool é convenção deliberada nestes testes de integração
+// (não migrar para sqlc); ver AGENTS.md, seção "Padrões de backend".
 package store_test
 
 import (

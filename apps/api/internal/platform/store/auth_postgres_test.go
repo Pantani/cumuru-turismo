@@ -6,6 +6,9 @@
 // row, and the rotation closes every session through RevokeAccountSessions.
 // A stubbed store proves none of that. These cases run the real statements
 // under the cumuru_app grants an operator actually gets.
+//
+// SQL inline via pgxpool é convenção deliberada nestes testes de integração
+// (não migrar para sqlc); ver AGENTS.md, seção "Padrões de backend".
 package store_test
 
 import (
