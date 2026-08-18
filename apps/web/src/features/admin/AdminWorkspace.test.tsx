@@ -10,6 +10,7 @@ import { renderWithSession } from "../../test/session";
 import { AdminWorkspace } from "./AdminWorkspace";
 
 const accommodationId = "019fae14-0000-7000-8000-0000000000a1";
+const otherAccommodationId = "019fae14-0000-7000-8000-0000000000a2";
 
 function apiResponse(body: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
@@ -186,6 +187,66 @@ describe("área da administração", () => {
     await waitFor(() => {
       const issued = calls.find((call) => call.url.endsWith("/activation"));
       expect(issued?.headers.get("If-Match")).toBe('"3"');
+    });
+  });
+
+  /**
+   * O `version` de `AccommodationAccess` nasce de `useState(accommodation.version)`
+   * e só é reinicializado se o componente remontar. Sem `key` no ponto de uso, a
+   * troca de hospedagem selecionada reaproveita a instância e a versão da
+   * hospedagem anterior vazaria para o `If-Match` da nova — que então falharia
+   * com precondição, ou pior, colidiria por acaso com uma versão válida de outra
+   * linha.
+   */
+  it("usa a versão da hospedagem recém-selecionada ao trocar a seleção", async () => {
+    const user = userEvent.setup();
+    const calls = stubApi({
+      accommodations: [
+        accommodation({ version: 3 }),
+        accommodation({
+          id: otherAccommodationId,
+          name: "Casa Fictícia da Duna",
+          version: 9,
+        }),
+      ],
+      onRequest: (request) =>
+        request.method === "POST" && request.url.endsWith("/activation")
+          ? apiResponse({
+              url: "https://exemplo.invalid/ativacao#token",
+              version: 10,
+            })
+          : undefined,
+    });
+    renderWithSession(<AdminWorkspace />);
+
+    // A seleção não é automática na administração: a primeira troca precisa
+    // acontecer para existir um "antes" cuja versão poderia vazar.
+    await user.click(
+      await screen.findByRole("button", { name: /Pousada Farol Fictícia/ }),
+    );
+    await screen.findByRole("heading", {
+      name: "Acesso da hospedagem Pousada Farol Fictícia",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /Casa Fictícia da Duna/ }),
+    );
+    await screen.findByRole("heading", {
+      name: "Acesso da hospedagem Casa Fictícia da Duna",
+    });
+    await user.type(
+      screen.getByLabelText("Como chamar essa pessoa"),
+      "Marina Fictícia",
+    );
+    await user.type(
+      screen.getByLabelText("E-mail de acesso"),
+      "marina@exemplo.invalid",
+    );
+    await user.click(screen.getByRole("button", { name: "Emitir acesso" }));
+
+    await waitFor(() => {
+      const issued = calls.find((call) => call.url.endsWith("/activation"));
+      expect(issued?.headers.get("If-Match")).toBe('"9"');
     });
   });
 

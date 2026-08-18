@@ -97,7 +97,6 @@ function AccommodationAccess({ accommodation }: { accommodation: Accommodation }
     <section
       className="workspace-section"
       aria-labelledby="admin-accommodation-access-title"
-      key={accommodation.id}
     >
       <h2 id="admin-accommodation-access-title">
         {t("admin.access.title", { name: accommodation.name })}
@@ -182,7 +181,9 @@ export function AdminWorkspace() {
         />
       </section>
 
-      {selected === null ? null : <AccommodationAccess accommodation={selected} />}
+      {selected === null ? null : (
+        <AccommodationAccess accommodation={selected} key={selected.id} />
+      )}
 
       <AccessRequestQueue />
     </div>
