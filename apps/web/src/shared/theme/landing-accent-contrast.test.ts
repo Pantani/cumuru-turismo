@@ -3,12 +3,12 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Vigia o contraste de `.lp-accent` e `.lp-index-number` dentro de cada seção
- * `.lp-section-*` da landing. Essas classes usam `--coral` como cor de texto
- * por padrão; seções cujo fundo já É `--coral` (`.lp-section-coral`) precisam
- * de uma sobrescrita, e essa sobrescrita tem que resolver para uma cor de
- * contraste alto sobre o próprio fundo — não para `--ink` (creme), que dá
- * 2.58:1 e falha o WCAG AA.
+ * Vigia o contraste de `.lp-accent` e `.lp-index-number` dentro da seção
+ * `.lp-section-coral` da landing. Essas classes usam `--coral` como cor de
+ * texto por padrão; como o fundo de `.lp-section-coral` já É `--coral`, a
+ * seção precisa de uma sobrescrita, e essa sobrescrita tem que resolver para
+ * uma cor de contraste alto sobre o próprio fundo — não para `--ink` (creme),
+ * que dá 2.58:1 e falha o WCAG AA.
  */
 
 const MINIMUM_RATIO = 4.5;
