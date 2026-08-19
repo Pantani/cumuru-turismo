@@ -124,12 +124,18 @@ textarea {
   font: inherit;
 }
 
-/* Caixa de texto padrão do produto. Fica na base, com especificidade zero
-   (`:where()`), porque antes só os campos dentro de um cartão conhecido eram
-   estilizados: qualquer formulário fora dessa lista caía no controle do
-   navegador — mais estreito, cinza e fora do ritmo do resto da página. Os
-   casos deliberadamente menores (`.month-field`, `.section-heading`) continuam
-   vencendo pela própria especificidade. */
+/* Caixa de texto padrão do produto. Antes só os campos dentro de um cartão
+   conhecido eram estilizados, e qualquer formulário fora dessa lista caía no
+   controle do navegador — mais estreito, cinza e fora do ritmo do resto da
+   página.
+
+   A regra fica no nível do tipo (0,0,1): o `:where()` zera só a lista de tipos
+   recusados, para que ela não conte. Assim qualquer classe vence, e os campos
+   deliberadamente menores (`.month-field`, `.section-heading`) seguem mandando
+   no próprio tamanho. Envolver o grupo inteiro em `:where()` para chegar a
+   0,0,0 seria pior, não mais previsível: o reset `input, select, textarea {
+   font: inherit }` acima também é 0,0,1 e passaria a vencer, e o campo herdaria
+   o peso do rótulo (650) ou do corpo (400) no lugar dos 450 daqui. */
 input:where(:not([type="checkbox"], [type="radio"], [type="file"])),
 select,
 textarea {
