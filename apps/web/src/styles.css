@@ -152,6 +152,37 @@ textarea:hover:not(:disabled) {
   border-color: var(--brand);
 }
 
+/* A seta do sistema não segue o tema nem o tamanho do resto: cada navegador
+   desenha a sua. Trocamos por um chevron nosso, feito de dois gradientes —
+   gradiente aceita `currentColor`, e imagem em `data:` não aceitaria, então
+   a seta acompanha a cor do texto — inclusive quando o campo desabilita.
+   Fora `[multiple]` e `[size]`, que viram lista e não têm indicador. */
+select:where(:not([multiple], [size])) {
+  appearance: none;
+  padding-right: 2.75rem;
+  background-image:
+    linear-gradient(
+      45deg,
+      transparent 50%,
+      color-mix(in srgb, currentColor 62%, transparent) 50%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, currentColor 62%, transparent) 50%,
+      transparent 50%
+    );
+  background-position:
+    right 1.31rem center,
+    right 1rem center;
+  background-size: 0.32rem 0.32rem;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+select:where(:not([multiple], [size])):disabled {
+  cursor: not-allowed;
+}
+
 :where(input, select, textarea)[aria-invalid="true"] {
   border-color: var(--danger);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
@@ -939,7 +970,10 @@ h4 {
   min-height: 2.75rem;
   padding: 0.6rem 2.2rem 0.6rem 0.75rem;
   color: var(--ink);
-  background: var(--surface);
+  background-color: var(--surface);
+  background-position:
+    right 1.06rem center,
+    right 0.75rem center;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -952,7 +986,7 @@ h4 {
 
 .section-heading select:disabled {
   color: var(--ink-3);
-  background: var(--surface-sunken);
+  background-color: var(--surface-sunken);
   cursor: not-allowed;
 }
 

@@ -187,6 +187,10 @@ arquivo.
   só dentro daqueles seis contêineres;
 - rótulo colado ao campo nos filtros de `/hospedagens`: os dois filtros usavam
   `className="field"`, classe que não existe na folha de estilo;
+- seta do `select` desenhada pelo sistema, que não seguia o tema nem o tamanho
+  do campo e mudava de forma conforme o navegador: passa a ser um chevron da
+  própria folha de estilo, feito de gradiente para acompanhar `currentColor`,
+  inclusive quando o campo desabilita;
 - `POST /accommodations` descrito no contrato como onboarding "com OIDC fake",
   trilho que a [ADR-037](docs/decisoes/ADR-037-autenticacao-local-por-email-e-senha.md)
   substituiu: `NewChainVerifier(session, federated)` aceita a sessão local de
