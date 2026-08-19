@@ -91,7 +91,7 @@ arquivo.
   principals próprios (`fixture-questionnaire-editor` e
   `-reviewer`). Sem migration e sem escopo novo; banco local já semeado mantém
   os escopos antigos na linha da conta, então rode `make docker-rm` antes do
-  próximo `local-demo`;
+  próximo `local-demo`.
 - **o administrador deixou de ver "Suas hospedagens" e ganhou área própria.** A
   mesma tela servia às duas autoridades: quem entrava com a conta semeada de
   administração via a lista de hospedagens como se fossem suas, com quadro de
