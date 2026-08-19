@@ -307,3 +307,102 @@ func TestApprovalIsAnOperationOfItsOwnAndOnlyWhenActive(t *testing.T) {
 		t.Fatal("update_stay disappeared from the active accommodation")
 	}
 }
+
+func stringPointer(value string) *string {
+	return &value
+}
+
+// A publicação vira link discável e link de WhatsApp; número com separador não
+// disca, e site que não é https publica endereço que o navegador vai recusar.
+func TestServiceRejectsUnpublishableContact(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		patch UpdatePatch
+	}{
+		{name: "telefone com separador", patch: UpdatePatch{
+			SetPublicContactPhone: true,
+			PublicContactPhone:    stringPointer("+55 73 99999-0001"),
+		}},
+		{name: "telefone sem país", patch: UpdatePatch{
+			SetPublicContactPhone: true,
+			PublicContactPhone:    stringPointer("73999990001"),
+		}},
+		{name: "site em http", patch: UpdatePatch{
+			SetPublicWebsiteURL: true,
+			PublicWebsiteURL:    stringPointer("http://pousada.invalid"),
+		}},
+		{name: "site sem host", patch: UpdatePatch{
+			SetPublicWebsiteURL: true,
+			PublicWebsiteURL:    stringPointer("https://"),
+		}},
+		{name: "publicar apagando o telefone", patch: UpdatePatch{
+			SetPublicListingEnabled: true,
+			PublicListingEnabled:    true,
+			SetPublicContactPhone:   true,
+			PublicContactPhone:      nil,
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			command := validUpdateCommand()
+			command.Patch = tt.patch
+			repository := &repositoryStub{}
+			_, err := NewService(repository).Update(context.Background(), command)
+			if !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("Update() error = %v, want ErrInvalidInput", err)
+			}
+			if repository.updateCalls != 0 {
+				t.Fatalf("repository calls = %d, want 0", repository.updateCalls)
+			}
+		})
+	}
+}
+
+// Despublicar é sempre aceito, inclusive apagando o contato no mesmo pedido:
+// retirar consentimento não pode depender de o resto do corpo estar completo.
+func TestServiceAcceptsWithdrawingThePublicListing(t *testing.T) {
+	t.Parallel()
+
+	command := validUpdateCommand()
+	command.Patch = UpdatePatch{
+		SetPublicListingEnabled: true,
+		PublicListingEnabled:    false,
+		SetPublicContactPhone:   true,
+		PublicContactPhone:      nil,
+	}
+	repository := &repositoryStub{}
+
+	if _, err := NewService(repository).Update(context.Background(), command); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if repository.updateCalls != 1 {
+		t.Fatalf("repository calls = %d, want 1", repository.updateCalls)
+	}
+}
+
+func TestServiceAcceptsPublishableContact(t *testing.T) {
+	t.Parallel()
+
+	command := validUpdateCommand()
+	command.Patch = UpdatePatch{
+		SetPublicListingEnabled:  true,
+		PublicListingEnabled:     true,
+		SetPublicContactPhone:    true,
+		PublicContactPhone:       stringPointer("+5573999990001"),
+		SetPublicContactWhatsApp: true,
+		PublicContactWhatsApp:    true,
+		SetPublicWebsiteURL:      true,
+		PublicWebsiteURL:         stringPointer("https://pousada.invalid/"),
+	}
+	repository := &repositoryStub{}
+
+	if _, err := NewService(repository).Update(context.Background(), command); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if repository.updateCalls != 1 {
+		t.Fatalf("repository calls = %d, want 1", repository.updateCalls)
+	}
+}

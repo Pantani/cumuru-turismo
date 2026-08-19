@@ -150,7 +150,7 @@ type CreateCalendarFeedRow struct {
 
 // A URL não aparece no RETURNING e não aparecerá: ela é segredo portador, e
 // devolvê-la transformaria a tela que qualquer operador abre num jeito de ler o
-// calendário do anúncio em outro lugar (ADR-043).
+// calendário do anúncio em outro lugar (ADR-044).
 func (q *Queries) CreateCalendarFeed(ctx context.Context, arg CreateCalendarFeedParams) (CreateCalendarFeedRow, error) {
 	row := q.db.QueryRow(ctx, createCalendarFeed,
 		arg.FeedID,
@@ -783,7 +783,7 @@ type WithdrawUnseenCalendarReservationsParams struct {
 
 // Some do feed quem foi cancelado na plataforma, e o arquivo não diz isso: diz
 // apenas que não está mais lá. Por isso a retirada alcança só a fila pendente —
-// desaparecimento nunca cancela estadia já confirmada (ADR-043).
+// desaparecimento nunca cancela estadia já confirmada (ADR-044).
 func (q *Queries) WithdrawUnseenCalendarReservations(ctx context.Context, arg WithdrawUnseenCalendarReservationsParams) error {
 	_, err := q.db.Exec(ctx, withdrawUnseenCalendarReservations, arg.WithdrawnAt, arg.FeedID, arg.CycleStartedAt)
 	return err

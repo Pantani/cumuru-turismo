@@ -39,7 +39,7 @@ tags:
     description: >
       Importação do calendário da plataforma de hospedagem. Traz datas e nunca
       identidade nem número de hóspedes, porque o arquivo não os exporta; a
-      estadia só nasce por confirmação humana (ADR-043).
+      estadia só nasce por confirmação humana (ADR-044).
   - name: privacy
     description: Exercício dos direitos do titular.
 security:
@@ -241,6 +241,45 @@ paths:
         "401":
           $ref: "#/components/responses/Problem"
         "403":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /public/accommodations:
+    get:
+      summary: Listar hospedagens publicadas
+      description: >
+        Lista aberta de hospedagens, para quem procura onde ficar. Nominal de
+        propósito e por isso fora de analytics: publica nome, categoria,
+        localidade, capacidade, telefone e site de quem pediu para ser
+        encontrado, e nada além disso. Só aparece a hospedagem ativa que
+        consentiu com a publicação; retirado o consentimento, a linha sai da
+        lista na mesma transação. Sem cursor e sem seletor: o documento é único
+        e cacheável por inteiro, e filtrar é trabalho de quem lê.
+      tags: [public]
+      security: []
+      operationId: listPublicAccommodations
+      x-cumuru-feature: core
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Lista corrente de hospedagens publicadas.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/PublicCache"
+            ETag:
+              $ref: "#/components/headers/PublicEntityTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicAccommodationDirectory"
+        "304":
+          $ref: "#/components/responses/PublicNotModified"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "503":
           $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/InternalServerProblem"
@@ -1981,7 +2020,7 @@ paths:
       description: >
         Devolve os feeds ativos e suspensos com o estado da última
         sincronização. A URL do feed nunca aparece na resposta: ela é segredo
-        portador, e quem a tem lê o calendário do anúncio inteiro (ADR-043).
+        portador, e quem a tem lê o calendário do anúncio inteiro (ADR-044).
       tags: [calendar-feeds]
       operationId: listCalendarFeeds
       x-cumuru-feature: calendar-feed
@@ -3454,6 +3493,7 @@ components:
         - name
         - category
         - status
+        - public_listing
         - version
         - created_at
         - updated_at
@@ -3487,6 +3527,8 @@ components:
         public_area_code:
           type: [string, "null"]
           maxLength: 100
+        public_listing:
+          $ref: "#/components/schemas/AccommodationPublicListing"
         version:
           type: integer
           format: int64
@@ -3497,6 +3539,81 @@ components:
         updated_at:
           type: string
           format: date-time
+    AccommodationPublicListing:
+      type: object
+      description: >
+        Consentimento vivo de publicação na lista aberta, com o contato que ele
+        autoriza. enabled falso é o estado inicial de toda hospedagem: estar
+        cadastrada não publica contato. Publicada exige telefone, e consented_at
+        guarda o instante do consentimento vigente — republicar o que já estava
+        publicado não reescreve a data, e despublicar a elimina.
+      required: [enabled, phone, whatsapp, website, consented_at]
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        phone:
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{9,14}$"
+        whatsapp:
+          type: boolean
+        website:
+          type: [string, "null"]
+          format: uri
+          maxLength: 180
+        consented_at:
+          type: [string, "null"]
+          format: date-time
+    PublicAccommodationDirectory:
+      type: object
+      required: [updated_at, count, entries]
+      additionalProperties: false
+      properties:
+        updated_at:
+          type: string
+          format: date-time
+          description: >
+            Alteração mais recente entre as hospedagens publicadas, não o
+            instante da consulta: dois pedidos iguais devolvem o mesmo documento.
+        count:
+          type: integer
+          minimum: 0
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicAccommodationEntry"
+    PublicAccommodationEntry:
+      type: object
+      required: [id, name, category, capacity, area_code, phone, whatsapp, website]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        category:
+          $ref: "#/components/schemas/AccommodationCategory"
+        capacity:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 10000
+        area_code:
+          type: [string, "null"]
+          maxLength: 100
+        phone:
+          type: string
+          description: E.164 sem separador, para virar link discável e link de WhatsApp.
+          pattern: "^\\+[1-9][0-9]{9,14}$"
+        whatsapp:
+          type: boolean
+          description: O número publicado atende por WhatsApp.
+        website:
+          type: [string, "null"]
+          format: uri
+          maxLength: 180
     AccommodationPage:
       type: object
       required: [items, next_cursor]
@@ -3526,6 +3643,21 @@ components:
         public_area_code:
           type: [string, "null"]
           maxLength: 100
+        public_listing_enabled:
+          type: boolean
+          description: >
+            Publica ou retira a hospedagem da lista aberta. Publicar sem
+            telefone — nem no corpo, nem já gravado — é recusado com 409: a
+            lista existe para o hóspede ligar.
+        public_contact_phone:
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{9,14}$"
+        public_contact_whatsapp:
+          type: boolean
+        public_website_url:
+          type: [string, "null"]
+          format: uri
+          maxLength: 180
     AccommodationAccessRequestApprovalState:
       type: string
       description: >

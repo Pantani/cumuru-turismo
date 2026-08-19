@@ -31,7 +31,7 @@ const (
 
 	// O feed é agregado próprio: a reserva importada muda de versão a cada
 	// sincronização, e pendurá-la na estadia faria a estadia versionar por
-	// causa de um arquivo remoto (ADR-043).
+	// causa de um arquivo remoto (ADR-044).
 	AggregateCalendarFeed        AggregateType = "calendar_feed"
 	AggregateCalendarReservation AggregateType = "calendar_reservation"
 )

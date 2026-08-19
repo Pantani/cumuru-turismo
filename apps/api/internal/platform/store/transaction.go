@@ -373,6 +373,11 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &postgresError) && postgresError.Code == "23505"
 }
 
+func isCheckViolation(err error) bool {
+	var postgresError *pgconn.PgError
+	return errors.As(err, &postgresError) && postgresError.Code == "23514"
+}
+
 type eventSpec struct {
 	actorType    audit.ActorType
 	actorIssuer  string

@@ -159,7 +159,7 @@ func parseCalendarDate(value string) (stay.CivilDate, error) {
 // classify never guesses beyond the two vocabularies it knows. KindUnknown is
 // the honest answer for a summary nobody wrote for us, and the queue asks the
 // lodging instead of inventing an occupancy that would reach the public
-// indicator (ADR-043).
+// indicator (ADR-044).
 func classify(summary string) ReservationKind {
 	normalized := strings.ToLower(strings.TrimSpace(summary))
 	if containsAny(normalized, blockedMarkers) {

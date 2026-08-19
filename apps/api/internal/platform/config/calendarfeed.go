@@ -7,7 +7,7 @@ import "time"
 // It is off unless declared, and off means the routes are never registered:
 // the feature makes outbound requests to hosts named by users and stores a
 // bearer URL, so a half-configured deployment must have no surface at all
-// rather than a surface that fails at the first request (ADR-043).
+// rather than a surface that fails at the first request (ADR-044).
 type CalendarFeedConfig struct {
 	Enabled bool
 	// FetchTimeout bounds one outbound request. The worker's cycle budget is

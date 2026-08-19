@@ -99,11 +99,43 @@ CREATE TABLE core.accommodations (
   capacity integer,
   public_area_code text,
   onboarding_submission_id uuid,
+  -- Lista pública de hospedagens: publicação é ato da hospedagem, não
+  -- consequência do cadastro. Nasce falsa, exige telefone e carimba o
+  -- consentimento; retirada, a linha some da lista na mesma transação.
+  public_listing_enabled boolean NOT NULL DEFAULT false,
+  public_contact_phone text,
+  public_contact_whatsapp boolean NOT NULL DEFAULT false,
+  public_website_url text,
+  public_listing_consented_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   version bigint NOT NULL DEFAULT 1,
   CONSTRAINT accommodations_capacity_positive
     CHECK (capacity IS NULL OR capacity > 0),
+  CONSTRAINT accommodations_public_phone_e164
+    CHECK (
+      public_contact_phone IS NULL
+      OR public_contact_phone ~ '^\+[1-9][0-9]{9,14}$'
+    ),
+  CONSTRAINT accommodations_public_website_https
+    CHECK (
+      public_website_url IS NULL
+      OR public_website_url ~ '^https://[^[:space:]]{4,180}$'
+    ),
+  CONSTRAINT accommodations_public_whatsapp_needs_phone
+    CHECK (public_contact_whatsapp = false OR public_contact_phone IS NOT NULL),
+  CONSTRAINT accommodations_public_listing_consistent
+    CHECK (
+      (
+        public_listing_enabled = false
+        AND public_listing_consented_at IS NULL
+      )
+      OR (
+        public_listing_enabled = true
+        AND public_contact_phone IS NOT NULL
+        AND public_listing_consented_at IS NOT NULL
+      )
+    ),
   CONSTRAINT accommodations_category_valid
     CHECK (
       category IN (
@@ -120,6 +152,10 @@ CREATE TABLE core.accommodations (
 
 CREATE INDEX accommodations_organization_idx
   ON core.accommodations (organization_id, status);
+
+CREATE INDEX accommodations_public_directory_idx
+  ON core.accommodations (name, id)
+  WHERE public_listing_enabled = true AND status = 'active';
 
 CREATE UNIQUE INDEX accommodations_onboarding_submission_idx
   ON core.accommodations (organization_id, onboarding_submission_id)
@@ -573,7 +609,7 @@ CREATE TABLE core.group_submissions (
 
 -- Origem declarada das datas de uma acomodação. A URL é segredo portador e fica
 -- cifrada em repouso; a impressão digital existe só para recusar o mesmo feed
--- cadastrado duas vezes na mesma acomodação (ADR-043).
+-- cadastrado duas vezes na mesma acomodação (ADR-044).
 CREATE TABLE core.calendar_feeds (
   id uuid PRIMARY KEY,
   accommodation_id uuid NOT NULL REFERENCES core.accommodations(id),
@@ -631,7 +667,7 @@ CREATE INDEX calendar_feeds_due_idx
 
 -- Intenção de estadia observada no calendário da plataforma. Vira core.stays
 -- só por confirmação humana, porque o arquivo não traz número de hóspedes e não
--- separa reserva de bloqueio de manutenção com confiabilidade (ADR-043).
+-- separa reserva de bloqueio de manutenção com confiabilidade (ADR-044).
 CREATE TABLE core.calendar_reservations (
   id uuid PRIMARY KEY,
   feed_id uuid NOT NULL REFERENCES core.calendar_feeds(id),

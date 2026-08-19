@@ -165,6 +165,20 @@ require_equal \
   "${fresh_versions},${fresh_mappings}" \
   "1,2" \
   "fresh questionnaire counts"
+# A lista pública mostra quem consentiu, não quem existe: o catálogo tem 16
+# hospedagens e 13 publicadas, e a diferença é o que prova que estar cadastrada
+# não publica contato.
+published_listings="$(
+  psql_migration --tuples-only --no-align --command="
+    SELECT count(*)
+    FROM core.accommodations
+    WHERE id::text LIKE '019fae11-%'
+      AND public_listing_enabled = true
+      AND public_contact_phone IS NOT NULL
+      AND public_listing_consented_at IS NOT NULL
+  "
+)"
+require_equal "${published_listings}" "13" "published directory entries"
 require_equal \
   "${fresh_responses}" \
   "${fresh_v7_responses}" \

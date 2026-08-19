@@ -21,7 +21,7 @@ type calendarReservationListResponse struct {
 
 // createCalendarFeedBody carries the address on the way in and never on the way
 // out. It is the only request body in the API that holds a bearer secret, which
-// is why the response schema has no field for it (ADR-043).
+// is why the response schema has no field for it (ADR-044).
 type createCalendarFeedBody struct {
 	Provider calendarfeed.Provider `json:"provider"`
 	Label    string                `json:"label"`

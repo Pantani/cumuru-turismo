@@ -83,7 +83,7 @@ services:
       # habilitação as seis rotas não são registradas e o worker não busca nada,
       # porque a funcionalidade faz requisição de saída para host informado por
       # usuário e guarda URL portadora — meia configuração não pode ter
-      # superfície nenhuma (ADR-043).
+      # superfície nenhuma (ADR-044).
       CALENDAR_FEED_ENABLED: "true"
       # Dois rings, e nenhum deles pode coincidir com outro: um precisa ser
       # reversível para o worker abrir a URL, o outro nunca pode ser.

@@ -62,7 +62,7 @@ function FeedRow({
 /**
  * O painel nunca mostra o endereço do calendário depois de salvo, e a API não o
  * devolve: quem tem o link lê o calendário do anúncio inteiro. O que a tela
- * mostra é o rótulo, o estado e quando foi lido pela última vez (ADR-043).
+ * mostra é o rótulo, o estado e quando foi lido pela última vez (ADR-044).
  */
 export function CalendarFeedPanel({ accommodationId }: CalendarFeedPanelProps) {
   const { coreClient: client } = useAuthSession();

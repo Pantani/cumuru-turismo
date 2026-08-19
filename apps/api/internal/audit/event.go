@@ -101,7 +101,7 @@ const (
 	// O feed de calendário é origem declarada, não estadia. Ele tem ações
 	// próprias porque cadastrar de onde vêm as datas e registrar quem esteve
 	// hospedado são fatos diferentes, e a confirmação já emite stay.created
-	// no mesmo instante (ADR-043).
+	// no mesmo instante (ADR-044).
 	ActionCalendarFeedRegistered       Action = "calendar_feed.registered"
 	ActionCalendarFeedRemoved          Action = "calendar_feed.removed"
 	ActionCalendarReservationConfirmed Action = "calendar_reservation.confirmed"

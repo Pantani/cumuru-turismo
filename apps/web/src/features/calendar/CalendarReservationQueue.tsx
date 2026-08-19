@@ -106,7 +106,7 @@ function ReservationRow({
  * O calendário nunca diz quantas pessoas vieram e nem sempre separa reserva de
  * bloqueio de manutenção. Por isso a fila pergunta em vez de decidir: confirmar
  * é o único caminho em que uma linha importada vira presença publicada
- * (ADR-043).
+ * (ADR-044).
  */
 export function CalendarReservationQueue({
   accommodationId,

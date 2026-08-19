@@ -49,7 +49,7 @@ func TestParseCalendarReadsDatesAndClassifiesTheSummary(t *testing.T) {
 }
 
 // A summary nobody wrote for us must not be guessed into occupancy: unknown is
-// what reaches the queue, and the lodging decides (ADR-043).
+// what reaches the queue, and the lodging decides (ADR-044).
 func TestParseCalendarLeavesAnUnrecognizedSummaryUnknown(t *testing.T) {
 	t.Parallel()
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { useAuthSession } from "../../shared/auth/AuthSession";
 import { AccommodationAccessPanel } from "../accommodation/AccommodationAccessPanel";
+import { PublicListingPanel } from "../accommodation/PublicListingPanel";
 import { useAccommodations } from "../accommodation/use-accommodations";
 import { ApprovalQueue } from "../approval/ApprovalQueue";
 import { CalendarFeedPanel } from "../calendar/CalendarFeedPanel";
@@ -58,7 +59,7 @@ function SelfServicePanels({ accommodation }: { accommodation: Accommodation }) 
 }
 
 export function OperatorWorkspace() {
-  const { accommodations, loading, operation, selected, setSelected } =
+  const { accommodations, load, loading, operation, selected, setSelected } =
     useAccommodations("Carregando suas hospedagens");
   // Confirmar uma reserva importada cria estadia, e o quadro carrega por estado
   // próprio: sem este contador ele mostraria a lista de antes da confirmação.
@@ -85,6 +86,11 @@ export function OperatorWorkspace() {
             onConfirmed={() => setStayReload((current) => current + 1)}
           />
           <CalendarFeedPanel accommodationId={selected.id} />
+          <PublicListingPanel
+            key={selected.id}
+            accommodation={selected}
+            onSaved={() => void load()}
+          />
           <SelfServicePanels accommodation={selected} />
         </>
       )}

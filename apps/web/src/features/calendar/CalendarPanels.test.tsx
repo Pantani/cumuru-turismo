@@ -105,7 +105,7 @@ describe("calendário da plataforma de hospedagem", () => {
 
   /**
    * O calendário não traz número de hóspedes. Se a confirmação enviasse um valor
-   * qualquer, um bloqueio de manutenção viraria presença publicada (ADR-043).
+   * qualquer, um bloqueio de manutenção viraria presença publicada (ADR-044).
    */
   it("confirma a reserva com o número de hóspedes informado por quem recebeu", async () => {
     const calls = stubApi();

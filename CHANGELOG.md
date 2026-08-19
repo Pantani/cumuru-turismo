@@ -7,6 +7,20 @@ arquivo.
 
 ### Adicionado
 
+- lista pública de hospedagens em `/hospedagens` e
+  `GET /api/v1/public/accommodations`, com nome, categoria, localidade,
+  capacidade, telefone em E.164, WhatsApp e site das hospedagens ativas que
+  consentiram em publicar; documento único, ordenado por nome, sem cursor,
+  `max-age=300` e ETag forte
+  ([ADR-043](docs/decisoes/ADR-043-lista-publica-de-hospedagens.md));
+- consentimento de publicação em `core.accommodations`
+  (`public_listing_enabled`, `public_contact_phone`, `public_contact_whatsapp`,
+  `public_website_url`, `public_listing_consented_at`), exposto no recurso da
+  acomodação como `public_listing` e editável por
+  `PATCH /accommodations/{id}`; publicar sem telefone é recusado, e despublicar
+  elimina o carimbo de consentimento;
+- painel "Aparecer na lista pública" na área da hospedagem, que publica e
+  retira o contato sob a mesma versão otimista das demais edições;
 - importação do calendário do Booking.com por iCal: a hospedagem cadastra o
   endereço `.ics` do anúncio, o worker lê a cada duas horas e as datas entram
   como reserva importada. `POST /accommodations/{accommodation_id}/calendar-feeds`,
@@ -14,7 +28,7 @@ arquivo.
   `GET /accommodations/{accommodation_id}/calendar-reservations`,
   `POST /calendar-reservations/{reservation_id}/confirm` e `/dismiss` no
   contrato, atrás de `CALENDAR_FEED_ENABLED`
-  ([ADR-043](docs/decisoes/ADR-043-importacao-de-calendario-da-plataforma-de-hospedagem.md));
+  ([ADR-044](docs/decisoes/ADR-044-importacao-de-calendario-da-plataforma-de-hospedagem.md));
 - `core.calendar_feeds` e `core.calendar_reservations` com a URL do feed cifrada
   em repouso por AES-GCM com keyring versionado, o identificador da reserva na
   origem guardado sob HMAC e nenhuma coluna de identidade — a estadia só nasce

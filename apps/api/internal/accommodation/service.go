@@ -21,20 +21,38 @@ var (
 	ErrPreconditionFailed = errors.New("precondition failed")
 	ErrUnavailable        = errors.New("repository unavailable")
 	idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
+	// O mesmo E.164 da constraint accommodations_public_phone_e164: o número
+	// vira link discável e link de WhatsApp, e nenhum dos dois aceita separador.
+	publicPhonePattern = regexp.MustCompile(`^\+[1-9][0-9]{9,14}$`)
 )
 
+const publicWebsiteMaxLength = 180
+
 type Accommodation struct {
-	ID             uuid.UUID `json:"id"`
-	OrganizationID uuid.UUID `json:"organization_id"`
-	Name           string    `json:"name"`
-	Category       Category  `json:"category"`
-	Status         Status    `json:"status"`
-	CadasturID     *string   `json:"cadastur_id,omitempty"`
-	Capacity       *int32    `json:"capacity,omitempty"`
-	PublicAreaCode *string   `json:"public_area_code,omitempty"`
-	Version        int64     `json:"version"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             uuid.UUID     `json:"id"`
+	OrganizationID uuid.UUID     `json:"organization_id"`
+	Name           string        `json:"name"`
+	Category       Category      `json:"category"`
+	Status         Status        `json:"status"`
+	CadasturID     *string       `json:"cadastur_id,omitempty"`
+	Capacity       *int32        `json:"capacity,omitempty"`
+	PublicAreaCode *string       `json:"public_area_code,omitempty"`
+	PublicListing  PublicListing `json:"public_listing"`
+	Version        int64         `json:"version"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
+}
+
+// PublicListing é o consentimento de publicação na lista aberta de hospedagens,
+// junto com o contato que ele autoriza. Fica no recurso da acomodação, e não em
+// tabela própria, porque é atributo do cadastro e não relação: quem edita a
+// acomodação é quem publica, sob a mesma versão otimista.
+type PublicListing struct {
+	Enabled     bool       `json:"enabled"`
+	Phone       *string    `json:"phone"`
+	WhatsApp    bool       `json:"whatsapp"`
+	Website     *string    `json:"website"`
+	ConsentedAt *time.Time `json:"consented_at"`
 }
 
 type Membership struct {
@@ -81,14 +99,22 @@ type PageCursor struct {
 }
 
 type UpdatePatch struct {
-	SetName           bool
-	Name              string
-	SetCategory       bool
-	Category          Category
-	SetCapacity       bool
-	Capacity          *int32
-	SetPublicAreaCode bool
-	PublicAreaCode    *string
+	SetName                  bool
+	Name                     string
+	SetCategory              bool
+	Category                 Category
+	SetCapacity              bool
+	Capacity                 *int32
+	SetPublicAreaCode        bool
+	PublicAreaCode           *string
+	SetPublicListingEnabled  bool
+	PublicListingEnabled     bool
+	SetPublicContactPhone    bool
+	PublicContactPhone       *string
+	SetPublicContactWhatsApp bool
+	PublicContactWhatsApp    bool
+	SetPublicWebsiteURL      bool
+	PublicWebsiteURL         *string
 }
 
 type CreateCommand struct {
@@ -251,7 +277,13 @@ func validUpdateIdentity(command UpdateCommand) bool {
 
 func hasAccommodationPatch(patch UpdatePatch) bool {
 	return patch.SetName || patch.SetCategory ||
-		patch.SetCapacity || patch.SetPublicAreaCode
+		patch.SetCapacity || patch.SetPublicAreaCode ||
+		hasPublicListingPatch(patch)
+}
+
+func hasPublicListingPatch(patch UpdatePatch) bool {
+	return patch.SetPublicListingEnabled || patch.SetPublicContactPhone ||
+		patch.SetPublicContactWhatsApp || patch.SetPublicWebsiteURL
 }
 
 func validRequiredTextPatch(set bool, value string, maximum int) bool {
@@ -262,7 +294,50 @@ func validOptionalFields(patch UpdatePatch) bool {
 	if !validNullableCapacity(patch.SetCapacity, patch.Capacity) {
 		return false
 	}
-	return validNullableText(patch.SetPublicAreaCode, patch.PublicAreaCode, 100)
+	if !validNullableText(patch.SetPublicAreaCode, patch.PublicAreaCode, 100) {
+		return false
+	}
+	return validPublicListingPatch(patch)
+}
+
+// Publicar sem telefone não é pedido incompleto, é pedido contraditório: a
+// lista existe para o hóspede ligar. A contradição visível no próprio corpo é
+// recusada aqui; publicar contando com telefone que a linha não tem é estado, e
+// morre na constraint.
+func validPublicListingPatch(patch UpdatePatch) bool {
+	return validPublicPhonePatch(patch) &&
+		validPublicWebsitePatch(patch) &&
+		validPublishKeepsPhone(patch)
+}
+
+func validPublishKeepsPhone(patch UpdatePatch) bool {
+	if !patch.SetPublicListingEnabled || !patch.PublicListingEnabled {
+		return true
+	}
+	return !patch.SetPublicContactPhone || patch.PublicContactPhone != nil
+}
+
+func validPublicPhonePatch(patch UpdatePatch) bool {
+	if !patch.SetPublicContactPhone || patch.PublicContactPhone == nil {
+		return true
+	}
+	return publicPhonePattern.MatchString(*patch.PublicContactPhone)
+}
+
+func validPublicWebsitePatch(patch UpdatePatch) bool {
+	if !patch.SetPublicWebsiteURL || patch.PublicWebsiteURL == nil {
+		return true
+	}
+	return validPublicWebsite(*patch.PublicWebsiteURL)
+}
+
+func validPublicWebsite(value string) bool {
+	if !validTextLength(value, publicWebsiteMaxLength) ||
+		strings.ContainsAny(value, " \t\n\r") {
+		return false
+	}
+	address, err := url.Parse(value)
+	return err == nil && address.Scheme == "https" && address.Host != ""
 }
 
 func validCreateShape(command CreateCommand) bool {

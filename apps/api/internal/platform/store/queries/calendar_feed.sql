@@ -1,7 +1,7 @@
 -- name: CreateCalendarFeed :one
 -- A URL não aparece no RETURNING e não aparecerá: ela é segredo portador, e
 -- devolvê-la transformaria a tela que qualquer operador abre num jeito de ler o
--- calendário do anúncio em outro lugar (ADR-043).
+-- calendário do anúncio em outro lugar (ADR-044).
 INSERT INTO core.calendar_feeds (
   id,
   accommodation_id,
@@ -216,7 +216,7 @@ WHERE reservation.feed_id = sqlc.arg(feed_id)
 -- name: WithdrawUnseenCalendarReservations :exec
 -- Some do feed quem foi cancelado na plataforma, e o arquivo não diz isso: diz
 -- apenas que não está mais lá. Por isso a retirada alcança só a fila pendente —
--- desaparecimento nunca cancela estadia já confirmada (ADR-043).
+-- desaparecimento nunca cancela estadia já confirmada (ADR-044).
 UPDATE core.calendar_reservations AS reservation
 SET
   state = 'withdrawn',

@@ -12,7 +12,7 @@
 // with any reliability. So the import produces an observation, never a stay:
 // the lodging confirms the dates, states how many people came, and only then
 // does core.stays exist. Anything else would let a maintenance block reach the
-// published presence indicator (ADR-043).
+// published presence indicator (ADR-044).
 package calendarfeed
 
 import (

@@ -22,7 +22,7 @@ type Keyring struct {
 
 // SealedURL is the feed address at rest. The address is a bearer secret —
 // whoever holds it reads the whole listing calendar — so it is stored sealed
-// and never returned by the API (ADR-043).
+// and never returned by the API (ADR-044).
 type SealedURL struct {
 	Ciphertext []byte
 	Nonce      []byte

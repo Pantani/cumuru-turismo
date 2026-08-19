@@ -4,7 +4,7 @@
 -- de hóspedes nem a diferença confiável entre reserva e bloqueio de manutenção,
 -- e é por isso que o calendário importado mora em tabela própria: `core.stays`
 -- alimenta a presença publicada, e bloqueio de manutenção importado como estadia
--- inflaria o indicador público (ADR-043).
+-- inflaria o indicador público (ADR-044).
 BEGIN;
 
 CREATE TABLE core.calendar_feeds (
@@ -112,7 +112,7 @@ CREATE TABLE core.calendar_reservations (
     CHECK ((state = 'confirmed') = (stay_id IS NOT NULL)),
   -- Só o que ainda estava na fila pode ser retirado por sumiço. Reserva
   -- cancelada some do feed sem dizer que foi cancelada, então desaparecimento
-  -- nunca cancela estadia já confirmada (ADR-043).
+  -- nunca cancela estadia já confirmada (ADR-044).
   CONSTRAINT calendar_reservations_withdrawal_valid
     CHECK ((state = 'withdrawn') = (withdrawn_at IS NOT NULL)),
   CONSTRAINT calendar_reservations_seen_order_valid

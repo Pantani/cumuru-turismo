@@ -34,7 +34,7 @@ type Observed struct {
 // complete picture the origin shows, and everything pending that is absent from
 // it is withdrawn from the queue — while nothing confirmed is touched, because a
 // booking cancelled on the platform simply stops appearing, and that is not the
-// same statement as "the stay did not happen" (ADR-043).
+// same statement as "the stay did not happen" (ADR-044).
 //
 // On any other outcome Observed is empty and means "unknown", not "none": the
 // queue is left exactly as it was, and only the feed's own failure fields move.

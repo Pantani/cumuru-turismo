@@ -27,10 +27,14 @@ type createAccommodationRequest struct {
 }
 
 type updateAccommodationRequest struct {
-	Name           requiredPatch[string]                 `json:"name"`
-	Category       requiredPatch[accommodation.Category] `json:"category"`
-	Capacity       nullableInt32                         `json:"capacity"`
-	PublicAreaCode nullableString                        `json:"public_area_code"`
+	Name                  requiredPatch[string]                 `json:"name"`
+	Category              requiredPatch[accommodation.Category] `json:"category"`
+	Capacity              nullableInt32                         `json:"capacity"`
+	PublicAreaCode        nullableString                        `json:"public_area_code"`
+	PublicListingEnabled  requiredPatch[bool]                   `json:"public_listing_enabled"`
+	PublicContactPhone    nullableString                        `json:"public_contact_phone"`
+	PublicContactWhatsApp requiredPatch[bool]                   `json:"public_contact_whatsapp"`
+	PublicWebsiteURL      nullableString                        `json:"public_website_url"`
 }
 
 type createMembershipRequest struct {
@@ -265,6 +269,14 @@ func accommodationPatch(body updateAccommodationRequest) accommodation.UpdatePat
 		SetCategory: body.Category.Set, Category: body.Category.Value,
 		SetCapacity: body.Capacity.Set, Capacity: body.Capacity.Value,
 		SetPublicAreaCode: body.PublicAreaCode.Set, PublicAreaCode: body.PublicAreaCode.Value,
+		SetPublicListingEnabled:  body.PublicListingEnabled.Set,
+		PublicListingEnabled:     body.PublicListingEnabled.Value,
+		SetPublicContactPhone:    body.PublicContactPhone.Set,
+		PublicContactPhone:       body.PublicContactPhone.Value,
+		SetPublicContactWhatsApp: body.PublicContactWhatsApp.Set,
+		PublicContactWhatsApp:    body.PublicContactWhatsApp.Value,
+		SetPublicWebsiteURL:      body.PublicWebsiteURL.Set,
+		PublicWebsiteURL:         body.PublicWebsiteURL.Value,
 	}
 }
 
