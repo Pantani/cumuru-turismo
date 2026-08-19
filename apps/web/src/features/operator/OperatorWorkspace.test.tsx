@@ -33,6 +33,13 @@ function accommodation(overrides: Record<string, unknown> = {}) {
     category: "formal_lodging",
     status: "active",
     capacity: 12,
+    public_listing: {
+      enabled: false,
+      phone: null,
+      whatsapp: false,
+      website: null,
+      consented_at: null,
+    },
     version: 1,
     created_at: "2026-08-01T00:00:00Z",
     updated_at: "2026-08-01T00:00:00Z",
@@ -182,6 +189,62 @@ describe("área da hospedagem", () => {
 
     await screen.findByRole("button", { name: /Pousada Farol Fictícia/ });
     expect(screen.queryByRole("button", { name: /Cadastrar/ })).toBeNull();
+  });
+
+  /**
+   * Publicar é ato da hospedagem: o painel escreve o mesmo `PATCH` das demais
+   * edições, e lê a versão corrente na hora de salvar porque os painéis
+   * vizinhos escrevem na mesma linha.
+   */
+  it("publica o contato lendo a versão corrente antes de escrever", async () => {
+    const user = userEvent.setup();
+    const calls = stubApi({
+      onRequest: (input) => {
+        if (input.method === "PATCH") {
+          return apiResponse(accommodation({ version: 2 }), {
+            headers: { ETag: '"2"' },
+          });
+        }
+        return new URL(input.url).pathname.endsWith(accommodationId)
+          ? apiResponse(accommodation(), { headers: { ETag: '"1"' } })
+          : undefined;
+      },
+    });
+    renderWithSession(<OperatorWorkspace />);
+
+    await screen.findByRole("heading", { name: "Aparecer na lista pública" });
+    await user.type(
+      screen.getByLabelText("Telefone com país e DDD"),
+      "+5573999990001",
+    );
+    await user.click(
+      screen.getByLabelText("Publicar minha hospedagem na lista"),
+    );
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === "PATCH")).toBe(true);
+    });
+    const patch = calls.find((call) => call.method === "PATCH");
+    expect(patch?.headers.get("If-Match")).toBe('"1"');
+  });
+
+  // O 409 do banco custa uma ida ao servidor para dizer o que a tela já sabe.
+  it("recusa publicar sem telefone antes de chamar o servidor", async () => {
+    const user = userEvent.setup();
+    const calls = stubApi({});
+    renderWithSession(<OperatorWorkspace />);
+
+    await screen.findByRole("heading", { name: "Aparecer na lista pública" });
+    await user.click(
+      screen.getByLabelText("Publicar minha hospedagem na lista"),
+    );
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /informe o telefone/u,
+    );
+    expect(calls.some((call) => call.method === "PATCH")).toBe(false);
   });
 
   it("oferece só as transições que o servidor aceita para o estado", async () => {

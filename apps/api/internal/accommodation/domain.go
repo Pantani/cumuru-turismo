@@ -42,6 +42,13 @@ func (c Category) ValidInput() bool {
 	}
 }
 
+// Valid aceita também unclassified, que ValidInput recusa: o vocabulário de
+// entrada é menor que o de armazenamento, porque unclassified é estado de linha
+// herdada e nunca escolha de quem cadastra.
+func (c Category) Valid() bool {
+	return c.ValidInput() || c == CategoryUnclassified
+}
+
 type Operation string
 
 const (

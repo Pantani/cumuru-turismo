@@ -7,6 +7,20 @@ arquivo.
 
 ### Adicionado
 
+- lista pública de hospedagens em `/hospedagens` e
+  `GET /api/v1/public/accommodations`, com nome, categoria, localidade,
+  capacidade, telefone em E.164, WhatsApp e site das hospedagens ativas que
+  consentiram em publicar; documento único, ordenado por nome, sem cursor,
+  `max-age=300` e ETag forte
+  ([ADR-043](docs/decisoes/ADR-043-lista-publica-de-hospedagens.md));
+- consentimento de publicação em `core.accommodations`
+  (`public_listing_enabled`, `public_contact_phone`, `public_contact_whatsapp`,
+  `public_website_url`, `public_listing_consented_at`), exposto no recurso da
+  acomodação como `public_listing` e editável por
+  `PATCH /accommodations/{id}`; publicar sem telefone é recusado, e despublicar
+  elimina o carimbo de consentimento;
+- painel "Aparecer na lista pública" na área da hospedagem, que publica e
+  retira o contato sob a mesma versão otimista das demais edições;
 - autenticação local por e-mail e senha com Argon2id, sessão opaca, bloqueio
   por tentativas e `POST /auth/login`, `POST /auth/logout` e `GET /auth/session`
   no contrato, permitindo entrar sem CNPJ, Cadastur ou chave federal

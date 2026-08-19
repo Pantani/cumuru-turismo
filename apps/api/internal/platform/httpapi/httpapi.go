@@ -17,6 +17,7 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
 	"github.com/Pantani/cumuru/apps/api/internal/activation"
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
+	"github.com/Pantani/cumuru/apps/api/internal/directory"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/idempotency"
 	"github.com/Pantani/cumuru/apps/api/internal/questionnaire"
@@ -69,6 +70,7 @@ type Dependencies struct {
 	Activation                     *activation.Service
 	Questionnaires                 *questionnaire.Service
 	PublicAnalytics                analytics.PublicReader
+	PublicDirectory                directory.PublicReader
 	AnalyticsQuality               analytics.QualityReader
 	CORSAllowedOrigins             []string
 	TrustedProxyCIDRs              []netip.Prefix
@@ -182,17 +184,27 @@ func (d Dependencies) registerFeatureRoutes(mux *http.ServeMux, metrics *httpMet
 	d.registerAnalyticsRoutes(mux, metrics)
 }
 
+type openChannelSurface struct {
+	present  bool
+	register func(*http.ServeMux, *httpMetrics)
+}
+
 // The open channel is registered only when the feature is on, so a disabled feature
 // answers 404 instead of exposing a half-configured route.
 func (d Dependencies) registerOpenChannelRoutes(mux *http.ServeMux, metrics *httpMetrics) {
-	if d.Stays != nil && d.SelfServiceEnabled {
-		d.registerSelfServiceRoutes(mux, metrics)
+	for _, surface := range d.openChannelSurfaces() {
+		if surface.present {
+			surface.register(mux, metrics)
+		}
 	}
-	if d.Activation != nil {
-		d.registerActivationRoutes(mux, metrics)
-	}
-	if d.AccessRequests != nil {
-		d.registerAccessRequestRoutes(mux, metrics)
+}
+
+func (d Dependencies) openChannelSurfaces() []openChannelSurface {
+	return []openChannelSurface{
+		{d.Stays != nil && d.SelfServiceEnabled, d.registerSelfServiceRoutes},
+		{d.Activation != nil, d.registerActivationRoutes},
+		{d.AccessRequests != nil, d.registerAccessRequestRoutes},
+		{d.PublicDirectory != nil, d.registerDirectoryRoutes},
 	}
 }
 

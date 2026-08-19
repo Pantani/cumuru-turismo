@@ -11,6 +11,7 @@ export const messagesEs: Messages = {
   "app.nav.workspace": "Área del alojamiento",
   "app.nav.administration": "Administración",
   "app.nav.questionnaires": "Cuestionarios",
+  "app.nav.directory": "Dónde quedarse",
   "app.nav.quality": "Calidad",
   "app.nav.aria": "Navegación principal",
   "app.skipLink": "Ir al contenido",
@@ -39,6 +40,7 @@ export const messagesEs: Messages = {
   "app.title.workspace": "Área del alojamiento",
   "app.title.questionnaires": "Cuestionarios",
   "app.title.quality": "Calidad de los datos",
+  "app.title.directory": "Alojamientos de Cumuruxatiba",
   "app.title.notFound": "Página no encontrada",
 
   // ------------------------------------------------------- Landing: seções
@@ -655,4 +657,33 @@ export const messagesEs: Messages = {
   "visitor.residenceCountry": "País de residencia del visitante {number}",
   "visitor.remove": "Eliminar visitante {number}",
   "visitor.add": "Añadir visitante",
+  // -------------------------------------- Lista pública de alojamientos
+  "directory.eyebrow": "Dónde quedarse",
+  "directory.pageTitle": "Alojamientos de Cumuruxatiba",
+  "directory.intro":
+    "Lista de los alojamientos que pidieron aparecer aquí. Cada uno eligió publicar su propio contacto; el Observatorio no intermedia reservas ni cobra comisión.",
+  "directory.loading": "Cargando la lista…",
+  "directory.failed":
+    "No fue posible cargar la lista ahora. Inténtalo de nuevo en unos minutos.",
+  "directory.empty":
+    "Ningún alojamiento publicó su contacto todavía. Si alojas en Cumuruxatiba, pide tu acceso y publica el tuyo.",
+  "directory.noMatches": "Ningún alojamiento coincide con este filtro.",
+  "directory.count": "{count} alojamientos publicados",
+  "directory.countOne": "1 alojamiento publicado",
+  "directory.updatedAt": "Actualizada el {date}",
+  "directory.search.label": "Buscar por nombre o localidad",
+  "directory.search.placeholder": "Ej.: posada, playa del norte",
+  "directory.filter.label": "Tipo de alojamiento",
+  "directory.filter.all": "Todos los tipos",
+  "directory.card.capacity": "Hasta {count} personas",
+  "directory.card.call": "Llamar a {name}",
+  "directory.card.whatsapp": "WhatsApp de {name}",
+  "directory.card.website": "Sitio de {name}",
+  "directory.card.websiteLabel": "Sitio",
+  "directory.category.unclassified": "Sin clasificar",
+  "directory.publish.title": "¿Alojas y quieres aparecer aquí?",
+  "directory.publish.body":
+    "Pide tu acceso, entra en el área del alojamiento y publica el teléfono cuando quieras. Puedes retirarlo en cualquier momento.",
+  "directory.publish.action": "Pedir acceso",
+
 };

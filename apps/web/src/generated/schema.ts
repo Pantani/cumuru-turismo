@@ -132,6 +132,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/accommodations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar hospedagens publicadas
+         * @description Lista aberta de hospedagens, para quem procura onde ficar. Nominal de propósito e por isso fora de analytics: publica nome, categoria, localidade, capacidade, telefone e site de quem pediu para ser encontrado, e nada além disso. Só aparece a hospedagem ativa que consentiu com a publicação; retirado o consentimento, a linha sai da lista na mesma transação. Sem cursor e sem seletor: o documento é único e cacheável por inteiro, e filtrar é trabalho de quem lê.
+         */
+        get: operations["listPublicAccommodations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/summary": {
         parameters: {
             query?: never;
@@ -1035,12 +1055,46 @@ export interface components {
             readonly cadastur_id?: string | null;
             capacity?: number | null;
             public_area_code?: string | null;
+            public_listing: components["schemas"]["AccommodationPublicListing"];
             /** Format: int64 */
             version: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description Consentimento vivo de publicação na lista aberta, com o contato que ele autoriza. enabled falso é o estado inicial de toda hospedagem: estar cadastrada não publica contato. Publicada exige telefone, e consented_at guarda o instante do consentimento vigente — republicar o que já estava publicado não reescreve a data, e despublicar a elimina. */
+        AccommodationPublicListing: {
+            enabled: boolean;
+            phone: string | null;
+            whatsapp: boolean;
+            /** Format: uri */
+            website: string | null;
+            /** Format: date-time */
+            consented_at: string | null;
+        };
+        PublicAccommodationDirectory: {
+            /**
+             * Format: date-time
+             * @description Alteração mais recente entre as hospedagens publicadas, não o instante da consulta: dois pedidos iguais devolvem o mesmo documento.
+             */
+            updated_at: string;
+            count: number;
+            entries: components["schemas"]["PublicAccommodationEntry"][];
+        };
+        PublicAccommodationEntry: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            category: components["schemas"]["AccommodationCategory"];
+            capacity: number | null;
+            area_code: string | null;
+            /** @description E.164 sem separador, para virar link discável e link de WhatsApp. */
+            phone: string;
+            /** @description O número publicado atende por WhatsApp. */
+            whatsapp: boolean;
+            /** Format: uri */
+            website: string | null;
         };
         AccommodationPage: {
             items: components["schemas"]["Accommodation"][];
@@ -1051,6 +1105,12 @@ export interface components {
             category?: components["schemas"]["AccommodationInputCategory"];
             capacity?: number | null;
             public_area_code?: string | null;
+            /** @description Publica ou retira a hospedagem da lista aberta. Publicar sem telefone — nem no corpo, nem já gravado — é recusado com 409: a lista existe para o hóspede ligar. */
+            public_listing_enabled?: boolean;
+            public_contact_phone?: string | null;
+            public_contact_whatsapp?: boolean;
+            /** Format: uri */
+            public_website_url?: string | null;
         };
         /**
          * @description expired é o pedido que ninguém leu dentro do prazo, e não uma decisão: não tem decisor nem motivo. Vale igualmente para o recurso e para o filtro da fila, de propósito — um estado que a listagem não sabe pedir vira registro que a tela não sabe explicar.
@@ -2284,6 +2344,35 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             500: components["responses"]["InternalServerProblem"];
+        };
+    };
+    listPublicAccommodations: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lista corrente de hospedagens publicadas. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["PublicCache"];
+                    ETag: components["headers"]["PublicEntityTag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicAccommodationDirectory"];
+                };
+            };
+            304: components["responses"]["PublicNotModified"];
+            400: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     getPublicSummary: {

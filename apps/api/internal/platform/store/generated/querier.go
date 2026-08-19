@@ -206,6 +206,13 @@ type Querier interface {
 	// que o diff apague o que existia.
 	ListPresenceReconciliationStays(ctx context.Context) ([]ListPresenceReconciliationStaysRow, error)
 	ListPresenceSourceStays(ctx context.Context) ([]ListPresenceSourceStaysRow, error)
+	// Lista pública de hospedagens. O filtro está aqui, e não no chamador: a rota
+	// é aberta, e uma consulta que dependesse do handler para recortar publicaria
+	// o cadastro inteiro no primeiro erro de quem a chamasse. Sem paginação por
+	// cursor de propósito — a lista é municipal e cabe num documento só, cacheável
+	// por inteiro; o limite acima do teto existe para a leitura recusar em vez de
+	// truncar em silêncio.
+	ListPublicAccommodationDirectory(ctx context.Context, pageLimit int32) ([]ListPublicAccommodationDirectoryRow, error)
 	ListQuestionOptionsForVersion(ctx context.Context, questionnaireVersionID pgtype.UUID) ([]SurveyQuestionOption, error)
 	ListQuestionnaireVersions(ctx context.Context, arg ListQuestionnaireVersionsParams) ([]ListQuestionnaireVersionsRow, error)
 	ListQuestionnaires(ctx context.Context, arg ListQuestionnairesParams) ([]SurveyQuestionnaire, error)

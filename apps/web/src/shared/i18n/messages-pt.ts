@@ -16,6 +16,7 @@ export const messagesPt = {
   "app.nav.workspace": "Área da hospedagem",
   "app.nav.administration": "Administração",
   "app.nav.questionnaires": "Questionários",
+  "app.nav.directory": "Onde ficar",
   "app.nav.quality": "Qualidade",
   "app.nav.aria": "Navegação principal",
   "app.skipLink": "Ir para o conteúdo",
@@ -44,6 +45,7 @@ export const messagesPt = {
   "app.title.workspace": "Área da hospedagem",
   "app.title.questionnaires": "Questionários",
   "app.title.quality": "Qualidade dos dados",
+  "app.title.directory": "Hospedagens de Cumuruxatiba",
   "app.title.notFound": "Página não encontrada",
 
   // ------------------------------------------------------- Landing: seções
@@ -652,6 +654,35 @@ export const messagesPt = {
   "visitor.residenceCountry": "País de residência do visitante {number}",
   "visitor.remove": "Remover visitante {number}",
   "visitor.add": "Adicionar visitante",
+  // --------------------------------------- Lista pública de hospedagens
+  "directory.eyebrow": "Onde ficar",
+  "directory.pageTitle": "Hospedagens de Cumuruxatiba",
+  "directory.intro":
+    "Lista das hospedagens que pediram para aparecer aqui. Cada uma escolheu publicar o próprio contato; o Observatório não intermedeia reserva nem cobra comissão.",
+  "directory.loading": "Carregando a lista…",
+  "directory.failed":
+    "Não foi possível carregar a lista agora. Tente de novo em alguns minutos.",
+  "directory.empty":
+    "Nenhuma hospedagem publicou o contato ainda. Se você hospeda em Cumuruxatiba, peça seu acesso e publique o seu.",
+  "directory.noMatches": "Nenhuma hospedagem encontrada com esse filtro.",
+  "directory.count": "{count} hospedagens publicadas",
+  "directory.countOne": "1 hospedagem publicada",
+  "directory.updatedAt": "Atualizada em {date}",
+  "directory.search.label": "Buscar por nome ou localidade",
+  "directory.search.placeholder": "Ex.: pousada, praia do norte",
+  "directory.filter.label": "Tipo de hospedagem",
+  "directory.filter.all": "Todos os tipos",
+  "directory.card.capacity": "Até {count} pessoas",
+  "directory.card.call": "Ligar para {name}",
+  "directory.card.whatsapp": "WhatsApp de {name}",
+  "directory.card.website": "Site de {name}",
+  "directory.card.websiteLabel": "Site",
+  "directory.category.unclassified": "Não classificada",
+  "directory.publish.title": "Você hospeda e quer aparecer aqui?",
+  "directory.publish.body":
+    "Peça seu acesso, entre na área da hospedagem e publique o telefone quando quiser. Você pode retirar a publicação a qualquer momento.",
+  "directory.publish.action": "Pedir acesso",
+
 } as const;
 
 export type MessageKey = keyof typeof messagesPt;

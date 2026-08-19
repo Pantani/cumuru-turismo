@@ -229,7 +229,12 @@ INSERT INTO core.accommodations (
   status,
   cadastur_id,
   capacity,
-  public_area_code
+  public_area_code,
+  public_listing_enabled,
+  public_contact_phone,
+  public_contact_whatsapp,
+  public_website_url,
+  public_listing_consented_at
 )
 VALUES (
   $1,
@@ -239,19 +244,31 @@ VALUES (
   'active',
   $5,
   $6,
-  $7
+  $7,
+  $8::text IS NOT NULL,
+  $8,
+  $9,
+  $10,
+  CASE
+    WHEN $8::text IS NULL THEN NULL
+    ELSE $11::timestamptz
+  END
 )
 ON CONFLICT DO NOTHING
 `
 
 type InsertLocalDemoAccommodationParams struct {
-	ID             pgtype.UUID `json:"id"`
-	OrganizationID pgtype.UUID `json:"organization_id"`
-	Name           string      `json:"name"`
-	Category       string      `json:"category"`
-	CadasturID     *string     `json:"cadastur_id"`
-	Capacity       *int32      `json:"capacity"`
-	PublicAreaCode *string     `json:"public_area_code"`
+	ID                    pgtype.UUID        `json:"id"`
+	OrganizationID        pgtype.UUID        `json:"organization_id"`
+	Name                  string             `json:"name"`
+	Category              string             `json:"category"`
+	CadasturID            *string            `json:"cadastur_id"`
+	Capacity              *int32             `json:"capacity"`
+	PublicAreaCode        *string            `json:"public_area_code"`
+	PublicContactPhone    *string            `json:"public_contact_phone"`
+	PublicContactWhatsapp bool               `json:"public_contact_whatsapp"`
+	PublicWebsiteUrl      *string            `json:"public_website_url"`
+	ConsentedAt           pgtype.Timestamptz `json:"consented_at"`
 }
 
 func (q *Queries) InsertLocalDemoAccommodation(ctx context.Context, arg InsertLocalDemoAccommodationParams) error {
@@ -263,6 +280,10 @@ func (q *Queries) InsertLocalDemoAccommodation(ctx context.Context, arg InsertLo
 		arg.CadasturID,
 		arg.Capacity,
 		arg.PublicAreaCode,
+		arg.PublicContactPhone,
+		arg.PublicContactWhatsapp,
+		arg.PublicWebsiteUrl,
+		arg.ConsentedAt,
 	)
 	return err
 }

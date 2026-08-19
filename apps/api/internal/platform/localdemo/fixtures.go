@@ -118,21 +118,23 @@ func accountFixture(lookup func(string) (string, bool)) (store.LocalDemoAccount,
 // would render as unavailable no matter how much history it had.
 func localAccommodations(fakeCadastur *string) []store.LocalDemoAccommodation {
 	return []store.LocalDemoAccommodation{
-		localAccommodation(1, "Pousada Farol Fictícia", "formal_lodging", 24, fakeCadastur),
-		localAccommodation(2, "Hospedaria Rio Fictícia", "formal_lodging", 18, nil),
-		localAccommodation(3, "Chalés Areia Fictícios", "seasonal_rental", 16, nil),
-		localAccommodation(4, "Casa Silenciosa Fictícia", "family_hosting", 8, nil),
-		localAccommodation(5, "Pousada Vento Sul Fictícia", "formal_lodging", 30, nil),
-		localAccommodation(6, "Camping Ondas Fictício", "camping", 40, nil),
-		localAccommodation(7, "Kitnets Maré Fictícias", "seasonal_rental", 12, nil),
+		published(localAccommodation(1, "Pousada Farol Fictícia", "formal_lodging", 24, fakeCadastur), 1, true, "https://pousada-farol.invalid/"),
+		published(localAccommodation(2, "Hospedaria Rio Fictícia", "formal_lodging", 18, nil), 2, true, ""),
+		published(localAccommodation(3, "Chalés Areia Fictícios", "seasonal_rental", 16, nil), 3, true, "https://chales-areia.invalid/"),
+		published(localAccommodation(4, "Casa Silenciosa Fictícia", "family_hosting", 8, nil), 4, false, ""),
+		published(localAccommodation(5, "Pousada Vento Sul Fictícia", "formal_lodging", 30, nil), 5, true, ""),
+		published(localAccommodation(6, "Camping Ondas Fictício", "camping", 40, nil), 6, true, "https://camping-ondas.invalid/"),
+		published(localAccommodation(7, "Kitnets Maré Fictícias", "seasonal_rental", 12, nil), 7, false, ""),
+		// Cadastradas e não publicadas de propósito: a lista aberta mostra quem
+		// consentiu, não quem existe.
 		localAccommodation(8, "Quintal da Vovó Fictício", "family_hosting", 6, nil),
-		localAccommodation(9, "Pousada Mirante Fictícia", "formal_lodging", 22, nil),
+		published(localAccommodation(9, "Pousada Mirante Fictícia", "formal_lodging", 22, nil), 9, true, ""),
 		localAccommodation(10, "Recanto Regularizando Fictício", "regularizing", 10, nil),
-		localAccommodation(11, "Camping Rio das Ostras Fictício", "camping", 28, nil),
-		localAccommodation(12, "Camping Barra Fictício", "camping", 34, nil),
-		localAccommodation(13, "Flats Coqueiral Fictícios", "seasonal_rental", 14, nil),
-		localAccommodation(14, "Casa da Ponte Fictícia", "family_hosting", 5, nil),
-		localAccommodation(15, "Sítio em Regularização Fictício", "regularizing", 12, nil),
+		published(localAccommodation(11, "Camping Rio das Ostras Fictício", "camping", 28, nil), 11, true, ""),
+		published(localAccommodation(12, "Camping Barra Fictício", "camping", 34, nil), 12, false, ""),
+		published(localAccommodation(13, "Flats Coqueiral Fictícios", "seasonal_rental", 14, nil), 13, true, ""),
+		published(localAccommodation(14, "Casa da Ponte Fictícia", "family_hosting", 5, nil), 14, true, ""),
+		published(localAccommodation(15, "Sítio em Regularização Fictício", "regularizing", 12, nil), 15, false, ""),
 		localAccommodation(16, "Chácara Regularizando Fictícia", "regularizing", 9, nil),
 	}
 }
@@ -152,6 +154,24 @@ func localAccommodation(
 		Capacity:       capacity,
 		PublicAreaCode: "cumuruxatiba",
 	}
+}
+
+// Telefone fictício em E.164, derivado do índice do próprio fixture: nenhum
+// número real da região entra aqui, porque o fixture roda na máquina de
+// qualquer pessoa e o telefone publicado vira link discável.
+func published(
+	accommodation store.LocalDemoAccommodation,
+	index int,
+	whatsapp bool,
+	website string,
+) store.LocalDemoAccommodation {
+	phone := fmt.Sprintf("+557399999%04d", index)
+	accommodation.PublicPhone = &phone
+	accommodation.PublicWhatsApp = whatsapp
+	if website != "" {
+		accommodation.PublicWebsite = &website
+	}
+	return accommodation
 }
 
 func questionnaireDefinition() questionnaire.Definition {

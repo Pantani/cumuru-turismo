@@ -14,6 +14,7 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
 	"github.com/Pantani/cumuru/apps/api/internal/activation"
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
+	"github.com/Pantani/cumuru/apps/api/internal/directory"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/database"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/httpapi"
@@ -107,10 +108,15 @@ func apiHandlers(
 	if err != nil {
 		return nil, nil, errors.New("access request repository initialization failed")
 	}
+	// A lista pública de hospedagens não tem chave própria nem pool próprio: é
+	// leitura do mesmo cadastro, recortada na consulta, e por isso sobe junto
+	// com a acomodação em vez de atrás de um flag que poderia deixar o hóspede
+	// sem lista numa stack que tem hospedagem publicada.
+	publicDirectory := store.NewAccommodationDirectoryRepository(platformStore)
 	return httpapi.New(apiDependencies(
 		cfg, build, logger, tracing, verifier,
 		platformStore, accommodationService, stayService, questionnaireService,
-		publicAnalytics, analyticsQuality, activations, accessRequests,
+		publicAnalytics, publicDirectory, analyticsQuality, activations, accessRequests,
 	))
 }
 
@@ -163,6 +169,7 @@ func apiDependencies(
 	stayService *stay.Service,
 	questionnaireService *questionnaire.Service,
 	publicAnalytics analytics.PublicReader,
+	publicDirectory directory.PublicReader,
 	analyticsQuality analytics.QualityReader,
 	activationService *activation.Service,
 	accessRequestService *accessrequest.Service,
@@ -180,6 +187,7 @@ func apiDependencies(
 		Activation:                     activationService,
 		Questionnaires:                 questionnaireService,
 		PublicAnalytics:                publicAnalytics,
+		PublicDirectory:                publicDirectory,
 		AnalyticsQuality:               analyticsQuality,
 		CORSAllowedOrigins:             cfg.Core.CORSAllowedOrigins,
 		TrustedProxyCIDRs:              cfg.TrustedProxyCIDRs,

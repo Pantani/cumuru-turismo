@@ -22,6 +22,13 @@ type LocalDemoAccommodation struct {
 	CadasturID     *string
 	Capacity       int32
 	PublicAreaCode string
+	// Contato publicado na lista aberta. Nulo é a hospedagem que existe no
+	// cadastro e não quis aparecer: sem ela o fixture mostraria uma lista em
+	// que estar cadastrado e estar publicado são a mesma coisa, que é
+	// exatamente o que o consentimento separa.
+	PublicPhone    *string
+	PublicWhatsApp bool
+	PublicWebsite  *string
 }
 
 type LocalDemoFoundation struct {
@@ -411,6 +418,7 @@ func insertLocalAccommodation(
 	organizationID uuid.UUID,
 	accommodation LocalDemoAccommodation,
 ) error {
+	consentedAt := time.Now().UTC()
 	if err := q.InsertLocalDemoAccommodation(
 		ctx,
 		generated.InsertLocalDemoAccommodationParams{
@@ -421,6 +429,12 @@ func insertLocalAccommodation(
 			CadasturID:     accommodation.CadasturID,
 			Capacity:       &accommodation.Capacity,
 			PublicAreaCode: &accommodation.PublicAreaCode,
+			// O carimbo acompanha o telefone: a constraint recusa publicação
+			// sem consentimento e consentimento sem publicação.
+			PublicContactPhone:    accommodation.PublicPhone,
+			PublicContactWhatsapp: accommodation.PublicWhatsApp,
+			PublicWebsiteUrl:      accommodation.PublicWebsite,
+			ConsentedAt:           pgTime(consentedAt),
 		},
 	); err != nil {
 		return ErrUnavailable
