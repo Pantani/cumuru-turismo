@@ -2236,11 +2236,17 @@ export interface components {
             revoked: number;
             median_hours_to_submit?: number;
         };
+        /**
+         * @description Concluída é a capability consumida, seja a participação resposta ou
+         *     recusa explícita. O funil não separa as duas porque a API grava em
+         *     `survey.responses` e não lê de volta — privilégio deliberado, não
+         *     lacuna: só o worker enxerga a participação.
+         */
         SurveyFunnel: {
             issued: number;
-            answered: number;
-            declined: number;
+            completed: number;
             expired_unanswered: number;
+            revoked: number;
             median_hours_to_answer?: number;
         };
         SelfRegistrationFunnel: {

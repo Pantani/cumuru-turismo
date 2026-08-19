@@ -98,8 +98,10 @@ function funnelRows(funnel: Schemas["AdoptionFunnel"]) {
     {
       stage: "Pesquisa",
       offered: funnel.survey.issued,
-      completed: funnel.survey.answered,
-      lost: funnel.survey.expired_unanswered,
+      // Concluída é a capability consumida — resposta ou recusa explícita. A
+      // API não enxerga a participação, então a separação não existe aqui.
+      completed: funnel.survey.completed,
+      lost: funnel.survey.expired_unanswered + funnel.survey.revoked,
       median: funnel.survey.median_hours_to_answer,
     },
     {
@@ -166,8 +168,9 @@ function AdoptionFunnelSection({ client }: AnalyticsQualityProps) {
     <section className="analytics-section" aria-labelledby="funnel-title">
       <h3 id="funnel-title">Funil de adesão nos últimos 30 dias</h3>
       <p>
-        Contagens de estados já registrados. A pesquisa recusada explicitamente
-        conta como resposta, não como perda.
+        Contagens de estados já registrados. Na pesquisa, concluída é a
+        capability consumida: quem respondeu e quem recusou explicitamente
+        contam juntos, porque a API grava a resposta e não a lê de volta.
       </p>
       <FunnelTable funnel={funnel.data.data} />
     </section>

@@ -262,9 +262,9 @@ const isInviteFunnel = objectValidator(
 const isSurveyFunnel = objectValidator(
   {
     issued: isFunnelCount,
-    answered: isFunnelCount,
-    declined: isFunnelCount,
+    completed: isFunnelCount,
     expired_unanswered: isFunnelCount,
+    revoked: isFunnelCount,
   },
   { median_hours_to_answer: isFunnelCount },
 );

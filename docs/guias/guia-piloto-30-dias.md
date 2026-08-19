@@ -77,7 +77,7 @@ Três avisos sobre como ler:
 
 - **"Mediana" com um travessão (—) não é erro.** O sistema esconde esse número
   quando houve menos de dez conclusões no período, porque com duas ou três a
-  "média" seria o tempo de uma pessoa específica. É proteção, não falha.
+  mediana ainda seria o tempo de uma pessoa específica. É proteção, não falha.
 - **Recusa na pesquisa não é perda.** Quem abriu e disse "não quero responder"
   aparece em "recusados", e isso é uma resposta legítima. Perda é quem abriu e
   sumiu.

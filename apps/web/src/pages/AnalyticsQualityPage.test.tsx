@@ -45,9 +45,9 @@ describe("rota interna de qualidade", () => {
             },
             survey: {
               issued: 0,
-              answered: 0,
-              declined: 0,
+              completed: 0,
               expired_unanswered: 0,
+              revoked: 0,
             },
             self_registration: {
               started: 0,

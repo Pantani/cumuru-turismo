@@ -51,7 +51,7 @@ const funnel: components["schemas"]["AdoptionFunnel"] = {
     median_hours_to_submit: 5,
   },
   // Sem mediana: o servidor a retira abaixo de dez submissões na janela.
-  survey: { issued: 30, answered: 9, declined: 4, expired_unanswered: 17 },
+  survey: { issued: 30, completed: 13, expired_unanswered: 17, revoked: 0 },
   self_registration: {
     started: 12,
     pending: 2,
@@ -156,9 +156,9 @@ describe("painel interno agregado de qualidade", () => {
         })
       ).closest("section") as HTMLElement,
     );
-    // 30 de 40 convites submetidos; 9 de 30 pesquisas respondidas.
+    // 30 de 40 convites submetidos; 13 de 30 capabilities consumidas.
     expect(section.getByText("75%")).toBeTruthy();
-    expect(section.getByText("30%")).toBeTruthy();
+    expect(section.getByText("43%")).toBeTruthy();
     expect(section.getByText("5 h")).toBeTruthy();
     // A pesquisa e o autocadastro não têm mediana publicável nesta janela.
     expect(section.getAllByText("—")).toHaveLength(2);

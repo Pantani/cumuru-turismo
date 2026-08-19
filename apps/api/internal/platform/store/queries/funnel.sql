@@ -25,37 +25,45 @@ SELECT
     0
   )::double precision AS median_hours
 FROM core.invites AS invite
+-- A estadia tem no máximo uma submissão (`group_submissions.stay_id` é único),
+-- mas pode ter mais de um convite: um revogado e outro emitido em seguida.
+-- Sem `use_count > 0` na junção, a mesma submissão seria contada uma vez por
+-- convite e inflaria a amostra da mediana.
 LEFT JOIN core.group_submissions AS submission
   ON submission.stay_id = invite.stay_id
   AND submission.collection_channel = 'invite'
+  AND invite.use_count > 0
 WHERE invite.created_at >= sqlc.arg(window_start)
   AND invite.created_at < sqlc.arg(window_end);
 
 -- name: SummarizeSurveyFunnel :one
--- `participation` separa quem respondeu de quem recusou explicitamente. A
--- recusa é resposta, não abandono, e misturar as duas esconderia justamente o
--- que o questionário precisa saber sobre si mesmo.
+-- A conclusão sai de `survey.capabilities.consumed_at`, não de
+-- `survey.responses`: `app_runtime` tem INSERT e não SELECT nas respostas — a
+-- API grava a resposta do hóspede e não a lê de volta, e isso é controle de
+-- privacidade, não lacuna a corrigir com GRANT.
+--
+-- O preço é real e fica declarado: sem ler `participation`, o funil não separa
+-- quem respondeu de quem recusou explicitamente. As duas contam como concluídas.
+-- Essa separação só pode vir do worker, que é quem enxerga a resposta.
 SELECT
   count(*)::integer AS issued,
-  count(*) FILTER (WHERE response.participation = 'submitted')::integer AS answered,
-  count(*) FILTER (WHERE response.participation = 'declined')::integer AS declined,
+  count(*) FILTER (WHERE capability.consumed_at IS NOT NULL)::integer AS completed,
   count(*) FILTER (
     WHERE capability.consumed_at IS NULL
       AND capability.revoked_at IS NULL
       AND capability.expires_at < sqlc.arg(as_of)
   )::integer AS expired_unanswered,
-  count(response.id)::integer AS latency_sample,
+  count(*) FILTER (WHERE capability.revoked_at IS NOT NULL)::integer AS revoked,
+  count(capability.consumed_at)::integer AS latency_sample,
   coalesce(
     percentile_cont(0.5) WITHIN GROUP (
       ORDER BY extract(
-        epoch FROM (response.submitted_at - capability.created_at)
+        epoch FROM (capability.consumed_at - capability.created_at)
       ) / 3600
     ),
     0
   )::double precision AS median_hours
 FROM survey.capabilities AS capability
-LEFT JOIN survey.responses AS response
-  ON response.capability_id = capability.id
 WHERE capability.created_at >= sqlc.arg(window_start)
   AND capability.created_at < sqlc.arg(window_end);
 

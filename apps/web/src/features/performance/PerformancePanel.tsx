@@ -5,6 +5,7 @@ import { PerformanceChart } from "./PerformanceChart";
 import {
   comparativeTone,
   type PerformancePayload,
+  type PerformanceSummary,
   summarize,
 } from "./performance-summary";
 import {
@@ -73,9 +74,54 @@ function ComparisonNotice({ performance }: { performance: PerformancePayload }) 
   );
 }
 
+/**
+ * `comparison.status` governa toda saída da vila, não só a curva. O servidor já
+ * retira ocupação e índice quando fecha o comparativo; a tela não deriva nem
+ * renderiza nenhum deles mesmo que a resposta os traga. É defesa em
+ * profundidade sobre um controle de privacidade, não redundância.
+ */
+type ComparativeTone = ReturnType<typeof comparativeTone>;
+
+interface VillageReadings {
+  change: number | null;
+  occupancy: number | undefined;
+  tone: ComparativeTone;
+}
+
+/**
+ * Uma porta só para todo valor da vila. Fechado o comparativo, nada é derivado
+ * nem renderizado — nem que a resposta traga os campos.
+ */
+function villageReadings(
+  performance: PerformancePayload,
+  summary: PerformanceSummary,
+): VillageReadings {
+  if (performance.comparison.status !== "available") {
+    return { change: null, occupancy: undefined, tone: "unavailable" };
+  }
+  return {
+    change: summary.villageChangePercent,
+    occupancy: performance.occupancy.village_percent,
+    tone: comparativeTone(summary),
+  };
+}
+
+const TONE_SENTENCES: Record<Exclude<ComparativeTone, "unavailable">, string> = {
+  ahead: "Você cresceu mais que a vila nesta janela.",
+  behind: "A vila cresceu mais que você nesta janela.",
+  even: "Você e a vila se moveram igual nesta janela.",
+};
+
+function ToneSentence({ tone }: { tone: ComparativeTone }) {
+  if (tone === "unavailable") {
+    return null;
+  }
+  return <p className="performance-tone">{TONE_SENTENCES[tone]}</p>;
+}
+
 function Readings({ performance }: { performance: PerformancePayload }) {
   const summary = summarize(performance.series);
-  const tone = comparativeTone(summary);
+  const village = villageReadings(performance, summary);
   const comparable = performance.comparison.status === "available";
   return (
     <>
@@ -88,7 +134,7 @@ function Readings({ performance }: { performance: PerformancePayload }) {
           {/* A banda de cinco pontos é do servidor; a tela só a nomeia, para
               que ninguém leia precisão que o número não tem. */}
           <dt>Ocupação da vila (faixa)</dt>
-          <dd>{occupancyLabel(performance.occupancy.village_percent)}</dd>
+          <dd>{occupancyLabel(village.occupancy)}</dd>
         </div>
         <div>
           <dt>Suas pessoas-dia na janela</dt>
@@ -100,7 +146,7 @@ function Readings({ performance }: { performance: PerformancePayload }) {
         </div>
         <div>
           <dt>Variação da vila</dt>
-          <dd>{changeLabel(summary.villageChangePercent)}</dd>
+          <dd>{changeLabel(village.change)}</dd>
         </div>
       </dl>
       <PerformanceChart
@@ -108,15 +154,7 @@ function Readings({ performance }: { performance: PerformancePayload }) {
         points={performance.series}
         showVillage={comparable}
       />
-      {tone === "unavailable" ? null : (
-        <p className="performance-tone">
-          {tone === "ahead"
-            ? "Você cresceu mais que a vila nesta janela."
-            : tone === "behind"
-              ? "A vila cresceu mais que você nesta janela."
-              : "Você e a vila se moveram igual nesta janela."}
-        </p>
-      )}
+      <ToneSentence tone={village.tone} />
     </>
   );
 }

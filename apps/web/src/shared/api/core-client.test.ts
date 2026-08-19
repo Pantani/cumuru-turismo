@@ -325,15 +325,21 @@ describe("cliente tipado do núcleo", () => {
     );
     const client = createCoreClient({ fetcher, getAccessToken: () => token });
 
-    // O par inconsistente é recusado pelo servidor, não ignorado: mandá-lo
-    // renderia 400 difícil de diagnosticar em vez de uma janela válida.
-    await client.getAccommodationPerformance(stayId, "recent_90_days", "2026-05");
+    // O par é discriminado no tipo: `month` fora de `window=month`, e
+    // `window=month` sem ele, não compilam. O servidor recusa os dois casos, e
+    // o compilador passa a recusá-los antes da requisição existir.
+    await client.getAccommodationPerformance(stayId, "recent_90_days");
     const withoutMonth = fetcher.mock.calls[0]?.[0] as Request;
     expect(new URL(withoutMonth.url).search).toBe("?window=recent_90_days");
 
     await client.getAccommodationPerformance(stayId, "month", "2026-05");
     const withMonth = fetcher.mock.calls[1]?.[0] as Request;
     expect(new URL(withMonth.url).search).toBe("?window=month&month=2026-05");
+
+    // @ts-expect-error month não acompanha janela retroativa
+    void (() => client.getAccommodationPerformance(stayId, "recent_90_days", "2026-05"));
+    // @ts-expect-error window=month exige o mês
+    void (() => client.getAccommodationPerformance(stayId, "month"));
   });
 
   it.each([

@@ -25,7 +25,10 @@ arquivo.
   autocadastro iniciado, pendente e decidido. Não abre canal de telemetria e
   não coleta nada novo — conta estados que o registro já guarda. A mediana de
   latência só aparece a partir de dez submissões na janela, porque abaixo disso
-  ela descreve uma pessoa e não um comportamento;
+  ela descreve uma pessoa e não um comportamento. Na pesquisa, concluída é a
+  capability consumida: resposta e recusa explícita contam juntas, porque
+  `app_runtime` grava em `survey.responses` e não lê de volta — privilégio
+  deliberado, não lacuna a corrigir com GRANT;
 - [ADR-045](docs/decisoes/ADR-045-retorno-do-dado-a-hospedagem-e-funil-de-adesao.md)
   registrando as três decisões de privacidade desta entrega: limiar próprio do
   comparativo, recusa de publicar ocupação como célula pública e funil que conta

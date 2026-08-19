@@ -2,6 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { PerformanceWindow } from "../../shared/api/core-client";
+
+/** O seletor da tela oferece só as janelas retroativas; `month` tem tela própria. */
+type LookbackWindow = Exclude<PerformanceWindow, "month">;
 import { useAuthSession } from "../../shared/auth/AuthSession";
 import { describeFailure } from "../operator/use-operation";
 import type { PerformancePayload } from "./performance-summary";
@@ -18,7 +21,7 @@ export const PERFORMANCE_WINDOWS = [
   "recent_90_days",
   "recent_365_days",
   "recent_730_days",
-] as const satisfies readonly PerformanceWindow[];
+] as const satisfies readonly LookbackWindow[];
 
 export const PERFORMANCE_WINDOW_LABELS: Record<
   (typeof PERFORMANCE_WINDOWS)[number],
@@ -32,7 +35,7 @@ export const PERFORMANCE_WINDOW_LABELS: Record<
 
 export function usePerformance(accommodationId: string) {
   const { coreClient: client } = useAuthSession();
-  const [window, setWindow] = useState<PerformanceWindow>("recent_90_days");
+  const [window, setWindow] = useState<LookbackWindow>("recent_90_days");
 
   const query = useQuery({
     queryKey: [PERFORMANCE_QUERY_KEY, accommodationId, window],

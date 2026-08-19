@@ -148,11 +148,20 @@ export interface StayListFilters {
  */
 function performanceQuery(window: PerformanceWindow, month?: string) {
   const query = new URLSearchParams({ window });
-  if (window === "month" && month !== undefined) {
-    query.set("month", month);
+  if (window === "month") {
+    query.set("month", month as string);
   }
   return `?${query.toString()}`;
 }
+
+/**
+ * `month` é obrigatório dentro de `window=month` e recusado fora dela — o
+ * servidor responde 400 nos dois casos. A tupla discriminada faz a chamada
+ * inválida falhar no compilador em vez de virar 400 em runtime.
+ */
+export type PerformanceSelector =
+  | [window: Exclude<PerformanceWindow, "month">]
+  | [window: "month", month: string];
 
 export type PerformanceWindow =
   operations["getAccommodationPerformance"]["parameters"]["query"]["window"];
@@ -261,8 +270,7 @@ export function createCoreClient(options: HttpClientOptions) {
       read("getAccommodation", accommodation(id)),
     getAccommodationPerformance: (
       id: string,
-      window: PerformanceWindow,
-      month?: string,
+      ...[window, month]: PerformanceSelector
     ) =>
       read(
         "getAccommodationPerformance",

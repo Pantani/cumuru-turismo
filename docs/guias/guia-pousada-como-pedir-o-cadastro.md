@@ -88,8 +88,8 @@ na vila para planejar água, coleta, saúde e o
 comércio da temporada. Aponte a câmera no
 quadradinho e leve 1 minuto.
 
-Seus dados não aparecem em lugar nenhum:
-o painel público mostra só totais da vila.
+No painel público aparecem só totais da vila,
+nunca o seu nome nem a sua estadia.
 Ver o painel: [endereço do site]
 ```
 
@@ -140,9 +140,9 @@ lembra do que fez. Responde melhor e responde mais.
 > isso."
 
 **"Quem vê os meus dados?"**
-> "A hospedagem e a administração do Observatório, para o registro. No painel
-> público só aparecem totais da vila — nunca o seu nome, nem o seu quarto, nem a
-> sua data."
+> "Aqui na hospedagem eu vejo, e a administração do Observatório vê, porque o
+> registro é obrigação nossa. Fora isso, ninguém: no painel público só aparecem
+> totais da vila — nunca o seu nome, nem o seu quarto, nem a sua data."
 
 **"E se eu não quiser?"**
 > "Sem problema, eu faço o registro pelo caminho de sempre."
@@ -156,7 +156,9 @@ lembra do que fez. Responde melhor e responde mais.
 ## 7. O que nunca fazer
 
 - **Não preencha pelo hóspede sem ele saber.** Se ele pedir ajuda, tudo bem —
-  mas confirme os dados em voz alta com ele.
+  mas confirme mostrando a tela para ele, não lendo os dados em voz alta. A
+  recepção é espaço compartilhado e quem está na fila não precisa ouvir a data
+  de nascimento de ninguém.
 - **Não invente hóspede.** Cadastro de pessoa que não existe estraga o número da
   vila inteira e é o tipo de coisa que derruba o projeto.
 - **Não guarde foto do documento** no celular ou no computador da recepção.

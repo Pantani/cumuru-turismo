@@ -6142,20 +6142,25 @@ components:
           type: integer
           minimum: 0
     SurveyFunnel:
+      description: |
+        Concluída é a capability consumida, seja a participação resposta ou
+        recusa explícita. O funil não separa as duas porque a API grava em
+        `survey.responses` e não lê de volta — privilégio deliberado, não
+        lacuna: só o worker enxerga a participação.
       type: object
-      required: [issued, answered, declined, expired_unanswered]
+      required: [issued, completed, expired_unanswered, revoked]
       additionalProperties: false
       properties:
         issued:
           type: integer
           minimum: 0
-        answered:
-          type: integer
-          minimum: 0
-        declined:
+        completed:
           type: integer
           minimum: 0
         expired_unanswered:
+          type: integer
+          minimum: 0
+        revoked:
           type: integer
           minimum: 0
         median_hours_to_answer:

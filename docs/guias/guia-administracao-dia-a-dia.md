@@ -171,7 +171,13 @@ de guardar.
    exatamente a pessoa quer.
 2. **Não confirme nem negue nada na hora**, nem por telefone. Você não sabe se
    quem está ligando é a pessoa. Diga: *"Vou registrar o seu pedido e retornar
-   pelo canal oficial em até 15 dias."*
+   pelo canal oficial."*
+
+   Sobre prazo, a LGPD (art. 19) tem **dois**, e confundi-los é o erro comum:
+   a confirmação de que existe tratamento e o acesso **em formato simplificado**
+   são *imediatos*; os **até 15 dias** valem para a declaração completa, com
+   origem, critérios e finalidade. Prometer 15 dias para tudo é prometer pior do
+   que a lei exige.
 3. **Encaminhe ao encarregado de dados do Município.** A decisão é dele, não sua.
 4. **Não apague nada por conta própria.** O registro de hóspede tem obrigação
    legal de guarda; apagar por impulso cria um problema maior que o original.
@@ -200,3 +206,6 @@ de guardar.
 | Toda semana | Olhar o funil e anotar a variação | 5 min |
 | Quando chegar | Entregar acesso de hospedagem aprovada | 5 min |
 | Quando chegar | Registrar e encaminhar pedido de titular | 15 min |
+
+O prazo do titular corre a partir do pedido, não do seu encaminhamento: leve ao
+encarregado no mesmo dia.

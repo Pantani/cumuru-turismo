@@ -104,8 +104,8 @@ func (r *FunnelRepository) survey(
 		return analytics.SurveyFunnel{}, ErrUnavailable
 	}
 	return analytics.SurveyFunnel{
-		Issued: row.Issued, Answered: row.Answered, Declined: row.Declined,
-		ExpiredUnanswered: row.ExpiredUnanswered,
+		Issued: row.Issued, Completed: row.Completed,
+		ExpiredUnanswered: row.ExpiredUnanswered, Revoked: row.Revoked,
 		MedianHoursToAnswer: analytics.LatencyMedian(
 			row.MedianHours, row.LatencySample,
 		),

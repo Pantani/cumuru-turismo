@@ -28,11 +28,14 @@ type InviteFunnel struct {
 	MedianHoursToSubmit *int32 `json:"median_hours_to_submit,omitempty"`
 }
 
+// SurveyFunnel não separa resposta de recusa explícita, e a razão é de
+// privilégio: `app_runtime` grava em `survey.responses` e não lê de volta.
+// Concluída é a capability consumida, seja qual for a participação.
 type SurveyFunnel struct {
 	Issued              int32  `json:"issued"`
-	Answered            int32  `json:"answered"`
-	Declined            int32  `json:"declined"`
+	Completed           int32  `json:"completed"`
 	ExpiredUnanswered   int32  `json:"expired_unanswered"`
+	Revoked             int32  `json:"revoked"`
 	MedianHoursToAnswer *int32 `json:"median_hours_to_answer,omitempty"`
 }
 

@@ -130,4 +130,32 @@ describe("comparativo da hospedagem", () => {
       ).toBe(true);
     });
   });
+
+  it("não deriva nada da vila quando o servidor fecha o comparativo", async () => {
+    // Resposta deliberadamente inconsistente: comparativo fechado e valores da
+    // vila presentes. A tela precisa obedecer ao status, não ao payload.
+    stubApi(
+      payload({
+        comparison: {
+          status: "unavailable",
+          reason: "own_capacity_share_too_high",
+        },
+        occupancy: { own_percent: 62, village_percent: 70 },
+        series: [
+          { date: "2026-07-01", own_person_days: 8, own_index: 100, village_index: 100 },
+          { date: "2026-07-02", own_person_days: 12, own_index: 150, village_index: 120 },
+        ],
+      }),
+    );
+    const { container } = renderWithSession(
+      <PerformancePanel accommodation={accommodation} />,
+    );
+
+    await screen.findByText(/Sua capacidade responde por boa parte da vila/u);
+    expect(screen.getByText("62%")).toBeTruthy();
+    expect(screen.queryByText("70%")).toBeNull();
+    expect(screen.queryByText("+20%")).toBeNull();
+    expect(container.querySelector(".performance-curve-village")).toBeNull();
+    expect(screen.queryByText(/cresceu mais que/u)).toBeNull();
+  });
 });

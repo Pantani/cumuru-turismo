@@ -13,30 +13,34 @@ import (
 
 const listAccommodationObservedPresence = `-- name: ListAccommodationObservedPresence :many
 SELECT
-  fact.presence_on,
-  round(sum(fact.weight))::integer AS person_days
-FROM analytics.presence_days AS fact
-JOIN core.stays AS stay
-  ON stay.id = fact.stay_id
+  day::date AS presence_on,
+  count(*)::integer AS person_days
+FROM core.stays AS stay
 JOIN core.memberships AS m
   ON m.accommodation_id = stay.accommodation_id
-WHERE m.oidc_issuer = $1
-  AND m.oidc_subject = $2
+JOIN core.visitors AS visitor
+  ON visitor.stay_id = stay.id
+CROSS JOIN LATERAL generate_series(
+  greatest(stay.planned_arrival_on, $1::date),
+  least(stay.planned_departure_on - 1, $2::date - 1),
+  interval '1 day'
+) AS day
+WHERE m.oidc_issuer = $3
+  AND m.oidc_subject = $4
   AND m.active = true
-  AND stay.accommodation_id = $3
-  AND fact.kind = 'observed'
-  AND fact.presence_on >= $4
-  AND fact.presence_on < $5
-GROUP BY fact.presence_on
-ORDER BY fact.presence_on
+  AND stay.accommodation_id = $5
+  AND stay.status IN ('pre_registered', 'checked_in', 'checked_out')
+  AND (stay.approval_state IS NULL OR stay.approval_state = 'approved')
+GROUP BY day
+ORDER BY day
 `
 
 type ListAccommodationObservedPresenceParams struct {
+	StartOn         pgtype.Date `json:"start_on"`
+	EndOn           pgtype.Date `json:"end_on"`
 	OidcIssuer      string      `json:"oidc_issuer"`
 	OidcSubject     string      `json:"oidc_subject"`
 	AccommodationID pgtype.UUID `json:"accommodation_id"`
-	StartOn         pgtype.Date `json:"start_on"`
-	EndOn           pgtype.Date `json:"end_on"`
 }
 
 type ListAccommodationObservedPresenceRow struct {
@@ -44,16 +48,22 @@ type ListAccommodationObservedPresenceRow struct {
 	PersonDays int32       `json:"person_days"`
 }
 
-// O isolamento por membership fica no SQL, como em stay.sql e accommodation.sql:
-// a consulta não devolve linha alguma para quem não é da hospedagem, em vez de
-// devolver e filtrar em Go.
+// As pessoas-dia da própria hospedagem são derivadas de `core.stays` e
+// `core.visitors`, não de `analytics.presence_days`: `app_runtime` tem SELECT
+// nas duas primeiras e nenhum acesso à terceira, que é tabela do worker. A
+// fronteira é deliberada e não se corrige com GRANT — o que a API devolve aqui
+// é a mesma estadia que a hospedagem já lê em `GET /stays`, recortada por dia.
+//
+// A elegibilidade repete `presenceEligible`: estado contável e aprovação
+// resolvida. Divergir dela faria a curva própria contar estadia que a
+// publicação recusou.
 func (q *Queries) ListAccommodationObservedPresence(ctx context.Context, arg ListAccommodationObservedPresenceParams) ([]ListAccommodationObservedPresenceRow, error) {
 	rows, err := q.db.Query(ctx, listAccommodationObservedPresence,
+		arg.StartOn,
+		arg.EndOn,
 		arg.OidcIssuer,
 		arg.OidcSubject,
 		arg.AccommodationID,
-		arg.StartOn,
-		arg.EndOn,
 	)
 	if err != nil {
 		return nil, err
@@ -83,15 +93,19 @@ SELECT
 FROM core.accommodations AS accommodation
 CROSS JOIN LATERAL (
   SELECT
-    coalesce(round(sum(fact.weight)), 0) AS person_days,
+    count(*) AS person_days,
     count(*) > 0 AS reported
-  FROM analytics.presence_days AS fact
-  JOIN core.stays AS stay
-    ON stay.id = fact.stay_id
+  FROM core.stays AS stay
+  JOIN core.visitors AS visitor
+    ON visitor.stay_id = stay.id
+  CROSS JOIN LATERAL generate_series(
+    greatest(stay.planned_arrival_on, $1::date),
+    least(stay.planned_departure_on - 1, $2::date - 1),
+    interval '1 day'
+  ) AS day
   WHERE stay.accommodation_id = accommodation.id
-    AND fact.kind = 'observed'
-    AND fact.presence_on >= $1
-    AND fact.presence_on < $2
+    AND stay.status IN ('pre_registered', 'checked_in', 'checked_out')
+    AND (stay.approval_state IS NULL OR stay.approval_state = 'approved')
 ) AS observed
 WHERE accommodation.status = 'active'
   AND accommodation.capacity IS NOT NULL
@@ -113,10 +127,9 @@ type SummarizeVillageReportingRow struct {
 // carrega apenas o veredito, porque "somos sete com 210 leitos" já é informação
 // sobre terceiros.
 //
-// Uma passagem por acomodação, não duas: `reported` sai de count(*) na mesma
-// varredura que soma as pessoas-dia. Vem de count(*), e não de person_days > 0,
-// porque uma hospedagem que reportou pesos pequenos arredondaria para zero e
-// deixaria de contar como reportante.
+// Uma passagem por acomodação, e sobre as mesmas tabelas do núcleo, pela mesma
+// razão de privilégio da consulta acima. `reported` sai de count(*) para não
+// depender de arredondamento.
 func (q *Queries) SummarizeVillageReporting(ctx context.Context, arg SummarizeVillageReportingParams) (SummarizeVillageReportingRow, error) {
 	row := q.db.QueryRow(ctx, summarizeVillageReporting, arg.StartOn, arg.EndOn)
 	var i SummarizeVillageReportingRow
