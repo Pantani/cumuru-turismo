@@ -102,12 +102,12 @@ function contractCases(): ReadonlyArray<
 }
 
 describe("cliente tipado do núcleo", () => {
-  it("declara exatamente as 20 operações do contrato da fase", () => {
+  it("declara exatamente as 21 operações do contrato da fase", () => {
     expectTypeOf(coreOperationNames).toMatchTypeOf<
       ReadonlyArray<keyof operations>
     >();
-    expect(coreOperationNames).toHaveLength(20);
-    expect(new Set(coreOperationNames).size).toBe(20);
+    expect(coreOperationNames).toHaveLength(21);
+    expect(new Set(coreOperationNames).size).toBe(21);
   });
 
   it("envia o onboarding fechado com autorização e chave idempotente", async () => {

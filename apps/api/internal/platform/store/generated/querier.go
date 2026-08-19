@@ -181,6 +181,10 @@ type Querier interface {
 	// filtro ausente devolve todos os estados.
 	ListAccommodationAccessRequests(ctx context.Context, arg ListAccommodationAccessRequestsParams) ([]ListAccommodationAccessRequestsRow, error)
 	ListAccommodationMemberships(ctx context.Context, arg ListAccommodationMembershipsParams) ([]ListAccommodationMembershipsRow, error)
+	// O isolamento por membership fica no SQL, como em stay.sql e accommodation.sql:
+	// a consulta não devolve linha alguma para quem não é da hospedagem, em vez de
+	// devolver e filtrar em Go.
+	ListAccommodationObservedPresence(ctx context.Context, arg ListAccommodationObservedPresenceParams) ([]ListAccommodationObservedPresenceRow, error)
 	ListAccommodationOnboardingOrganizations(ctx context.Context, arg ListAccommodationOnboardingOrganizationsParams) ([]ListAccommodationOnboardingOrganizationsRow, error)
 	ListActiveAccommodationCoverage(ctx context.Context, arg ListActiveAccommodationCoverageParams) ([]ListActiveAccommodationCoverageRow, error)
 	ListActiveMetricCatalog(ctx context.Context, privacyPolicyVersion string) ([]AnalyticsMetricCatalog, error)
@@ -265,6 +269,20 @@ type Querier interface {
 	// endpoint não virar oráculo.
 	SpendProofOfWorkChallenge(ctx context.Context, arg SpendProofOfWorkChallengeParams) (int64, error)
 	SubmitQuestionnaireVersionReview(ctx context.Context, arg SubmitQuestionnaireVersionReviewParams) (SurveyQuestionnaireVersion, error)
+	// O funil não coleta nada: ele conta o que o registro já guarda. Convite
+	// emitido, convite usado, convite que expirou sem uso — três estados que já
+	// existem em `core.invites`, lidos por janela.
+	SummarizeInviteFunnel(ctx context.Context, arg SummarizeInviteFunnelParams) (SummarizeInviteFunnelRow, error)
+	SummarizeSelfRegistrationFunnel(ctx context.Context, arg SummarizeSelfRegistrationFunnelParams) (SummarizeSelfRegistrationFunnelRow, error)
+	// `participation` separa quem respondeu de quem recusou explicitamente. A
+	// recusa é resposta, não abandono, e misturar as duas esconderia justamente o
+	// que o questionário precisa saber sobre si mesmo.
+	SummarizeSurveyFunnel(ctx context.Context, arg SummarizeSurveyFunnelParams) (SummarizeSurveyFunnelRow, error)
+	// O denominador do comparativo, e nada além dele. Os dois números decidem se a
+	// vila pode aparecer ao lado do dado próprio e morrem no processo: a resposta
+	// HTTP carrega apenas o veredito, porque "somos sete com 210 leitos" já é
+	// informação sobre terceiros.
+	SummarizeVillageReporting(ctx context.Context, arg SummarizeVillageReportingParams) (SummarizeVillageReportingRow, error)
 	TouchAuthSession(ctx context.Context, arg TouchAuthSessionParams) error
 	UpdateAccommodation(ctx context.Context, arg UpdateAccommodationParams) (UpdateAccommodationRow, error)
 	UpdateAccommodationMembership(ctx context.Context, arg UpdateAccommodationMembershipParams) (UpdateAccommodationMembershipRow, error)

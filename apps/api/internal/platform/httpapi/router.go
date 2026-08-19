@@ -20,10 +20,27 @@ func (d Dependencies) registerAnalyticsRoutes(mux *http.ServeMux, metrics *httpM
 			mux, metrics, "GET /api/v1/public/methodology", d.publicMethodology,
 		)
 	}
+	// O comparativo da hospedagem usa o escopo que já governa a leitura da
+	// própria acomodação (GET /accommodations/{id}). Ele expõe menos que a
+	// listagem de estadias que esse mesmo escopo libera: agregado próprio ao
+	// lado do documento público, sem nenhuma linha de hóspede.
+	if d.OwnPerformance != nil {
+		d.handleRoute(
+			mux, metrics,
+			"GET /api/v1/accommodations/{accommodation_id}/performance",
+			"stays:read:own", d.accommodationPerformance,
+		)
+	}
 	if d.AnalyticsQuality != nil {
 		d.handleRoute(
 			mux, metrics, "GET /api/v1/analytics/quality",
 			"analytics:read:internal", d.analyticsQuality,
+		)
+	}
+	if d.AnalyticsFunnel != nil {
+		d.handleRoute(
+			mux, metrics, "GET /api/v1/analytics/funnel",
+			"analytics:read:internal", d.analyticsFunnel,
 		)
 	}
 }

@@ -70,6 +70,8 @@ type Dependencies struct {
 	Questionnaires                 *questionnaire.Service
 	PublicAnalytics                analytics.PublicReader
 	AnalyticsQuality               analytics.QualityReader
+	AnalyticsFunnel                analytics.FunnelReader
+	OwnPerformance                 analytics.OwnPerformanceReader
 	CORSAllowedOrigins             []string
 	TrustedProxyCIDRs              []netip.Prefix
 	CursorKeys                     config.KeyringConfig

@@ -18,6 +18,13 @@ func TestCoreQueriesKeepAuthorizationAndLocksInSQL(t *testing.T) {
 		"m.oidc_subject = sqlc.arg(oidc_subject)",
 		"FOR UPDATE OF target",
 	)
+	assertSQLContains(t, "own_performance.sql",
+		"-- name: ListAccommodationObservedPresence",
+		"-- name: SummarizeVillageReporting",
+		"m.oidc_issuer = sqlc.arg(oidc_issuer)",
+		"m.oidc_subject = sqlc.arg(oidc_subject)",
+		"m.active = true",
+	)
 	assertSQLContains(t, "stay.sql",
 		"-- name: CreateStay",
 		"-- name: ListAccessibleStays",

@@ -19,6 +19,7 @@ export const coreOperationNames = [
   "listAccommodations",
   "createAccommodation",
   "getAccommodation",
+  "getAccommodationPerformance",
   "updateAccommodation",
   "listAccommodationMemberships",
   "createAccommodationMembership",
@@ -66,6 +67,9 @@ const successContracts = {
   listAccommodations: { status: 200 },
   createAccommodation: created,
   getAccommodation: versioned,
+  // O comparativo é dado de um inquilino só: sai com no-store e sem ETag,
+  // porque validador é promessa de cache compartilhado.
+  getAccommodationPerformance: { status: 200 },
   updateAccommodation: versioned,
   listAccommodationMemberships: { status: 200 },
   createAccommodationMembership: created,
@@ -123,6 +127,9 @@ export interface StayListFilters {
   provenance?: Schemas["StayProvenance"];
   status?: Schemas["StayStatus"];
 }
+
+export type PerformanceWindow =
+  operations["getAccommodationPerformance"]["parameters"]["query"]["window"];
 
 const MERGE_PATCH = "application/merge-patch+json";
 
@@ -201,6 +208,15 @@ export function createCoreClient(options: HttpClientOptions) {
       }),
     getAccommodation: (id: string) =>
       read("getAccommodation", accommodation(id)),
+    getAccommodationPerformance: (
+      id: string,
+      window: PerformanceWindow,
+      month?: string,
+    ) =>
+      read(
+        "getAccommodationPerformance",
+        `${accommodation(id)}/performance${queryString({ window, month })}`,
+      ),
     updateAccommodation: (
       id: string,
       body: MergePatchRequest<"updateAccommodation">,

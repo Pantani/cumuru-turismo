@@ -169,6 +169,7 @@ function client(
     getPreferences: vi.fn(() => result(preferences)),
     getMethodology: vi.fn(() => result(methodology)),
     getQuality: vi.fn(),
+    getFunnel: vi.fn(),
     ...overrides,
   };
 }

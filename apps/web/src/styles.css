@@ -2897,3 +2897,67 @@ button.quiet-action:disabled {
   gap: 1rem;
   flex-wrap: wrap;
 }
+
+/* Comparativo da hospedagem: a curva própria é a da marca; a da vila é neutra
+   e tracejada, porque ela é referência de leitura, não protagonista. */
+.performance-panel {
+  display: grid;
+  gap: 1rem;
+  padding-top: var(--space-block);
+  border-top: 1px solid var(--line);
+}
+
+.performance-readings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+.performance-readings dt {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.performance-readings dd {
+  margin: 0.25rem 0 0;
+  color: var(--ink);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.performance-chart {
+  width: 100%;
+  height: clamp(9rem, 22vw, 12rem);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
+.performance-curve-own,
+.performance-curve-village {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.performance-curve-own {
+  stroke: var(--brand-strong);
+  stroke-width: 2;
+}
+
+.performance-curve-village {
+  stroke: var(--ink-3);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.performance-tone {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.6;
+}

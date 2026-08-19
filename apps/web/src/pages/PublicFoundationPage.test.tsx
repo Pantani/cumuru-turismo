@@ -15,6 +15,7 @@ const client: AnalyticsClient = {
   getPreferences: vi.fn(() => pending),
   getMethodology: vi.fn(() => pending),
   getQuality: vi.fn(() => pending),
+  getFunnel: vi.fn(() => pending),
 };
 
 function renderPage(locale: Locale = "pt") {

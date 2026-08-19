@@ -330,6 +330,43 @@ const isQualityCoverage = unionValidator(
   isAvailableQualityCoverage,
   isUnavailableQualityCoverage,
 );
+const isFunnelCount = integerValidator(0);
+const isInviteFunnel = objectValidator(
+  {
+    issued: isFunnelCount,
+    submitted: isFunnelCount,
+    expired_unused: isFunnelCount,
+    revoked: isFunnelCount,
+  },
+  { median_hours_to_submit: isFunnelCount },
+);
+const isSurveyFunnel = objectValidator(
+  {
+    issued: isFunnelCount,
+    answered: isFunnelCount,
+    declined: isFunnelCount,
+    expired_unanswered: isFunnelCount,
+  },
+  { median_hours_to_answer: isFunnelCount },
+);
+const isSelfRegistrationFunnel = objectValidator({
+  started: isFunnelCount,
+  pending: isFunnelCount,
+  approved: isFunnelCount,
+  rejected: isFunnelCount,
+  expired: isFunnelCount,
+});
+/**
+ * A mediana é opcional no contrato porque o servidor a retira abaixo de dez
+ * submissões. Ausência é a resposta correta, não campo faltando.
+ */
+export const isFunnel = objectValidator({
+  window: literalValidator("last_30_days"),
+  as_of: isDateTime,
+  invite: isInviteFunnel,
+  survey: isSurveyFunnel,
+  self_registration: isSelfRegistrationFunnel,
+});
 export const isQuality = objectValidator({
   window: literalValidator("last_30_days"),
   updated_at: isDateTime,

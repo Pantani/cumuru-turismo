@@ -87,6 +87,37 @@ function noActivePoster() {
   );
 }
 
+/**
+ * O comparativo da hospedagem é lido junto com o quadro de estadias. A
+ * publicação fictícia entra com os dois lados liberados para que a área monte
+ * como monta em runtime.
+ */
+function performancePayload() {
+  return {
+    metadata: {
+      period: {
+        start: "2026-05-01",
+        end: "2026-08-01",
+        end_exclusive: true,
+        time_zone: "America/Bahia",
+      },
+      unit: "person_day",
+      data_mode: "prototype_fixtures",
+      updated_at: "2026-08-01T03:00:00Z",
+      privacy_policy_version: "prototype-v1",
+      methodology_version: "explainable-baseline-v1",
+      coverage: { status: "published", ratio: 65 },
+    },
+    window: "recent_90_days",
+    comparison: { status: "available" },
+    occupancy: { own_percent: 62, village_percent: 70 },
+    series: [
+      { date: "2026-07-01", own_person_days: 8, own_index: 100, village_index: 100 },
+      { date: "2026-07-02", own_person_days: 12, own_index: 150, village_index: 120 },
+    ],
+  };
+}
+
 /** The approval queue reads the same listing behind `approval_state`. */
 function staysFor(url: URL, stays: readonly unknown[]) {
   return url.searchParams.has("approval_state") ? [] : stays;
@@ -109,6 +140,9 @@ function routedResponse(input: Request, table: Required<Omit<RouteTable, "onRequ
   }
   if (isPosterLookup(input, url)) {
     return noActivePoster();
+  }
+  if (url.pathname.endsWith("/performance")) {
+    return apiResponse(performancePayload());
   }
   if (url.pathname.endsWith("/stays")) {
     return apiResponse({
