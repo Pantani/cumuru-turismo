@@ -70,7 +70,7 @@ func TestLoadExternalContextRejectsUnsafeConfiguration(t *testing.T) {
 		{"deployed environment", "APP_ENV", "production", "EXTERNAL_CONTEXT_ENABLED"},
 		{"missing ingestion DSN", "EXTERNAL_DATABASE_URL", "", "EXTERNAL_DATABASE_URL"},
 		// Reusing the application role would leave the grant model of migration
-		// 000003 constraining nothing.
+		// 000005 constraining nothing.
 		{"shared runtime role", "EXTERNAL_DATABASE_URL", "same", "EXTERNAL_DATABASE_URL"},
 		{"empty allowlist", "EXTERNAL_ALLOWED_HOSTS", ",", "EXTERNAL_ALLOWED_HOSTS"},
 		// A URL in the allowlist would never match the host of the constant URL
@@ -78,6 +78,13 @@ func TestLoadExternalContextRejectsUnsafeConfiguration(t *testing.T) {
 		{"allowlist with scheme", "EXTERNAL_ALLOWED_HOSTS", "https://api.open-meteo.com", "EXTERNAL_ALLOWED_HOSTS"},
 		{"allowlist with path", "EXTERNAL_ALLOWED_HOSTS", "api.open-meteo.com/v1", "EXTERNAL_ALLOWED_HOSTS"},
 		{"allowlist with port", "EXTERNAL_ALLOWED_HOSTS", "api.open-meteo.com:443", "EXTERNAL_ALLOWED_HOSTS"},
+		// A bare name with no dot is a container name or a local alias, and
+		// resolving one from inside the cluster is how an allowlist becomes an
+		// SSRF primitive against a neighbour service.
+		{"allowlist without a dot", "EXTERNAL_ALLOWED_HOSTS", "localhost", "EXTERNAL_ALLOWED_HOSTS"},
+		{"allowlist with trailing dot", "EXTERNAL_ALLOWED_HOSTS", "api.open-meteo.com.", "EXTERNAL_ALLOWED_HOSTS"},
+		// A zero interval would make the ingestion ticker panic at start.
+		{"zero ingestion interval", "EXTERNAL_INGESTION_INTERVAL", "0s", "EXTERNAL_INGESTION_INTERVAL"},
 		{"batch outlasting its cycle", "EXTERNAL_BATCH_BUDGET", "7h", "EXTERNAL_BATCH_BUDGET"},
 		{"zero batch budget", "EXTERNAL_BATCH_BUDGET", "0s", "EXTERNAL_BATCH_BUDGET"},
 		{"malformed timeout", "EXTERNAL_REQUEST_TIMEOUT", "ten", "EXTERNAL_REQUEST_TIMEOUT"},
@@ -85,7 +92,6 @@ func TestLoadExternalContextRejectsUnsafeConfiguration(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			assertUnsafeExternalContextConfig(

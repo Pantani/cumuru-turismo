@@ -15,12 +15,12 @@ import (
 // SSRF primitive.
 func TestFetcherRefusesHostsOutsideTheAllowlist(t *testing.T) {
 	cases := map[string]string{
-		"foreign host":  "https://example.invalid/v1/forecast",
-		"plain http":    "http://127.0.0.1/v1/forecast",
-		"host as path":  "https://attacker.invalid/127.0.0.1",
-		"credentials":   "https://127.0.0.1@attacker.invalid/v1",
-		"link local":    "https://169.254.169.254/latest/meta-data",
-		"unix scheme":   "file:///etc/passwd",
+		"foreign host":   "https://example.invalid/v1/forecast",
+		"plain http":     "http://127.0.0.1/v1/forecast",
+		"host as path":   "https://attacker.invalid/127.0.0.1",
+		"credentials":    "https://127.0.0.1@attacker.invalid/v1",
+		"link local":     "https://169.254.169.254/latest/meta-data",
+		"unix scheme":    "file:///etc/passwd",
 		"missing scheme": "//127.0.0.1/v1/forecast",
 	}
 	fetcher := allowlistFetcher(t)
@@ -30,6 +30,32 @@ func TestFetcherRefusesHostsOutsideTheAllowlist(t *testing.T) {
 				t.Fatalf("fetcher allowed %s", name)
 			}
 		})
+	}
+}
+
+// A fetcher that cannot be built correctly must not be built at all. A zero
+// RequestTimeout leaves http.Client.Timeout disabled, so one slow target would
+// consume the batch budget of every other target in the cycle; a nil logger
+// turns the first fetch into a panic.
+func TestNewFetcherRefusesUnusableConfiguration(t *testing.T) {
+	cases := map[string]func(*config.ExternalContextConfig){
+		"no allowlist":    func(c *config.ExternalContextConfig) { c.AllowedHosts = nil },
+		"no size ceiling": func(c *config.ExternalContextConfig) { c.MaxResponseBytes = 0 },
+		"no request timeout": func(c *config.ExternalContextConfig) {
+			c.RequestTimeout = 0
+		},
+	}
+	for name, corrupt := range cases {
+		t.Run(name, func(t *testing.T) {
+			settings := testSettings()
+			corrupt(&settings)
+			if _, err := NewFetcher(settings, testLogger(&bytes.Buffer{})); err == nil {
+				t.Fatalf("fetcher was built with %s", name)
+			}
+		})
+	}
+	if _, err := NewFetcher(testSettings(), nil); err == nil {
+		t.Fatal("fetcher was built without a logger")
 	}
 }
 
@@ -70,10 +96,11 @@ func TestExternalURLCarriesOnlyItsConstantParameters(t *testing.T) {
 
 	ingestion.RunCycle(context.Background())
 
-	if len(stub.requests) != 1 {
-		t.Fatalf("upstream called %d times, want 1", len(stub.requests))
+	requests := stub.recorded()
+	if len(requests) != 1 {
+		t.Fatalf("upstream called %d times, want 1", len(requests))
 	}
-	query := stub.requests[0].URL.Query()
+	query := requests[0].URL.Query()
 	if len(query) != 1 || query.Get("daily") != "temperature_2m_max" {
 		t.Fatalf("unexpected upstream query: %v", query)
 	}
@@ -126,15 +153,16 @@ func TestUserAgentIsConstantAndCarriesNoIdentifier(t *testing.T) {
 	ingestion.RunCycle(context.Background())
 	ingestion.RunCycle(context.Background())
 
-	if len(stub.requests) != 2 {
-		t.Fatalf("upstream called %d times, want 2", len(stub.requests))
+	requests := stub.recorded()
+	if len(requests) != 2 {
+		t.Fatalf("upstream called %d times, want 2", len(requests))
 	}
-	first := stub.requests[0].Header.Get("User-Agent")
-	if first != stub.requests[1].Header.Get("User-Agent") {
+	first := requests[0].Header.Get("User-Agent")
+	if first != requests[1].Header.Get("User-Agent") {
 		t.Fatal("User-Agent varied between requests")
 	}
 	assertNoIdentifier(t, first)
-	assertNoClientHeaders(t, stub.requests[0])
+	assertNoClientHeaders(t, requests[0])
 }
 
 func assertNoIdentifier(t *testing.T, agent string) {
@@ -232,10 +260,13 @@ func TestAllowlistDecidesWhichTargetsRun(t *testing.T) {
 	}
 }
 
-// The production default allowlist, verbatim from config/external.go.
+// The production default allowlist, read from config rather than copied, so a
+// change to the default is exercised here instead of silently diverging.
 func defaultHostSettings() config.ExternalContextConfig {
 	settings := testSettings()
-	settings.AllowedHosts = []string{"api.open-meteo.com"}
+	settings.AllowedHosts = strings.Split(
+		config.DefaultExternalAllowedHosts, ",",
+	)
 	return settings
 }
 

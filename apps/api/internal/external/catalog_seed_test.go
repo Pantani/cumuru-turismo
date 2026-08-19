@@ -49,7 +49,13 @@ func TestCatalogueSeedingIsIdempotent(t *testing.T) {
 
 	ingestion.RunCycle(context.Background())
 	sources, series := len(repository.sources), len(repository.series)
-	before, _ := repository.seriesByCode(SourceCHMHarmonics, "tide_extremes")
+	// Discarding the found flag here would compare two zero SeriesRecords and
+	// pass while asserting nothing — the same shape of green-but-empty test
+	// that let the seeding defect through in the first place.
+	before, found := repository.seriesByCode(SourceCHMHarmonics, "tide_extremes")
+	if !found {
+		t.Fatal("the tide series was never seeded, so idempotence is untested")
+	}
 
 	ingestion.RunCycle(context.Background())
 
@@ -57,7 +63,10 @@ func TestCatalogueSeedingIsIdempotent(t *testing.T) {
 		t.Fatalf("second cycle changed the catalogue size: %d/%d then %d/%d",
 			sources, series, len(repository.sources), len(repository.series))
 	}
-	after, _ := repository.seriesByCode(SourceCHMHarmonics, "tide_extremes")
+	after, found := repository.seriesByCode(SourceCHMHarmonics, "tide_extremes")
+	if !found {
+		t.Fatal("the second cycle removed the tide series")
+	}
 	if after != before {
 		t.Fatalf("second cycle rewrote the tide series: %+v then %+v",
 			before, after)

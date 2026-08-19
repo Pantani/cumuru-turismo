@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// The source vocabulary is closed by CHECK in migration 000003 and by the
+// The source vocabulary is closed by CHECK in the external context migration and by the
 // ExternalSourceCode enum in the contract. These are the four the delivery
 // touches.
 const (

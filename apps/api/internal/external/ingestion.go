@@ -142,8 +142,14 @@ func (i *Ingestion) executeTarget(ctx context.Context, target Target) string {
 	if err := i.ensureCatalog(ctx, target); err != nil {
 		return OutcomeWriteError
 	}
+	// UUIDv7 by the convention in docs/04: time-ordered ids everywhere, so the
+	// run rows of one source stay clustered in the index instead of scattering.
+	id, err := uuid.NewV7()
+	if err != nil {
+		return OutcomeWriteError
+	}
 	run := RunStart{
-		ID:         uuid.New(),
+		ID:         id,
 		SourceCode: target.SourceCode,
 		StartedAt:  i.now(),
 		// Pessimistic on purpose: a run interrupted before it finishes is
@@ -192,10 +198,7 @@ func (i *Ingestion) fetchAndStore(
 	// não tem e faria a trilha afirmar "o servidor respondeu 0" onde ninguém
 	// respondeu. A coluna é nula justamente para distinguir os dois casos.
 	result := RunResult{Outcome: outcome}
-	if response.status > 0 {
-		status := int32(response.status)
-		result.HTTPStatus = &status
-	}
+	result.HTTPStatus = recordedStatus(response.status)
 	if outcome != OutcomeOK {
 		return result
 	}
@@ -205,6 +208,18 @@ func (i *Ingestion) fetchAndStore(
 		return result
 	}
 	return i.storeResult(ctx, target, runID, points, result)
+}
+
+// recordedStatus keeps the Go side in agreement with the CHECK on
+// `fetch_runs.http_status`, which accepts NULL or 100..599. A value outside
+// that range would be rejected by the database and would turn a fetch that
+// actually happened into a write_error, losing the outcome it was carrying.
+func recordedStatus(status int) *int32 {
+	if status < 100 || status > 599 {
+		return nil
+	}
+	recorded := int32(status)
+	return &recorded
 }
 
 func (i *Ingestion) storeResult(

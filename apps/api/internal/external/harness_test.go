@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,9 +24,26 @@ import (
 const testUserAgent = "CumuruObservatorio/1.0 " +
 	"(+https://turismo.prado.ba.gov.br; contato@prado.ba.gov.br)"
 
+// The handler runs on the server's own goroutine while the test reads what it
+// recorded, so the recording is synchronised and handed out as a copy. Nothing
+// here is observed to race today; the point is that no happens-before edge
+// guarantees it will not, and `make test-backend-race` runs in CI.
 type stubUpstream struct {
 	server   *httptest.Server
+	mutex    sync.Mutex
 	requests []*http.Request
+}
+
+func (s *stubUpstream) record(request *http.Request) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.requests = append(s.requests, request)
+}
+
+func (s *stubUpstream) recorded() []*http.Request {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return slices.Clone(s.requests)
 }
 
 func newStubUpstream(t *testing.T, handler http.HandlerFunc) *stubUpstream {
@@ -32,12 +51,40 @@ func newStubUpstream(t *testing.T, handler http.HandlerFunc) *stubUpstream {
 	stub := &stubUpstream{}
 	stub.server = httptest.NewTLSServer(http.HandlerFunc(
 		func(writer http.ResponseWriter, request *http.Request) {
-			stub.requests = append(stub.requests, request.Clone(request.Context()))
+			stub.record(request.Clone(request.Context()))
 			handler(writer, request)
 		},
 	))
 	t.Cleanup(stub.server.Close)
 	return stub
+}
+
+// switchableHandler lets a test change what the upstream answers between
+// cycles. The test goroutine writes the switch and the server goroutine reads
+// it, with no happens-before edge between them other than this mutex.
+type switchableHandler struct {
+	mutex   sync.Mutex
+	current http.HandlerFunc
+}
+
+func newSwitchableHandler(initial http.HandlerFunc) *switchableHandler {
+	return &switchableHandler{current: initial}
+}
+
+func (h *switchableHandler) switchTo(handler http.HandlerFunc) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	h.current = handler
+}
+
+func (h *switchableHandler) serve(
+	writer http.ResponseWriter,
+	request *http.Request,
+) {
+	h.mutex.Lock()
+	handler := h.current
+	h.mutex.Unlock()
+	handler(writer, request)
 }
 
 func fixtureHandler(t *testing.T, name string) http.HandlerFunc {

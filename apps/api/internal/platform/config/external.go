@@ -11,6 +11,12 @@ import (
 // an external integration, not the server address (ADR-045 §6).
 const externalContextUserAgent = "CumuruObservatorio/1.0 (+https://turismo.prado.ba.gov.br; contato@prado.ba.gov.br)"
 
+// DefaultExternalAllowedHosts is the allowlist a deployment gets when it sets
+// none. It is exported so that a test asserting how many ingestion targets the
+// default enables reads the real default instead of a copy of it, which would
+// keep passing against the old value after this one changed.
+const DefaultExternalAllowedHosts = "api.open-meteo.com"
+
 // ExternalContextConfig carries the first outbound HTTP surface of the product.
 // The host allowlist lives here, in configuration, and never in the database:
 // an UPDATE must not be able to turn the fetcher into an SSRF primitive.
@@ -59,7 +65,7 @@ func applyExternalContextSettings(
 		config.DatabaseURL = required(lookup, "EXTERNAL_DATABASE_URL")
 	}
 	config.AllowedHosts = splitList(
-		optional(lookup, "EXTERNAL_ALLOWED_HOSTS", "api.open-meteo.com"),
+		optional(lookup, "EXTERNAL_ALLOWED_HOSTS", DefaultExternalAllowedHosts),
 	)
 	reader := newEnvReader(lookup)
 	config.RequestTimeout = reader.duration(
@@ -183,7 +189,7 @@ func (c ExternalContextConfig) validateDatabase(
 		return err
 	}
 	// The ingestion role must be distinct from the application role, otherwise
-	// the grant model in migration 000003 constrains nothing.
+	// the grant model in migration 000005 constrains nothing.
 	if duplicateDatabaseRoles(databaseURL, c.DatabaseURL) {
 		return invalid("EXTERNAL_DATABASE_URL")
 	}

@@ -41,15 +41,13 @@ func TestIngestionIsIdempotentAcrossCycles(t *testing.T) {
 func TestIngestionRecordsRevisionForChangedDigest(t *testing.T) {
 	body := fixture(t, "open_meteo_forecast.json")
 	revised := fixture(t, "open_meteo_forecast_revised.json")
-	current := body
-	stub := newStubUpstream(t, func(writer http.ResponseWriter, _ *http.Request) {
-		_, _ = writer.Write(current)
-	})
+	handler := newSwitchableHandler(bodyHandler(body))
+	stub := newStubUpstream(t, handler.serve)
 	repository, ingestion := ingestionOver(t, stub)
 
 	ingestion.RunCycle(context.Background())
 	before := repository.count()
-	current = revised
+	handler.switchTo(bodyHandler(revised))
 	ingestion.RunCycle(context.Background())
 
 	if repository.count() != before+1 {
@@ -115,20 +113,13 @@ func assertFailureIsContained(
 	want string,
 ) {
 	t.Helper()
-	healthy := fixtureHandler(t, "open_meteo_forecast.json")
-	broken := false
-	stub := newStubUpstream(t, func(writer http.ResponseWriter, request *http.Request) {
-		if broken {
-			failing(writer, request)
-			return
-		}
-		healthy(writer, request)
-	})
+	handler := newSwitchableHandler(fixtureHandler(t, "open_meteo_forecast.json"))
+	stub := newStubUpstream(t, handler.serve)
 	repository, ingestion := ingestionOver(t, stub)
 
 	ingestion.RunCycle(context.Background())
 	stored := repository.count()
-	broken = true
+	handler.switchTo(failing)
 	ingestion.RunCycle(context.Background())
 
 	if got := repository.lastRun().Outcome; got != want {
@@ -204,9 +195,9 @@ func TestBreakerStopsAskingAndFabricatesNoRun(t *testing.T) {
 		t.Fatalf("breaker fabricated a run: %d then %d",
 			recorded, len(repository.runs))
 	}
-	if len(stub.requests) != breakerFailureThreshold {
+	if got := len(stub.recorded()); got != breakerFailureThreshold {
 		t.Fatalf("upstream called %d times, want %d",
-			len(stub.requests), breakerFailureThreshold)
+			got, breakerFailureThreshold)
 	}
 }
 
@@ -281,9 +272,8 @@ func TestUnstartableRunIsWriteErrorInTheMetricOnly(t *testing.T) {
 	if len(repository.runs) != 0 {
 		t.Fatalf("fetch_runs recorded = %d, want 0", len(repository.runs))
 	}
-	if len(stub.requests) != 0 {
-		t.Fatalf("upstream called %d times before a run existed, want 0",
-			len(stub.requests))
+	if got := len(stub.recorded()); got != 0 {
+		t.Fatalf("upstream called %d times before a run existed, want 0", got)
 	}
 }
 
@@ -335,6 +325,12 @@ func civilDay(t *testing.T, day string) time.Time {
 		t.Fatalf("civil day %s invalid: %v", day, err)
 	}
 	return value
+}
+
+func bodyHandler(body []byte) http.HandlerFunc {
+	return func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write(body)
+	}
 }
 
 func statusHandler(status int) http.HandlerFunc {

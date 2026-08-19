@@ -54,7 +54,11 @@ func NewFetcher(
 	settings config.ExternalContextConfig,
 	logger *slog.Logger,
 ) (*Fetcher, error) {
-	if len(settings.AllowedHosts) == 0 || settings.MaxResponseBytes <= 0 {
+	// A zero RequestTimeout disables http.Client.Timeout entirely, and one slow
+	// target would then eat the batch budget of every other target in the
+	// cycle. A nil logger would panic on the first fetch, which is the worst
+	// possible moment to discover the wiring is incomplete.
+	if !usableFetcherSettings(settings) || logger == nil {
 		return nil, errors.New("external fetcher configuration invalid")
 	}
 	fetcher := &Fetcher{
@@ -69,6 +73,12 @@ func NewFetcher(
 		CheckRedirect: fetcher.checkRedirect,
 	}
 	return fetcher, nil
+}
+
+func usableFetcherSettings(settings config.ExternalContextConfig) bool {
+	return len(settings.AllowedHosts) > 0 &&
+		settings.MaxResponseBytes > 0 &&
+		settings.RequestTimeout > 0
 }
 
 func hostSet(hosts []string) map[string]struct{} {
