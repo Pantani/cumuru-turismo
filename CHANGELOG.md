@@ -26,7 +26,7 @@ arquivo.
   não coleta nada novo — conta estados que o registro já guarda. A mediana de
   latência só aparece a partir de dez submissões na janela, porque abaixo disso
   ela descreve uma pessoa e não um comportamento;
-- [ADR-043](docs/decisoes/ADR-043-retorno-do-dado-a-hospedagem-e-funil-de-adesao.md)
+- [ADR-045](docs/decisoes/ADR-045-retorno-do-dado-a-hospedagem-e-funil-de-adesao.md)
   registrando as três decisões de privacidade desta entrega: limiar próprio do
   comparativo, recusa de publicar ocupação como célula pública e funil que conta
   estados em vez de instrumentar pessoas;
@@ -48,6 +48,33 @@ arquivo.
   estabelecimento recém-admitido, que é dado individualizado de
   estabelecimento (Portaria MTur nº 41/2025). Um número por janela, para um
   leitor identificado, é outra escala de exposição;
+- lista pública de hospedagens em `/hospedagens` e
+  `GET /api/v1/public/accommodations`, com nome, categoria, localidade,
+  capacidade, telefone em E.164, WhatsApp e site das hospedagens ativas que
+  consentiram em publicar; documento único, ordenado por nome, sem cursor,
+  `max-age=300` e ETag forte
+  ([ADR-043](docs/decisoes/ADR-043-lista-publica-de-hospedagens.md));
+- consentimento de publicação em `core.accommodations`
+  (`public_listing_enabled`, `public_contact_phone`, `public_contact_whatsapp`,
+  `public_website_url`, `public_listing_consented_at`), exposto no recurso da
+  acomodação como `public_listing` e editável por
+  `PATCH /accommodations/{id}`; publicar sem telefone é recusado, e despublicar
+  elimina o carimbo de consentimento;
+- painel "Aparecer na lista pública" na área da hospedagem, que publica e
+  retira o contato sob a mesma versão otimista das demais edições;
+- importação do calendário do Booking.com por iCal: a hospedagem cadastra o
+  endereço `.ics` do anúncio, o worker lê a cada duas horas e as datas entram
+  como reserva importada. `POST /accommodations/{accommodation_id}/calendar-feeds`,
+  `GET` da mesma rota, `POST /calendar-feeds/{feed_id}/remove`,
+  `GET /accommodations/{accommodation_id}/calendar-reservations`,
+  `POST /calendar-reservations/{reservation_id}/confirm` e `/dismiss` no
+  contrato, atrás de `CALENDAR_FEED_ENABLED`
+  ([ADR-044](docs/decisoes/ADR-044-importacao-de-calendario-da-plataforma-de-hospedagem.md));
+- `core.calendar_feeds` e `core.calendar_reservations` com a URL do feed cifrada
+  em repouso por AES-GCM com keyring versionado, o identificador da reserva na
+  origem guardado sob HMAC e nenhuma coluna de identidade — a estadia só nasce
+  por confirmação humana informando o número de hóspedes, que o arquivo não
+  traz;
 - autenticação local por e-mail e senha com Argon2id, sessão opaca, bloqueio
   por tentativas e `POST /auth/login`, `POST /auth/logout` e `GET /auth/session`
   no contrato, permitindo entrar sem CNPJ, Cadastur ou chave federal
@@ -94,6 +121,18 @@ arquivo.
 
 ### Alterado
 
+- **a hospedagem fictícia do `local-demo` deixou de administrar o catálogo de
+  questionários.** A conta de operação carregava `questionnaires:manage` e
+  `questionnaires:approve`, então `/questionários` aparecia no menu de quem
+  apenas opera uma hospedagem. O catálogo é um instrumento único da plataforma:
+  nem o serviço nem o repositório de questionário cruzam `core.memberships`, de
+  modo que os escopos editam, aprovam, publicam e aposentam a versão que todas as
+  hospedagens respondem. Desenhar o instrumento é ato da administração; a
+  hospedagem responde. A publicação da fixture continua intacta, porque usa
+  principals próprios (`fixture-questionnaire-editor` e
+  `-reviewer`). Sem migration e sem escopo novo; banco local já semeado mantém
+  os escopos antigos na linha da conta, então rode `make docker-rm` antes do
+  próximo `local-demo`.
 - **o administrador deixou de ver "Suas hospedagens" e ganhou área própria.** A
   mesma tela servia às duas autoridades: quem entrava com a conta semeada de
   administração via a lista de hospedagens como se fossem suas, com quadro de
@@ -190,6 +229,21 @@ arquivo.
 
 ### Corrigido
 
+- caixa de texto fora do padrão em todo formulário que não morava num cartão
+  conhecido: o estilo de campo estava preso a `.form-card`, `.panel-card`,
+  `.login-card`, `.operation-card`, `.onboarding-card` e `.new-stay-form`, então
+  os filtros do diretório, o calendário do Booking.com e a emissão de acesso
+  caíam no controle nativo do navegador — mais estreito, cinza e fora do ritmo
+  da página. O estilo passa a ser base global de `input`, `select` e `textarea`
+  com especificidade zero, e os campos deliberadamente menores continuam
+  vencendo pela própria regra; a borda de erro de `aria-invalid` deixa de valer
+  só dentro daqueles seis contêineres;
+- rótulo colado ao campo nos filtros de `/hospedagens`: os dois filtros usavam
+  `className="field"`, classe que não existe na folha de estilo;
+- seta do `select` desenhada pelo sistema, que não seguia o tema nem o tamanho
+  do campo e mudava de forma conforme o navegador: passa a ser um chevron da
+  própria folha de estilo, feito de gradiente para acompanhar `currentColor`,
+  inclusive quando o campo desabilita;
 - `POST /accommodations` descrito no contrato como onboarding "com OIDC fake",
   trilho que a [ADR-037](docs/decisoes/ADR-037-autenticacao-local-por-email-e-senha.md)
   substituiu: `NewChainVerifier(session, federated)` aceita a sessão local de

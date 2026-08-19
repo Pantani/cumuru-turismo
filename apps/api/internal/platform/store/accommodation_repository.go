@@ -550,7 +550,15 @@ func updateAccommodationParams(
 		SetCategory: patch.SetCategory, Category: string(patch.Category),
 		SetCapacity: patch.SetCapacity, Capacity: patch.Capacity,
 		SetPublicAreaCode: patch.SetPublicAreaCode, PublicAreaCode: patch.PublicAreaCode,
-		UpdatedAt: pgTime(now), AccommodationID: pgUUID(command.AccommodationID),
+		SetPublicListingEnabled:  patch.SetPublicListingEnabled,
+		PublicListingEnabled:     patch.PublicListingEnabled,
+		SetPublicContactPhone:    patch.SetPublicContactPhone,
+		PublicContactPhone:       patch.PublicContactPhone,
+		SetPublicContactWhatsapp: patch.SetPublicContactWhatsApp,
+		PublicContactWhatsapp:    patch.PublicContactWhatsApp,
+		SetPublicWebsiteUrl:      patch.SetPublicWebsiteURL,
+		PublicWebsiteUrl:         patch.PublicWebsiteURL,
+		UpdatedAt:                pgTime(now), AccommodationID: pgUUID(command.AccommodationID),
 		ExpectedVersion: command.ExpectedVersion,
 		OidcIssuer:      command.Actor.Issuer, OidcSubject: command.Actor.Subject,
 	}
@@ -723,10 +731,15 @@ var knownAccommodationErrors = []error{
 	accommodation.ErrPreconditionFailed, accommodation.ErrConflict,
 }
 
+// A violação de CHECK entra aqui porque é estado recusado, não banco fora do
+// ar: publicar a hospedagem cujo telefone a própria requisição não trouxe nem
+// a linha tem é conflito com o estado, e responder 503 mandaria a operadora
+// tentar de novo um pedido que nunca vai passar.
 func accommodationConflict(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows) ||
 		errors.Is(err, errIdempotencyConflict) ||
-		isUniqueViolation(err)
+		isUniqueViolation(err) ||
+		isCheckViolation(err)
 }
 
 func accommodationMutationError(err error) error {
@@ -751,6 +764,11 @@ func accommodationFromGet(row generated.GetAccessibleAccommodationRow) accommoda
 		ID: uuid.UUID(row.ID.Bytes), OrganizationID: uuid.UUID(row.OrganizationID.Bytes),
 		Name: row.Name, Category: accommodation.Category(row.Category), Status: accommodation.Status(row.Status),
 		CadasturID: row.CadasturID, Capacity: row.Capacity, PublicAreaCode: row.PublicAreaCode,
+		PublicListing: publicListing(
+			row.PublicListingEnabled, row.PublicContactPhone,
+			row.PublicContactWhatsapp, row.PublicWebsiteUrl,
+			row.PublicListingConsentedAt,
+		),
 		Version: row.Version, CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
 	}
 }
@@ -760,6 +778,11 @@ func accommodationFromList(row generated.ListAccessibleAccommodationsRow) accomm
 		ID: uuid.UUID(row.ID.Bytes), OrganizationID: uuid.UUID(row.OrganizationID.Bytes),
 		Name: row.Name, Category: accommodation.Category(row.Category), Status: accommodation.Status(row.Status),
 		CadasturID: row.CadasturID, Capacity: row.Capacity, PublicAreaCode: row.PublicAreaCode,
+		PublicListing: publicListing(
+			row.PublicListingEnabled, row.PublicContactPhone,
+			row.PublicContactWhatsapp, row.PublicWebsiteUrl,
+			row.PublicListingConsentedAt,
+		),
 		Version: row.Version, CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
 	}
 }
@@ -769,6 +792,11 @@ func accommodationFromUpdate(row generated.UpdateAccommodationRow) accommodation
 		ID: uuid.UUID(row.ID.Bytes), OrganizationID: uuid.UUID(row.OrganizationID.Bytes),
 		Name: row.Name, Category: accommodation.Category(row.Category), Status: accommodation.Status(row.Status),
 		CadasturID: row.CadasturID, Capacity: row.Capacity, PublicAreaCode: row.PublicAreaCode,
+		PublicListing: publicListing(
+			row.PublicListingEnabled, row.PublicContactPhone,
+			row.PublicContactWhatsapp, row.PublicWebsiteUrl,
+			row.PublicListingConsentedAt,
+		),
 		Version: row.Version, CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
 	}
 }
@@ -781,8 +809,31 @@ func accommodationFromOnboarding(
 		Name: row.Name, Category: accommodation.Category(row.Category),
 		Status: accommodation.Status(row.Status), CadasturID: row.CadasturID,
 		Capacity: row.Capacity, PublicAreaCode: row.PublicAreaCode,
+		PublicListing: publicListing(
+			row.PublicListingEnabled, row.PublicContactPhone,
+			row.PublicContactWhatsapp, row.PublicWebsiteUrl,
+			row.PublicListingConsentedAt,
+		),
 		Version: row.Version, CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
 	}
+}
+
+// O carimbo de consentimento só existe publicado; nulo vira ausência, não zero.
+func publicListing(
+	enabled bool,
+	phone *string,
+	whatsapp bool,
+	website *string,
+	consentedAt pgtype.Timestamptz,
+) accommodation.PublicListing {
+	listing := accommodation.PublicListing{
+		Enabled: enabled, Phone: phone, WhatsApp: whatsapp, Website: website,
+	}
+	if consentedAt.Valid {
+		moment := consentedAt.Time.UTC()
+		listing.ConsentedAt = &moment
+	}
+	return listing
 }
 
 func membershipFromList(row generated.ListAccommodationMembershipsRow) accommodation.Membership {

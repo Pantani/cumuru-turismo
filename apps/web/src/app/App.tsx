@@ -29,6 +29,9 @@ const SelfRegistrationPage = lazy(
 );
 const InviteRequestPage = lazy(() => import("../pages/InviteRequestPage"));
 const ActivationPage = lazy(() => import("../pages/ActivationPage"));
+const AccommodationDirectoryPage = lazy(
+  () => import("../pages/AccommodationDirectoryPage"),
+);
 const AuthenticatedPage = lazy(() => import("../pages/AuthenticatedPage"));
 const SurveyPage = lazy(() => import("../pages/SurveyPage"));
 const QuestionnaireAdminPage = lazy(
@@ -42,6 +45,7 @@ const routePages: Record<AppPath, ComponentType> = {
   "/registro": RegistrationPage,
   "/i": SelfRegistrationPage,
   "/convite": InviteRequestPage,
+  "/hospedagens": AccommodationDirectoryPage,
   "/ativacao": ActivationPage,
   "/pesquisa": SurveyPage,
   "/acesso": AuthenticatedPage,
@@ -54,6 +58,7 @@ const routeTitles: Record<AppPath, MessageKey> = {
   "/registro": "app.title.registration",
   "/i": "app.title.selfRegistration",
   "/convite": "app.title.inviteRequest",
+  "/hospedagens": "app.title.directory",
   "/ativacao": "app.title.activation",
   "/pesquisa": "app.title.survey",
   "/acesso": "app.title.workspace",
@@ -213,6 +218,7 @@ function navigationEntries(
 ): NavigationEntry[] {
   return [
     { href: "/", label: "app.nav.public", visible: true },
+    { href: "/hospedagens", label: "app.nav.directory", visible: true },
     {
       href: "/registro",
       label: "app.nav.registration",

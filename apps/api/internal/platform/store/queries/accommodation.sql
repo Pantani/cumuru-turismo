@@ -8,6 +8,11 @@ SELECT
   a.cadastur_id,
   a.capacity,
   a.public_area_code,
+  a.public_listing_enabled,
+  a.public_contact_phone,
+  a.public_contact_whatsapp,
+  a.public_website_url,
+  a.public_listing_consented_at,
   a.version,
   a.created_at,
   a.updated_at
@@ -37,6 +42,11 @@ SELECT
   a.cadastur_id,
   a.capacity,
   a.public_area_code,
+  a.public_listing_enabled,
+  a.public_contact_phone,
+  a.public_contact_whatsapp,
+  a.public_website_url,
+  a.public_listing_consented_at,
   a.version,
   a.created_at,
   a.updated_at,
@@ -78,6 +88,11 @@ SELECT
   accommodation.cadastur_id,
   accommodation.capacity,
   accommodation.public_area_code,
+  accommodation.public_listing_enabled,
+  accommodation.public_contact_phone,
+  accommodation.public_contact_whatsapp,
+  accommodation.public_website_url,
+  accommodation.public_listing_consented_at,
   accommodation.version,
   accommodation.created_at,
   accommodation.updated_at
@@ -129,6 +144,11 @@ RETURNING
   cadastur_id,
   capacity,
   public_area_code,
+  public_listing_enabled,
+  public_contact_phone,
+  public_contact_whatsapp,
+  public_website_url,
+  public_listing_consented_at,
   version,
   created_at,
   updated_at;
@@ -176,6 +196,39 @@ SET
     WHEN sqlc.arg(set_public_area_code)::boolean THEN sqlc.narg(public_area_code)::text
     ELSE a.public_area_code
   END,
+  public_listing_enabled = CASE
+    WHEN sqlc.arg(set_public_listing_enabled)::boolean
+      THEN sqlc.arg(public_listing_enabled)::boolean
+    ELSE a.public_listing_enabled
+  END,
+  public_contact_phone = CASE
+    WHEN sqlc.arg(set_public_contact_phone)::boolean
+      THEN sqlc.narg(public_contact_phone)::text
+    ELSE a.public_contact_phone
+  END,
+  public_contact_whatsapp = CASE
+    WHEN sqlc.arg(set_public_contact_whatsapp)::boolean
+      THEN sqlc.arg(public_contact_whatsapp)::boolean
+    ELSE a.public_contact_whatsapp
+  END,
+  public_website_url = CASE
+    WHEN sqlc.arg(set_public_website_url)::boolean
+      THEN sqlc.narg(public_website_url)::text
+    ELSE a.public_website_url
+  END,
+  -- O carimbo é do consentimento, não da edição: publicar de novo o que já
+  -- estava publicado não reescreve a data em que a hospedagem consentiu, e
+  -- despublicar a elimina em vez de guardar consentimento que foi retirado.
+  public_listing_consented_at = CASE
+    WHEN NOT sqlc.arg(set_public_listing_enabled)::boolean
+      THEN a.public_listing_consented_at
+    WHEN sqlc.arg(public_listing_enabled)::boolean
+      THEN pg_catalog.coalesce(
+        a.public_listing_consented_at,
+        sqlc.arg(updated_at)::timestamptz
+      )
+    ELSE NULL
+  END,
   updated_at = sqlc.arg(updated_at),
   version = a.version + 1
 WHERE a.id = sqlc.arg(accommodation_id)
@@ -199,6 +252,11 @@ RETURNING
   a.cadastur_id,
   a.capacity,
   a.public_area_code,
+  a.public_listing_enabled,
+  a.public_contact_phone,
+  a.public_contact_whatsapp,
+  a.public_website_url,
+  a.public_listing_consented_at,
   a.version,
   a.created_at,
   a.updated_at;
@@ -366,3 +424,26 @@ RETURNING
   version,
   created_at,
   updated_at;
+
+-- name: ListPublicAccommodationDirectory :many
+-- Lista pública de hospedagens. O filtro está aqui, e não no chamador: a rota
+-- é aberta, e uma consulta que dependesse do handler para recortar publicaria
+-- o cadastro inteiro no primeiro erro de quem a chamasse. Sem paginação por
+-- cursor de propósito — a lista é municipal e cabe num documento só, cacheável
+-- por inteiro; o limite acima do teto existe para a leitura recusar em vez de
+-- truncar em silêncio.
+SELECT
+  a.id,
+  a.name,
+  a.category,
+  a.capacity,
+  a.public_area_code,
+  a.public_contact_phone,
+  a.public_contact_whatsapp,
+  a.public_website_url,
+  a.updated_at
+FROM core.accommodations AS a
+WHERE a.public_listing_enabled = true
+  AND a.status = 'active'
+ORDER BY a.name, a.id
+LIMIT sqlc.arg(page_limit);

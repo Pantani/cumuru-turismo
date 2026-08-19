@@ -191,6 +191,11 @@ SELECT
   accommodation.cadastur_id,
   accommodation.capacity,
   accommodation.public_area_code,
+  accommodation.public_listing_enabled,
+  accommodation.public_contact_phone,
+  accommodation.public_contact_whatsapp,
+  accommodation.public_website_url,
+  accommodation.public_listing_consented_at,
   accommodation.version,
   accommodation.created_at,
   accommodation.updated_at
@@ -212,17 +217,22 @@ type FindOnboardedAccommodationParams struct {
 }
 
 type FindOnboardedAccommodationRow struct {
-	ID             pgtype.UUID             `json:"id"`
-	OrganizationID pgtype.UUID             `json:"organization_id"`
-	Name           string                  `json:"name"`
-	Category       string                  `json:"category"`
-	Status         CoreAccommodationStatus `json:"status"`
-	CadasturID     *string                 `json:"cadastur_id"`
-	Capacity       *int32                  `json:"capacity"`
-	PublicAreaCode *string                 `json:"public_area_code"`
-	Version        int64                   `json:"version"`
-	CreatedAt      pgtype.Timestamptz      `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz      `json:"updated_at"`
+	ID                       pgtype.UUID             `json:"id"`
+	OrganizationID           pgtype.UUID             `json:"organization_id"`
+	Name                     string                  `json:"name"`
+	Category                 string                  `json:"category"`
+	Status                   CoreAccommodationStatus `json:"status"`
+	CadasturID               *string                 `json:"cadastur_id"`
+	Capacity                 *int32                  `json:"capacity"`
+	PublicAreaCode           *string                 `json:"public_area_code"`
+	PublicListingEnabled     bool                    `json:"public_listing_enabled"`
+	PublicContactPhone       *string                 `json:"public_contact_phone"`
+	PublicContactWhatsapp    bool                    `json:"public_contact_whatsapp"`
+	PublicWebsiteUrl         *string                 `json:"public_website_url"`
+	PublicListingConsentedAt pgtype.Timestamptz      `json:"public_listing_consented_at"`
+	Version                  int64                   `json:"version"`
+	CreatedAt                pgtype.Timestamptz      `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz      `json:"updated_at"`
 }
 
 func (q *Queries) FindOnboardedAccommodation(ctx context.Context, arg FindOnboardedAccommodationParams) (FindOnboardedAccommodationRow, error) {
@@ -242,6 +252,11 @@ func (q *Queries) FindOnboardedAccommodation(ctx context.Context, arg FindOnboar
 		&i.CadasturID,
 		&i.Capacity,
 		&i.PublicAreaCode,
+		&i.PublicListingEnabled,
+		&i.PublicContactPhone,
+		&i.PublicContactWhatsapp,
+		&i.PublicWebsiteUrl,
+		&i.PublicListingConsentedAt,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -259,6 +274,11 @@ SELECT
   a.cadastur_id,
   a.capacity,
   a.public_area_code,
+  a.public_listing_enabled,
+  a.public_contact_phone,
+  a.public_contact_whatsapp,
+  a.public_website_url,
+  a.public_listing_consented_at,
   a.version,
   a.created_at,
   a.updated_at,
@@ -280,19 +300,24 @@ type GetAccessibleAccommodationParams struct {
 }
 
 type GetAccessibleAccommodationRow struct {
-	ID                pgtype.UUID             `json:"id"`
-	OrganizationID    pgtype.UUID             `json:"organization_id"`
-	Name              string                  `json:"name"`
-	Category          string                  `json:"category"`
-	Status            CoreAccommodationStatus `json:"status"`
-	CadasturID        *string                 `json:"cadastur_id"`
-	Capacity          *int32                  `json:"capacity"`
-	PublicAreaCode    *string                 `json:"public_area_code"`
-	Version           int64                   `json:"version"`
-	CreatedAt         pgtype.Timestamptz      `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz      `json:"updated_at"`
-	ActorMembershipID pgtype.UUID             `json:"actor_membership_id"`
-	ActorRole         string                  `json:"actor_role"`
+	ID                       pgtype.UUID             `json:"id"`
+	OrganizationID           pgtype.UUID             `json:"organization_id"`
+	Name                     string                  `json:"name"`
+	Category                 string                  `json:"category"`
+	Status                   CoreAccommodationStatus `json:"status"`
+	CadasturID               *string                 `json:"cadastur_id"`
+	Capacity                 *int32                  `json:"capacity"`
+	PublicAreaCode           *string                 `json:"public_area_code"`
+	PublicListingEnabled     bool                    `json:"public_listing_enabled"`
+	PublicContactPhone       *string                 `json:"public_contact_phone"`
+	PublicContactWhatsapp    bool                    `json:"public_contact_whatsapp"`
+	PublicWebsiteUrl         *string                 `json:"public_website_url"`
+	PublicListingConsentedAt pgtype.Timestamptz      `json:"public_listing_consented_at"`
+	Version                  int64                   `json:"version"`
+	CreatedAt                pgtype.Timestamptz      `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz      `json:"updated_at"`
+	ActorMembershipID        pgtype.UUID             `json:"actor_membership_id"`
+	ActorRole                string                  `json:"actor_role"`
 }
 
 func (q *Queries) GetAccessibleAccommodation(ctx context.Context, arg GetAccessibleAccommodationParams) (GetAccessibleAccommodationRow, error) {
@@ -307,6 +332,11 @@ func (q *Queries) GetAccessibleAccommodation(ctx context.Context, arg GetAccessi
 		&i.CadasturID,
 		&i.Capacity,
 		&i.PublicAreaCode,
+		&i.PublicListingEnabled,
+		&i.PublicContactPhone,
+		&i.PublicContactWhatsapp,
+		&i.PublicWebsiteUrl,
+		&i.PublicListingConsentedAt,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -344,6 +374,11 @@ RETURNING
   cadastur_id,
   capacity,
   public_area_code,
+  public_listing_enabled,
+  public_contact_phone,
+  public_contact_whatsapp,
+  public_website_url,
+  public_listing_consented_at,
   version,
   created_at,
   updated_at
@@ -359,17 +394,22 @@ type InsertOnboardingAccommodationParams struct {
 }
 
 type InsertOnboardingAccommodationRow struct {
-	ID             pgtype.UUID             `json:"id"`
-	OrganizationID pgtype.UUID             `json:"organization_id"`
-	Name           string                  `json:"name"`
-	Category       string                  `json:"category"`
-	Status         CoreAccommodationStatus `json:"status"`
-	CadasturID     *string                 `json:"cadastur_id"`
-	Capacity       *int32                  `json:"capacity"`
-	PublicAreaCode *string                 `json:"public_area_code"`
-	Version        int64                   `json:"version"`
-	CreatedAt      pgtype.Timestamptz      `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz      `json:"updated_at"`
+	ID                       pgtype.UUID             `json:"id"`
+	OrganizationID           pgtype.UUID             `json:"organization_id"`
+	Name                     string                  `json:"name"`
+	Category                 string                  `json:"category"`
+	Status                   CoreAccommodationStatus `json:"status"`
+	CadasturID               *string                 `json:"cadastur_id"`
+	Capacity                 *int32                  `json:"capacity"`
+	PublicAreaCode           *string                 `json:"public_area_code"`
+	PublicListingEnabled     bool                    `json:"public_listing_enabled"`
+	PublicContactPhone       *string                 `json:"public_contact_phone"`
+	PublicContactWhatsapp    bool                    `json:"public_contact_whatsapp"`
+	PublicWebsiteUrl         *string                 `json:"public_website_url"`
+	PublicListingConsentedAt pgtype.Timestamptz      `json:"public_listing_consented_at"`
+	Version                  int64                   `json:"version"`
+	CreatedAt                pgtype.Timestamptz      `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz      `json:"updated_at"`
 }
 
 func (q *Queries) InsertOnboardingAccommodation(ctx context.Context, arg InsertOnboardingAccommodationParams) (InsertOnboardingAccommodationRow, error) {
@@ -391,6 +431,11 @@ func (q *Queries) InsertOnboardingAccommodation(ctx context.Context, arg InsertO
 		&i.CadasturID,
 		&i.Capacity,
 		&i.PublicAreaCode,
+		&i.PublicListingEnabled,
+		&i.PublicContactPhone,
+		&i.PublicContactWhatsapp,
+		&i.PublicWebsiteUrl,
+		&i.PublicListingConsentedAt,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -494,6 +539,11 @@ SELECT
   a.cadastur_id,
   a.capacity,
   a.public_area_code,
+  a.public_listing_enabled,
+  a.public_contact_phone,
+  a.public_contact_whatsapp,
+  a.public_website_url,
+  a.public_listing_consented_at,
   a.version,
   a.created_at,
   a.updated_at
@@ -523,17 +573,22 @@ type ListAccessibleAccommodationsParams struct {
 }
 
 type ListAccessibleAccommodationsRow struct {
-	ID             pgtype.UUID             `json:"id"`
-	OrganizationID pgtype.UUID             `json:"organization_id"`
-	Name           string                  `json:"name"`
-	Category       string                  `json:"category"`
-	Status         CoreAccommodationStatus `json:"status"`
-	CadasturID     *string                 `json:"cadastur_id"`
-	Capacity       *int32                  `json:"capacity"`
-	PublicAreaCode *string                 `json:"public_area_code"`
-	Version        int64                   `json:"version"`
-	CreatedAt      pgtype.Timestamptz      `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz      `json:"updated_at"`
+	ID                       pgtype.UUID             `json:"id"`
+	OrganizationID           pgtype.UUID             `json:"organization_id"`
+	Name                     string                  `json:"name"`
+	Category                 string                  `json:"category"`
+	Status                   CoreAccommodationStatus `json:"status"`
+	CadasturID               *string                 `json:"cadastur_id"`
+	Capacity                 *int32                  `json:"capacity"`
+	PublicAreaCode           *string                 `json:"public_area_code"`
+	PublicListingEnabled     bool                    `json:"public_listing_enabled"`
+	PublicContactPhone       *string                 `json:"public_contact_phone"`
+	PublicContactWhatsapp    bool                    `json:"public_contact_whatsapp"`
+	PublicWebsiteUrl         *string                 `json:"public_website_url"`
+	PublicListingConsentedAt pgtype.Timestamptz      `json:"public_listing_consented_at"`
+	Version                  int64                   `json:"version"`
+	CreatedAt                pgtype.Timestamptz      `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz      `json:"updated_at"`
 }
 
 func (q *Queries) ListAccessibleAccommodations(ctx context.Context, arg ListAccessibleAccommodationsParams) ([]ListAccessibleAccommodationsRow, error) {
@@ -560,6 +615,11 @@ func (q *Queries) ListAccessibleAccommodations(ctx context.Context, arg ListAcce
 			&i.CadasturID,
 			&i.Capacity,
 			&i.PublicAreaCode,
+			&i.PublicListingEnabled,
+			&i.PublicContactPhone,
+			&i.PublicContactWhatsapp,
+			&i.PublicWebsiteUrl,
+			&i.PublicListingConsentedAt,
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -709,6 +769,72 @@ func (q *Queries) ListAccommodationOnboardingOrganizations(ctx context.Context, 
 	return items, nil
 }
 
+const listPublicAccommodationDirectory = `-- name: ListPublicAccommodationDirectory :many
+SELECT
+  a.id,
+  a.name,
+  a.category,
+  a.capacity,
+  a.public_area_code,
+  a.public_contact_phone,
+  a.public_contact_whatsapp,
+  a.public_website_url,
+  a.updated_at
+FROM core.accommodations AS a
+WHERE a.public_listing_enabled = true
+  AND a.status = 'active'
+ORDER BY a.name, a.id
+LIMIT $1
+`
+
+type ListPublicAccommodationDirectoryRow struct {
+	ID                    pgtype.UUID        `json:"id"`
+	Name                  string             `json:"name"`
+	Category              string             `json:"category"`
+	Capacity              *int32             `json:"capacity"`
+	PublicAreaCode        *string            `json:"public_area_code"`
+	PublicContactPhone    *string            `json:"public_contact_phone"`
+	PublicContactWhatsapp bool               `json:"public_contact_whatsapp"`
+	PublicWebsiteUrl      *string            `json:"public_website_url"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Lista pública de hospedagens. O filtro está aqui, e não no chamador: a rota
+// é aberta, e uma consulta que dependesse do handler para recortar publicaria
+// o cadastro inteiro no primeiro erro de quem a chamasse. Sem paginação por
+// cursor de propósito — a lista é municipal e cabe num documento só, cacheável
+// por inteiro; o limite acima do teto existe para a leitura recusar em vez de
+// truncar em silêncio.
+func (q *Queries) ListPublicAccommodationDirectory(ctx context.Context, pageLimit int32) ([]ListPublicAccommodationDirectoryRow, error) {
+	rows, err := q.db.Query(ctx, listPublicAccommodationDirectory, pageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPublicAccommodationDirectoryRow{}
+	for rows.Next() {
+		var i ListPublicAccommodationDirectoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Category,
+			&i.Capacity,
+			&i.PublicAreaCode,
+			&i.PublicContactPhone,
+			&i.PublicContactWhatsapp,
+			&i.PublicWebsiteUrl,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMembershipSetForManager = `-- name: LockMembershipSetForManager :many
 SELECT
   target.id,
@@ -790,17 +916,50 @@ SET
     WHEN $7::boolean THEN $8::text
     ELSE a.public_area_code
   END,
-  updated_at = $9,
+  public_listing_enabled = CASE
+    WHEN $9::boolean
+      THEN $10::boolean
+    ELSE a.public_listing_enabled
+  END,
+  public_contact_phone = CASE
+    WHEN $11::boolean
+      THEN $12::text
+    ELSE a.public_contact_phone
+  END,
+  public_contact_whatsapp = CASE
+    WHEN $13::boolean
+      THEN $14::boolean
+    ELSE a.public_contact_whatsapp
+  END,
+  public_website_url = CASE
+    WHEN $15::boolean
+      THEN $16::text
+    ELSE a.public_website_url
+  END,
+  -- O carimbo é do consentimento, não da edição: publicar de novo o que já
+  -- estava publicado não reescreve a data em que a hospedagem consentiu, e
+  -- despublicar a elimina em vez de guardar consentimento que foi retirado.
+  public_listing_consented_at = CASE
+    WHEN NOT $9::boolean
+      THEN a.public_listing_consented_at
+    WHEN $10::boolean
+      THEN pg_catalog.coalesce(
+        a.public_listing_consented_at,
+        $17::timestamptz
+      )
+    ELSE NULL
+  END,
+  updated_at = $17,
   version = a.version + 1
-WHERE a.id = $10
-  AND a.version = $11
+WHERE a.id = $18
+  AND a.version = $19
   AND a.status <> 'closed'
   AND EXISTS (
     SELECT 1
     FROM core.memberships AS m
     WHERE m.accommodation_id = a.id
-      AND m.oidc_issuer = $12
-      AND m.oidc_subject = $13
+      AND m.oidc_issuer = $20
+      AND m.oidc_subject = $21
       AND m.active = true
       AND m.role = 'manager'
   )
@@ -813,39 +972,57 @@ RETURNING
   a.cadastur_id,
   a.capacity,
   a.public_area_code,
+  a.public_listing_enabled,
+  a.public_contact_phone,
+  a.public_contact_whatsapp,
+  a.public_website_url,
+  a.public_listing_consented_at,
   a.version,
   a.created_at,
   a.updated_at
 `
 
 type UpdateAccommodationParams struct {
-	SetName           bool               `json:"set_name"`
-	Name              string             `json:"name"`
-	SetCategory       bool               `json:"set_category"`
-	Category          string             `json:"category"`
-	SetCapacity       bool               `json:"set_capacity"`
-	Capacity          *int32             `json:"capacity"`
-	SetPublicAreaCode bool               `json:"set_public_area_code"`
-	PublicAreaCode    *string            `json:"public_area_code"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	AccommodationID   pgtype.UUID        `json:"accommodation_id"`
-	ExpectedVersion   int64              `json:"expected_version"`
-	OidcIssuer        string             `json:"oidc_issuer"`
-	OidcSubject       string             `json:"oidc_subject"`
+	SetName                  bool               `json:"set_name"`
+	Name                     string             `json:"name"`
+	SetCategory              bool               `json:"set_category"`
+	Category                 string             `json:"category"`
+	SetCapacity              bool               `json:"set_capacity"`
+	Capacity                 *int32             `json:"capacity"`
+	SetPublicAreaCode        bool               `json:"set_public_area_code"`
+	PublicAreaCode           *string            `json:"public_area_code"`
+	SetPublicListingEnabled  bool               `json:"set_public_listing_enabled"`
+	PublicListingEnabled     bool               `json:"public_listing_enabled"`
+	SetPublicContactPhone    bool               `json:"set_public_contact_phone"`
+	PublicContactPhone       *string            `json:"public_contact_phone"`
+	SetPublicContactWhatsapp bool               `json:"set_public_contact_whatsapp"`
+	PublicContactWhatsapp    bool               `json:"public_contact_whatsapp"`
+	SetPublicWebsiteUrl      bool               `json:"set_public_website_url"`
+	PublicWebsiteUrl         *string            `json:"public_website_url"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	AccommodationID          pgtype.UUID        `json:"accommodation_id"`
+	ExpectedVersion          int64              `json:"expected_version"`
+	OidcIssuer               string             `json:"oidc_issuer"`
+	OidcSubject              string             `json:"oidc_subject"`
 }
 
 type UpdateAccommodationRow struct {
-	ID             pgtype.UUID             `json:"id"`
-	OrganizationID pgtype.UUID             `json:"organization_id"`
-	Name           string                  `json:"name"`
-	Category       string                  `json:"category"`
-	Status         CoreAccommodationStatus `json:"status"`
-	CadasturID     *string                 `json:"cadastur_id"`
-	Capacity       *int32                  `json:"capacity"`
-	PublicAreaCode *string                 `json:"public_area_code"`
-	Version        int64                   `json:"version"`
-	CreatedAt      pgtype.Timestamptz      `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz      `json:"updated_at"`
+	ID                       pgtype.UUID             `json:"id"`
+	OrganizationID           pgtype.UUID             `json:"organization_id"`
+	Name                     string                  `json:"name"`
+	Category                 string                  `json:"category"`
+	Status                   CoreAccommodationStatus `json:"status"`
+	CadasturID               *string                 `json:"cadastur_id"`
+	Capacity                 *int32                  `json:"capacity"`
+	PublicAreaCode           *string                 `json:"public_area_code"`
+	PublicListingEnabled     bool                    `json:"public_listing_enabled"`
+	PublicContactPhone       *string                 `json:"public_contact_phone"`
+	PublicContactWhatsapp    bool                    `json:"public_contact_whatsapp"`
+	PublicWebsiteUrl         *string                 `json:"public_website_url"`
+	PublicListingConsentedAt pgtype.Timestamptz      `json:"public_listing_consented_at"`
+	Version                  int64                   `json:"version"`
+	CreatedAt                pgtype.Timestamptz      `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz      `json:"updated_at"`
 }
 
 func (q *Queries) UpdateAccommodation(ctx context.Context, arg UpdateAccommodationParams) (UpdateAccommodationRow, error) {
@@ -858,6 +1035,14 @@ func (q *Queries) UpdateAccommodation(ctx context.Context, arg UpdateAccommodati
 		arg.Capacity,
 		arg.SetPublicAreaCode,
 		arg.PublicAreaCode,
+		arg.SetPublicListingEnabled,
+		arg.PublicListingEnabled,
+		arg.SetPublicContactPhone,
+		arg.PublicContactPhone,
+		arg.SetPublicContactWhatsapp,
+		arg.PublicContactWhatsapp,
+		arg.SetPublicWebsiteUrl,
+		arg.PublicWebsiteUrl,
 		arg.UpdatedAt,
 		arg.AccommodationID,
 		arg.ExpectedVersion,
@@ -874,6 +1059,11 @@ func (q *Queries) UpdateAccommodation(ctx context.Context, arg UpdateAccommodati
 		&i.CadasturID,
 		&i.Capacity,
 		&i.PublicAreaCode,
+		&i.PublicListingEnabled,
+		&i.PublicContactPhone,
+		&i.PublicContactWhatsapp,
+		&i.PublicWebsiteUrl,
+		&i.PublicListingConsentedAt,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,

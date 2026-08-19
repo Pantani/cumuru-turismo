@@ -121,6 +121,11 @@ func runWorkerWithResources(
 	if err != nil {
 		return errors.New("approval expiry initialization failed")
 	}
+	calendarSync, err := calendarSyncWorker(platformStore, cfg)
+	if err != nil {
+		return errors.New("calendar feed synchronization initialization failed")
+	}
+	calendarMetrics := calendarSyncMetricSet()
 	registry.MustRegister(
 		alive, ready, cleanupFailures, analyticsFailures, analyticsRuns,
 		expiredCleanupRuns, expiredCleanupDeleted,
@@ -128,6 +133,7 @@ func runWorkerWithResources(
 		outboxPending, outboxOldestAge, pollerShutdownTimeouts,
 	)
 	registry.MustRegister(approvalExpiry.collectors()...)
+	registry.MustRegister(calendarMetrics.failures, calendarMetrics.feeds)
 	alive.Set(1)
 	defer alive.Set(0)
 	updateReadiness(ctx, platformStore, ready)
@@ -150,6 +156,7 @@ func runWorkerWithResources(
 			saturated: expiredCleanupSaturated,
 		},
 		approvals: approvals, approvalExpiry: approvalExpiry,
+		calendarSync: calendarSync, calendarMetrics: calendarMetrics,
 	})
 	logger.Info("worker started", "component", "worker")
 	serveErr := server.Serve(
@@ -244,6 +251,8 @@ type workerPollerSpec struct {
 	cleanup           expiredCleanupMetrics
 	approvals         approvalExpirer
 	approvalExpiry    approvalExpiryMetrics
+	calendarSync      calendarSynchronizer
+	calendarMetrics   calendarSyncMetrics
 }
 
 // Feature-gated pollers only start when their feature is enabled, so a disabled
@@ -276,6 +285,7 @@ func startFeaturePollers(pollers *pollerCoordinator, spec workerPollerSpec) {
 		})
 	}
 	startApprovalExpiryPoller(pollers, spec)
+	startCalendarSyncPoller(pollers, spec)
 	if !spec.cfg.Analytics.Enabled {
 		return
 	}
@@ -301,6 +311,21 @@ func startApprovalExpiryPoller(pollers *pollerCoordinator, spec workerPollerSpec
 	pollers.Go(func(pollerContext context.Context) {
 		pollApprovalExpiry(
 			pollerContext, spec.approvals, spec.logger, spec.approvalExpiry,
+		)
+	})
+}
+
+// The synchronization only runs when the feature is on and the synchronizer
+// could be built. A worker fetching feeds the API does not serve would be
+// outbound traffic nobody can see the result of.
+func startCalendarSyncPoller(pollers *pollerCoordinator, spec workerPollerSpec) {
+	if !spec.cfg.CalendarFeed.Enabled || spec.calendarSync == nil {
+		return
+	}
+	pollers.Go(func(pollerContext context.Context) {
+		pollCalendarSync(
+			pollerContext, spec.calendarSync, spec.cfg.CalendarFeed.BatchSize,
+			spec.logger, spec.calendarMetrics,
 		)
 	})
 }

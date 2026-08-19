@@ -78,7 +78,7 @@ func TestPublicAnalyticsUsesStrongVariantETagAndCache(t *testing.T) {
 		t.Fatalf("status = %d body=%s", first.Code, first.Body.String())
 	}
 	etag := first.Header().Get("ETag")
-	if !strongAnalyticsETag.MatchString(etag) {
+	if !strongDocumentETag.MatchString(etag) {
 		t.Fatalf("ETag = %q", etag)
 	}
 	if first.Header().Get("Cache-Control") != publicAnalyticsCache {

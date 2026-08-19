@@ -17,6 +17,7 @@ worker agrega presença e o painel público mostra os indicadores anônimos.
 | `questionnaire` | Autoria e versionamento do questionário e pesquisa pública | implementada |
 | `analytics` | Presença, cobertura, supressão, publicação anônima e painéis | implementada |
 | `self-service` | Autocadastro por cartaz/QR, ativação de conta e fila de aprovação | implementada |
+| `calendar-feed` | Importação do calendário do Booking.com por iCal e fila de confirmação | implementada |
 | `fnrh` | Envio à FNRH Digital | não implementada; bloqueada por gates externos |
 
 **Todo o runtime opera como `PROTOTYPE_ONLY`.** Use exclusivamente dados,
@@ -51,6 +52,7 @@ Jornadas disponíveis na aplicação web:
 | Rota | Para quem | O que faz |
 | --- | --- | --- |
 | `/` | qualquer pessoa | Capa pública trilíngue e painel de indicadores anônimos |
+| `/hospedagens` | quem procura onde ficar | Lista pública das hospedagens que consentiram em publicar o contato |
 | `/acesso` | hospedagem ou administração | Login por e-mail e senha; a conta cai na área da hospedagem ou na da administração, conforme o escopo `accommodations:onboard` |
 | `/registro` | hóspede convidado | Registro do grupo a partir do convite nominal |
 | `/pesquisa` | hóspede convidado | Pesquisa turística opcional |
@@ -61,6 +63,29 @@ Jornadas disponíveis na aplicação web:
 
 `/registro`, `/pesquisa`, `/i` e `/ativacao` só funcionam com a capability no
 fragmento da URL: abertas diretamente, permanecem bloqueadas por construção.
+
+## Calendário do Booking.com
+
+A hospedagem que vende pelo Booking.com pode colar, na área dela, o endereço do
+calendário do anúncio — o mesmo `.ics` que o extranet exporta em **Tarifas e
+disponibilidade → Calendário → Sincronizar calendários → Exportar**. As datas
+passam a chegar sozinhas e a hospedagem só confirma quantas pessoas vieram.
+
+Três limites que o desenho assume em vez de esconder:
+
+- **o arquivo não traz identidade.** As plataformas pararam de exportá-la, e
+  isso aqui é a fronteira certa: o Observatório não guarda nome de hóspede;
+- **o arquivo não traz número de hóspedes.** Por isso a estadia só nasce quando
+  alguém confirma informando quantas pessoas vieram;
+- **o arquivo não separa reserva de bloqueio de manutenção com confiabilidade.**
+  A fila mostra o que a plataforma disse e pergunta; nada vira presença
+  publicada sem confirmação humana.
+
+Integração direta com a API do Booking.com não está no escopo e não é possível
+para este projeto: o Connectivity API é reservado a parceiro homologado que
+gerencia preço, disponibilidade e conteúdo em tempo real — a descrição de um
+channel manager. A decisão completa está em
+[`ADR-044`](docs/decisoes/ADR-044-importacao-de-calendario-da-plataforma-de-hospedagem.md).
 
 ## Resultado pretendido
 
@@ -392,6 +417,22 @@ autocadastro, e a pendência expira em 72 horas com auditoria. O canal é
 protegido por rate limit e proof-of-work, sem serviço de terceiro e sem cookie.
 A capability de ativação é de uso único e revogável; o token trafega no
 fragmento da URL e nunca em log, trace, métrica, audit ou outbox.
+
+### Lista pública de hospedagens
+
+`/hospedagens` e `GET /api/v1/public/accommodations` publicam nome, categoria,
+localidade, capacidade, telefone, WhatsApp e site das hospedagens ativas que
+pediram para aparecer — e nada além disso. A publicação é ato da própria
+hospedagem, no painel "Aparecer na lista pública" da área da hospedagem: nasce
+desligada, exige telefone em E.164 e guarda o instante do consentimento.
+Desmarcar retira a hospedagem da lista na mesma transação, sem fila e sem
+espera.
+
+O documento é único, ordenado por nome, sem cursor e cacheável por inteiro
+(`max-age=300`, ETag forte); filtrar por tipo e buscar por nome acontecem no
+navegador. Não há reserva, preço, disponibilidade nem avaliação: o Observatório
+não intermedeia hospedagem
+([ADR-043](docs/decisoes/ADR-043-lista-publica-de-hospedagens.md)).
 
 ### Imagens, proveniência e rede local
 

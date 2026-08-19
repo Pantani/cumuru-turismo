@@ -35,6 +35,11 @@ tags:
     description: Autopreenchimento limitado por convite.
   - name: questionnaires
     description: Questionários publicados e suas respostas.
+  - name: calendar-feeds
+    description: >
+      Importação do calendário da plataforma de hospedagem. Traz datas e nunca
+      identidade nem número de hóspedes, porque o arquivo não os exporta; a
+      estadia só nasce por confirmação humana (ADR-044).
   - name: privacy
     description: Exercício dos direitos do titular.
 security:
@@ -236,6 +241,45 @@ paths:
         "401":
           $ref: "#/components/responses/Problem"
         "403":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /public/accommodations:
+    get:
+      summary: Listar hospedagens publicadas
+      description: >
+        Lista aberta de hospedagens, para quem procura onde ficar. Nominal de
+        propósito e por isso fora de analytics: publica nome, categoria,
+        localidade, capacidade, telefone e site de quem pediu para ser
+        encontrado, e nada além disso. Só aparece a hospedagem ativa que
+        consentiu com a publicação; retirado o consentimento, a linha sai da
+        lista na mesma transação. Sem cursor e sem seletor: o documento é único
+        e cacheável por inteiro, e filtrar é trabalho de quem lê.
+      tags: [public]
+      security: []
+      operationId: listPublicAccommodations
+      x-cumuru-feature: core
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Lista corrente de hospedagens publicadas.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/PublicCache"
+            ETag:
+              $ref: "#/components/headers/PublicEntityTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicAccommodationDirectory"
+        "304":
+          $ref: "#/components/responses/PublicNotModified"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "503":
           $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/InternalServerProblem"
@@ -2055,6 +2099,231 @@ paths:
           $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/InternalServerProblem"
+  /accommodations/{accommodation_id}/calendar-feeds:
+    get:
+      summary: Listar feeds de calendário da acomodação
+      description: >
+        Devolve os feeds ativos e suspensos com o estado da última
+        sincronização. A URL do feed nunca aparece na resposta: ela é segredo
+        portador, e quem a tem lê o calendário do anúncio inteiro (ADR-044).
+      tags: [calendar-feeds]
+      operationId: listCalendarFeeds
+      x-cumuru-feature: calendar-feed
+      security:
+        - oidc: ["stays:read:own"]
+      parameters:
+        - $ref: "#/components/parameters/AccommodationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/CalendarFeedList"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+    post:
+      summary: Cadastrar feed de calendário
+      description: >
+        A hospedagem cola a URL .ics exportada do extranet da plataforma.
+        Cadastrar um feed declara de onde vêm as datas daquela acomodação, que é
+        o mesmo ato de quem registra estadia à mão, e por isso custa o mesmo
+        escopo. Só https, sem credencial embutida no endereço e sem host
+        interno; a URL é cifrada em repouso e não volta em nenhuma resposta.
+      tags: [calendar-feeds]
+      operationId: createCalendarFeed
+      x-cumuru-feature: calendar-feed
+      security:
+        - oidc: ["stays:write"]
+      parameters:
+        - $ref: "#/components/parameters/AccommodationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCalendarFeedRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/CalendarFeedSucceeded"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /calendar-feeds/{feed_id}/remove:
+    post:
+      summary: Remover feed de calendário
+      description: >
+        Marca o feed como removido e para a sincronização. As estadias já
+        confirmadas a partir dele continuam de pé: são fato da hospedagem, e
+        apagar a origem apagaria a explicação de como entraram.
+      tags: [calendar-feeds]
+      operationId: removeCalendarFeed
+      x-cumuru-feature: calendar-feed
+      security:
+        - oidc: ["stays:write"]
+      parameters:
+        - $ref: "#/components/parameters/CalendarFeedId"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/EmptyObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/CalendarFeedSucceeded"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "412":
+          $ref: "#/components/responses/Problem"
+        "428":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /accommodations/{accommodation_id}/calendar-reservations:
+    get:
+      summary: Listar reservas importadas do calendário
+      description: >
+        Fila da acomodação, somando todos os feeds dela. Cada item é intenção de
+        estadia observada na plataforma — datas e natureza — e nunca identidade
+        ou número de hóspedes, porque o arquivo não traz nenhum dos dois.
+      tags: [calendar-feeds]
+      operationId: listCalendarReservations
+      x-cumuru-feature: calendar-feed
+      security:
+        - oidc: ["stays:read:own"]
+      parameters:
+        - $ref: "#/components/parameters/AccommodationId"
+        - $ref: "#/components/parameters/CalendarReservationStateFilter"
+        - $ref: "#/components/parameters/CalendarPageLimit"
+      responses:
+        "200":
+          $ref: "#/components/responses/CalendarReservationList"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /calendar-reservations/{reservation_id}/confirm:
+    post:
+      summary: Confirmar reserva importada e criar a estadia
+      description: >
+        Único caminho em que a observação vira presença. As datas vêm do
+        calendário e o número de hóspedes vem de quem recebeu — o arquivo não o
+        traz. A estadia é criada pelo mesmo caminho do cadastro à mão, na mesma
+        transação, e por isso emite stay.created além da confirmação.
+      tags: [calendar-feeds]
+      operationId: confirmCalendarReservation
+      x-cumuru-feature: calendar-feed
+      security:
+        - oidc: ["stays:write"]
+      parameters:
+        - $ref: "#/components/parameters/CalendarReservationId"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmCalendarReservationRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/CalendarReservationSucceeded"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "412":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "428":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /calendar-reservations/{reservation_id}/dismiss:
+    post:
+      summary: Dispensar reserva importada
+      description: >
+        Diz que aquilo não era estadia: bloqueio de manutenção, uso do dono ou
+        reserva que a hospedagem já registrou à mão. Não há motivo de lista
+        fechada porque nada disso descreve pessoa alguma.
+      tags: [calendar-feeds]
+      operationId: dismissCalendarReservation
+      x-cumuru-feature: calendar-feed
+      security:
+        - oidc: ["stays:write"]
+      parameters:
+        - $ref: "#/components/parameters/CalendarReservationId"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/EmptyObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/CalendarReservationSucceeded"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/ProblemWithRetry"
+        "412":
+          $ref: "#/components/responses/Problem"
+        "428":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
   /questionnaires:
     get:
       summary: Listar questionários administráveis
@@ -2741,6 +3010,37 @@ components:
       description: Recorte da fila; ausente devolve todos os estados.
       schema:
         $ref: "#/components/schemas/AccommodationAccessRequestApprovalState"
+    CalendarFeedId:
+      name: feed_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CalendarReservationId:
+      name: reservation_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CalendarReservationStateFilter:
+      name: state
+      in: query
+      description: Recorte da fila; ausente devolve todos os estados.
+      schema:
+        $ref: "#/components/schemas/CalendarReservationState"
+    CalendarPageLimit:
+      name: limit
+      in: query
+      description: >
+        A fila é limitada ao calendário de uma acomodação e não usa cursor: um
+        token assinado numa lista que cabe na tela seria peso sem ganho.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
     MembershipId:
       name: membership_id
       in: path
@@ -2967,6 +3267,58 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StayMutationResult"
+    CalendarFeedList:
+      description: Feeds de calendário da acomodação, sem a URL de nenhum deles.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CalendarFeedList"
+    CalendarFeedSucceeded:
+      description: Comando aplicado ou reproduzido por replay idempotente.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        ETag:
+          $ref: "#/components/headers/EntityTag"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CalendarFeed"
+    CalendarReservationList:
+      description: Fila de reservas importadas da acomodação.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CalendarReservationList"
+    CalendarReservationSucceeded:
+      description: Decisão aplicada ou reproduzida por replay idempotente.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        ETag:
+          $ref: "#/components/headers/EntityTag"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CalendarReservation"
     AccommodationAccessRequestSucceeded:
       description: Decisão aplicada ou reproduzida por replay idempotente.
       headers:
@@ -3242,6 +3594,7 @@ components:
         - name
         - category
         - status
+        - public_listing
         - version
         - created_at
         - updated_at
@@ -3275,6 +3628,8 @@ components:
         public_area_code:
           type: [string, "null"]
           maxLength: 100
+        public_listing:
+          $ref: "#/components/schemas/AccommodationPublicListing"
         version:
           type: integer
           format: int64
@@ -3285,6 +3640,81 @@ components:
         updated_at:
           type: string
           format: date-time
+    AccommodationPublicListing:
+      type: object
+      description: >
+        Consentimento vivo de publicação na lista aberta, com o contato que ele
+        autoriza. enabled falso é o estado inicial de toda hospedagem: estar
+        cadastrada não publica contato. Publicada exige telefone, e consented_at
+        guarda o instante do consentimento vigente — republicar o que já estava
+        publicado não reescreve a data, e despublicar a elimina.
+      required: [enabled, phone, whatsapp, website, consented_at]
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        phone:
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{9,14}$"
+        whatsapp:
+          type: boolean
+        website:
+          type: [string, "null"]
+          format: uri
+          maxLength: 180
+        consented_at:
+          type: [string, "null"]
+          format: date-time
+    PublicAccommodationDirectory:
+      type: object
+      required: [updated_at, count, entries]
+      additionalProperties: false
+      properties:
+        updated_at:
+          type: string
+          format: date-time
+          description: >
+            Alteração mais recente entre as hospedagens publicadas, não o
+            instante da consulta: dois pedidos iguais devolvem o mesmo documento.
+        count:
+          type: integer
+          minimum: 0
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicAccommodationEntry"
+    PublicAccommodationEntry:
+      type: object
+      required: [id, name, category, capacity, area_code, phone, whatsapp, website]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        category:
+          $ref: "#/components/schemas/AccommodationCategory"
+        capacity:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 10000
+        area_code:
+          type: [string, "null"]
+          maxLength: 100
+        phone:
+          type: string
+          description: E.164 sem separador, para virar link discável e link de WhatsApp.
+          pattern: "^\\+[1-9][0-9]{9,14}$"
+        whatsapp:
+          type: boolean
+          description: O número publicado atende por WhatsApp.
+        website:
+          type: [string, "null"]
+          format: uri
+          maxLength: 180
     AccommodationPage:
       type: object
       required: [items, next_cursor]
@@ -3314,6 +3744,21 @@ components:
         public_area_code:
           type: [string, "null"]
           maxLength: 100
+        public_listing_enabled:
+          type: boolean
+          description: >
+            Publica ou retira a hospedagem da lista aberta. Publicar sem
+            telefone — nem no corpo, nem já gravado — é recusado com 409: a
+            lista existe para o hóspede ligar.
+        public_contact_phone:
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{9,14}$"
+        public_contact_whatsapp:
+          type: boolean
+        public_website_url:
+          type: [string, "null"]
+          format: uri
+          maxLength: 180
     AccommodationAccessRequestApprovalState:
       type: string
       description: >
@@ -4302,6 +4747,188 @@ components:
     StayProvenance:
       type: string
       enum: [assisted, self_service]
+    CalendarFeedProvider:
+      type: string
+      enum: [booking]
+      description: >
+        O provedor é campo, não abstração especulativa. Quando entrar o segundo,
+        ele é uma linha nesta lista.
+    CalendarFeedStatus:
+      type: string
+      enum: [active, suspended, removed]
+      description: >
+        Suspenso é o feed que falhou seguidamente e parou de ser buscado;
+        removido continua na base porque as estadias confirmadas a partir dele
+        continuam de pé.
+    CalendarFeedSyncOutcome:
+      type: string
+      enum: [ok, unreachable, not_calendar, malformed]
+      description: >
+        not_calendar é o caso comum de URL expirada: o extranet redireciona para
+        a tela de login em vez de falhar, e a hospedagem precisa ver isso
+        distinto de um host fora do ar.
+    CalendarFeed:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - accommodation_id
+        - provider
+        - label
+        - status
+        - last_synced_at
+        - last_sync_outcome
+        - consecutive_failures
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        accommodation_id:
+          type: string
+          format: uuid
+        provider:
+          $ref: "#/components/schemas/CalendarFeedProvider"
+        label:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Nome do anúncio dado pela hospedagem, nunca de pessoa.
+        status:
+          $ref: "#/components/schemas/CalendarFeedStatus"
+        last_synced_at:
+          type: [string, "null"]
+          format: date-time
+        last_sync_outcome:
+          oneOf:
+            - $ref: "#/components/schemas/CalendarFeedSyncOutcome"
+            - type: "null"
+        consecutive_failures:
+          type: integer
+          minimum: 0
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CalendarFeedList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarFeed"
+    CreateCalendarFeedRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, label, url]
+      properties:
+        provider:
+          $ref: "#/components/schemas/CalendarFeedProvider"
+        label:
+          type: string
+          minLength: 1
+          maxLength: 120
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          pattern: "^https://"
+          description: >
+            Endereço .ics exportado do extranet. É segredo portador: entra por
+            aqui, fica cifrado em repouso e não volta em nenhuma resposta.
+    CalendarReservationKind:
+      type: string
+      enum: [reserved, blocked, unknown]
+      description: >
+        unknown é a resposta honesta para um resumo que ninguém escreveu para
+        nós. O Booking.com não separa reserva de bloqueio de manutenção com
+        confiabilidade, e adivinhar inflaria a presença publicada.
+    CalendarReservationState:
+      type: string
+      enum: [pending, confirmed, dismissed, withdrawn]
+      description: >
+        withdrawn é a reserva que sumiu do feed. Sumiço não é cancelamento: a
+        plataforma não diz que foi cancelada, apenas deixa de mostrá-la, e por
+        isso a retirada nunca alcança o que já virou estadia.
+    CalendarReservation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - feed_id
+        - arrival_on
+        - departure_on
+        - kind
+        - state
+        - stay_id
+        - first_seen_at
+        - last_seen_at
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        feed_id:
+          type: string
+          format: uuid
+        arrival_on:
+          type: string
+          format: date
+        departure_on:
+          type: string
+          format: date
+        kind:
+          $ref: "#/components/schemas/CalendarReservationKind"
+        state:
+          $ref: "#/components/schemas/CalendarReservationState"
+        stay_id:
+          type: [string, "null"]
+          format: uuid
+        first_seen_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    CalendarReservationList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarReservation"
+    ConfirmCalendarReservationRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_guest_count, client_submission_id]
+      properties:
+        expected_guest_count:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: >
+            Vem de quem recebeu os hóspedes. O calendário nunca traz este
+            número, e é por isso que a confirmação é humana.
+        client_submission_id:
+          type: string
+          format: uuid
+          pattern: "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-7[0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$"
     RejectStayRequest:
       type: object
       required: [reason_code]

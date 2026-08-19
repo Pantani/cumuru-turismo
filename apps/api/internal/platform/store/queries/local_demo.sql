@@ -35,7 +35,12 @@ INSERT INTO core.accommodations (
   status,
   cadastur_id,
   capacity,
-  public_area_code
+  public_area_code,
+  public_listing_enabled,
+  public_contact_phone,
+  public_contact_whatsapp,
+  public_website_url,
+  public_listing_consented_at
 )
 VALUES (
   sqlc.arg(id),
@@ -45,7 +50,15 @@ VALUES (
   'active',
   sqlc.narg(cadastur_id),
   sqlc.arg(capacity),
-  sqlc.arg(public_area_code)
+  sqlc.arg(public_area_code),
+  sqlc.narg(public_contact_phone)::text IS NOT NULL,
+  sqlc.narg(public_contact_phone),
+  sqlc.arg(public_contact_whatsapp),
+  sqlc.narg(public_website_url),
+  CASE
+    WHEN sqlc.narg(public_contact_phone)::text IS NULL THEN NULL
+    ELSE sqlc.arg(consented_at)::timestamptz
+  END
 )
 ON CONFLICT DO NOTHING;
 

@@ -13,6 +13,8 @@ import { useOperation } from "./use-operation";
 
 interface StayBoardProps {
   accommodation: Accommodation;
+  /** Muda quando uma estadia nasce fora deste componente. */
+  reloadToken?: number;
 }
 
 type Focus =
@@ -27,7 +29,7 @@ function partition(stays: readonly Stay[]) {
   };
 }
 
-export function StayBoard({ accommodation }: StayBoardProps) {
+export function StayBoard({ accommodation, reloadToken = 0 }: StayBoardProps) {
   const { coreClient: client } = useAuthSession();
   const operation = useOperation();
   const { run } = operation;
@@ -42,7 +44,10 @@ export function StayBoard({ accommodation }: StayBoardProps) {
     );
     setStays(result?.data.items ?? []);
     setLoading(false);
-  }, [accommodation.id, client, run]);
+    // reloadToken entra nas dependências para que quem cria estadia por fora
+    // deste componente — a fila do calendário — consiga pedir a releitura sem
+    // conhecer o estado interno dele.
+  }, [accommodation.id, client, reloadToken, run]);
 
   useEffect(() => {
     setFocus({ kind: "none" });

@@ -8,6 +8,19 @@
  * the network.
  */
 
+import {
+  arrayValidator,
+  exactArrayValidator,
+  integerValidator,
+  isDate,
+  isDateTime,
+  literalValidator,
+  objectValidator,
+  record,
+  unionValidator,
+  type Validator,
+} from "./payload-validators";
+
 /**
  * Dias civis de histórico observado publicados pela release corrente. O número
  * é do contrato, não de uma escolha da interface: a metodologia o declara e
@@ -15,103 +28,9 @@
  */
 export const PRESENCE_HISTORY_DAYS = 730;
 
-type Validator = (value: unknown) => boolean;
-type ValidatorMap = Readonly<Record<string, Validator>>;
-
-const datePattern = /^\d{4}-\d{2}-\d{2}$/u;
-const dateTimePattern =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
 const categoryCodePattern = /^[a-z][a-z0-9_]*$/u;
 const civilMonthPattern = /^\d{4}-(?:0[1-9]|1[0-2])$/u;
 
-function record(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function hasOwn(object: Record<string, unknown>, key: string) {
-  return Object.prototype.hasOwnProperty.call(object, key);
-}
-
-function allowedKeys(object: Record<string, unknown>, allowed: Set<string>) {
-  return Object.keys(object).every((key) => allowed.has(key));
-}
-
-function requiredValid(object: Record<string, unknown>, required: ValidatorMap) {
-  return Object.entries(required).every(
-    ([key, validate]) => hasOwn(object, key) && validate(object[key]),
-  );
-}
-
-function optionalValid(object: Record<string, unknown>, optional: ValidatorMap) {
-  return Object.entries(optional).every(
-    ([key, validate]) => !hasOwn(object, key) || validate(object[key]),
-  );
-}
-
-function objectValidator(
-  required: ValidatorMap,
-  optional: ValidatorMap = {},
-): Validator {
-  const allowed = new Set([...Object.keys(required), ...Object.keys(optional)]);
-  return (value) => {
-    const object = record(value);
-    return (
-      object !== null &&
-      allowedKeys(object, allowed) &&
-      requiredValid(object, required) &&
-      optionalValid(object, optional)
-    );
-  };
-}
-
-function arrayValidator(
-  validateItem: Validator,
-  minimum = 0,
-  maximum = Number.POSITIVE_INFINITY,
-): Validator {
-  return (value) =>
-    Array.isArray(value) &&
-    value.length >= minimum &&
-    value.length <= maximum &&
-    value.every(validateItem);
-}
-
-function unionValidator(...validators: Validator[]): Validator {
-  return (value) => validators.some((validate) => validate(value));
-}
-
-function literalValidator(...allowed: readonly unknown[]): Validator {
-  const values = new Set(allowed);
-  return (value) => values.has(value);
-}
-
-function exactArrayValidator(...expected: readonly unknown[]): Validator {
-  return (value) =>
-    Array.isArray(value) &&
-    value.length === expected.length &&
-    expected.every((item, index) => Object.is(value[index], item));
-}
-
-function integerValidator(
-  minimum: number,
-  maximum = Number.POSITIVE_INFINITY,
-  multiple = 1,
-): Validator {
-  return (value) =>
-    typeof value === "number" &&
-    Number.isInteger(value) &&
-    value >= minimum &&
-    value <= maximum &&
-    value % multiple === 0;
-}
-const isDate: Validator = (value) =>
-  typeof value === "string" && datePattern.test(value);
-const isDateTime: Validator = (value) =>
-  typeof value === "string" &&
-  dateTimePattern.test(value) &&
-  Number.isFinite(Date.parse(value));
 const isPublicPercentage = integerValidator(0, 100, 5);
 const isPublishedValue = integerValidator(0, Number.POSITIVE_INFINITY, 10);
 const isQualityCountValue = integerValidator(0);

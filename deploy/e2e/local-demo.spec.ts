@@ -498,6 +498,21 @@ test("percorre a jornada local sem persistir authorities", async ({
     )
     .toBeLessThan(1);
 
+  // A lista pública é o único documento nominal do canal aberto, e nasce do
+  // consentimento de cada hospedagem: o fixture publica parte do catálogo e
+  // deixa o resto de fora, então a lista mostra quem consentiu e o telefone
+  // publicado é link discável — não texto.
+  await page.goto("/hospedagens");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Hospedagens de Cumuruxatiba" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Ligar para Pousada Farol Fictícia" }),
+  ).toHaveAttribute("href", "tel:+5573999990001");
+  await expect(
+    page.getByRole("heading", { name: "Quintal da Vovó Fictício" }),
+  ).toHaveCount(0);
+
   await page.goto("/acesso");
   await signIn(page);
 

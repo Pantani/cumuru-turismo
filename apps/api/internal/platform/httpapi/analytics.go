@@ -1,12 +1,9 @@
 package httpapi
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
@@ -14,11 +11,9 @@ import (
 
 const publicAnalyticsCache = "public, max-age=300, stale-if-error=86400"
 
-var strongAnalyticsETag = regexp.MustCompile(`^"sha256-[0-9a-f]{64}"$`)
-
 func (d Dependencies) publicSummary(writer http.ResponseWriter, request *http.Request) {
 	if !validNoQuery(request) || !validIfNoneMatch(request.Header.Get("If-None-Match")) {
-		writeInvalidAnalyticsRequest(writer, request)
+		writePublicBadRequest(writer, request)
 		return
 	}
 	value, err := d.PublicAnalytics.Summary(request.Context())
@@ -28,7 +23,7 @@ func (d Dependencies) publicSummary(writer http.ResponseWriter, request *http.Re
 func (d Dependencies) publicPresence(writer http.ResponseWriter, request *http.Request) {
 	slice, ok := presenceSlice(request)
 	if !ok || !validIfNoneMatch(request.Header.Get("If-None-Match")) {
-		writeInvalidAnalyticsRequest(writer, request)
+		writePublicBadRequest(writer, request)
 		return
 	}
 	value, err := d.PublicAnalytics.Presence(request.Context(), slice)
@@ -76,7 +71,7 @@ func presenceMonthSelector(
 func (d Dependencies) publicPreferences(writer http.ResponseWriter, request *http.Request) {
 	period, ok := analyticsSelector(request, "period", "last_complete_month")
 	if !ok || !validIfNoneMatch(request.Header.Get("If-None-Match")) {
-		writeInvalidAnalyticsRequest(writer, request)
+		writePublicBadRequest(writer, request)
 		return
 	}
 	value, err := d.PublicAnalytics.Preferences(request.Context(), period)
@@ -85,7 +80,7 @@ func (d Dependencies) publicPreferences(writer http.ResponseWriter, request *htt
 
 func (d Dependencies) publicMethodology(writer http.ResponseWriter, request *http.Request) {
 	if !validNoQuery(request) || !validIfNoneMatch(request.Header.Get("If-None-Match")) {
-		writeInvalidAnalyticsRequest(writer, request)
+		writePublicBadRequest(writer, request)
 		return
 	}
 	value, err := d.PublicAnalytics.Methodology(request.Context())
@@ -95,12 +90,12 @@ func (d Dependencies) publicMethodology(writer http.ResponseWriter, request *htt
 func (d Dependencies) analyticsQuality(writer http.ResponseWriter, request *http.Request) {
 	window, ok := analyticsSelector(request, "window", "last_30_days")
 	if !ok {
-		writeInvalidAnalyticsRequest(writer, request)
+		writePublicBadRequest(writer, request)
 		return
 	}
 	value, err := d.AnalyticsQuality.Quality(request.Context(), window)
 	if err != nil {
-		writeAnalyticsUnavailable(writer, request)
+		writePublicUnavailable(writer, request)
 		return
 	}
 	writer.Header().Set("Cache-Control", "no-store")
@@ -112,12 +107,12 @@ func (d Dependencies) analyticsQuality(writer http.ResponseWriter, request *http
 func (d Dependencies) analyticsFunnel(writer http.ResponseWriter, request *http.Request) {
 	window, ok := analyticsSelector(request, "window", "last_30_days")
 	if !ok {
-		writeInvalidAnalyticsRequest(writer, request)
+		writePublicBadRequest(writer, request)
 		return
 	}
 	value, err := d.AnalyticsFunnel.Funnel(request.Context(), window)
 	if err != nil {
-		writeAnalyticsUnavailable(writer, request)
+		writePublicUnavailable(writer, request)
 		return
 	}
 	writer.Header().Set("Cache-Control", "no-store")
@@ -132,15 +127,15 @@ func (d Dependencies) writePublicAnalytics(
 	err error,
 ) {
 	if err != nil {
-		writeAnalyticsUnavailable(writer, request)
+		writePublicUnavailable(writer, request)
 		return
 	}
 	payload, err := json.Marshal(value)
 	if err != nil {
-		writeAnalyticsUnavailable(writer, request)
+		writePublicUnavailable(writer, request)
 		return
 	}
-	etag := analyticsETag(operation, selector, payload)
+	etag := publicDocumentETag(operation, selector, payload)
 	writer.Header().Set("Cache-Control", publicAnalyticsCache)
 	writer.Header().Set("ETag", etag)
 	if request.Header.Get("If-None-Match") == etag {
@@ -150,17 +145,6 @@ func (d Dependencies) writePublicAnalytics(
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(payload)
-}
-
-func analyticsETag(operation, selector string, payload []byte) string {
-	source := make([]byte, 0, len(operation)+len(selector)+len(payload)+2)
-	source = append(source, operation...)
-	source = append(source, '\n')
-	source = append(source, selector...)
-	source = append(source, '\n')
-	source = append(source, payload...)
-	sum := sha256.Sum256(source)
-	return `"sha256-` + hex.EncodeToString(sum[:]) + `"`
 }
 
 // The public endpoints accept exactly one selector and nothing else, so an
@@ -191,23 +175,4 @@ func analyticsSelector(request *http.Request, name string, allowed ...string) (s
 		return value, true
 	}
 	return "", false
-}
-
-func validNoQuery(request *http.Request) bool {
-	return len(request.URL.Query()) == 0
-}
-
-func validIfNoneMatch(value string) bool {
-	return value == "" || strongAnalyticsETag.MatchString(value)
-}
-
-func writeInvalidAnalyticsRequest(writer http.ResponseWriter, request *http.Request) {
-	writeProblem(writer, request, http.StatusBadRequest, "invalid-request", "Requisição inválida")
-}
-
-func writeAnalyticsUnavailable(writer http.ResponseWriter, request *http.Request) {
-	writeProblem(
-		writer, request, http.StatusServiceUnavailable,
-		"dependency-unavailable", "Serviço temporariamente indisponível",
-	)
 }

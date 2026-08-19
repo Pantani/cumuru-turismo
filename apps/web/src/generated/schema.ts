@@ -132,6 +132,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/accommodations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar hospedagens publicadas
+         * @description Lista aberta de hospedagens, para quem procura onde ficar. Nominal de propósito e por isso fora de analytics: publica nome, categoria, localidade, capacidade, telefone e site de quem pediu para ser encontrado, e nada além disso. Só aparece a hospedagem ativa que consentiu com a publicação; retirado o consentimento, a linha sai da lista na mesma transação. Sem cursor e sem seletor: o documento é único e cacheável por inteiro, e filtrar é trabalho de quem lê.
+         */
+        get: operations["listPublicAccommodations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/summary": {
         parameters: {
             query?: never;
@@ -785,6 +805,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/accommodations/{accommodation_id}/calendar-feeds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar feeds de calendário da acomodação
+         * @description Devolve os feeds ativos e suspensos com o estado da última sincronização. A URL do feed nunca aparece na resposta: ela é segredo portador, e quem a tem lê o calendário do anúncio inteiro (ADR-044).
+         */
+        get: operations["listCalendarFeeds"];
+        put?: never;
+        /**
+         * Cadastrar feed de calendário
+         * @description A hospedagem cola a URL .ics exportada do extranet da plataforma. Cadastrar um feed declara de onde vêm as datas daquela acomodação, que é o mesmo ato de quem registra estadia à mão, e por isso custa o mesmo escopo. Só https, sem credencial embutida no endereço e sem host interno; a URL é cifrada em repouso e não volta em nenhuma resposta.
+         */
+        post: operations["createCalendarFeed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendar-feeds/{feed_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remover feed de calendário
+         * @description Marca o feed como removido e para a sincronização. As estadias já confirmadas a partir dele continuam de pé: são fato da hospedagem, e apagar a origem apagaria a explicação de como entraram.
+         */
+        post: operations["removeCalendarFeed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accommodations/{accommodation_id}/calendar-reservations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar reservas importadas do calendário
+         * @description Fila da acomodação, somando todos os feeds dela. Cada item é intenção de estadia observada na plataforma — datas e natureza — e nunca identidade ou número de hóspedes, porque o arquivo não traz nenhum dos dois.
+         */
+        get: operations["listCalendarReservations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendar-reservations/{reservation_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmar reserva importada e criar a estadia
+         * @description Único caminho em que a observação vira presença. As datas vêm do calendário e o número de hóspedes vem de quem recebeu — o arquivo não o traz. A estadia é criada pelo mesmo caminho do cadastro à mão, na mesma transação, e por isso emite stay.created além da confirmação.
+         */
+        post: operations["confirmCalendarReservation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendar-reservations/{reservation_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dispensar reserva importada
+         * @description Diz que aquilo não era estadia: bloqueio de manutenção, uso do dono ou reserva que a hospedagem já registrou à mão. Não há motivo de lista fechada porque nada disso descreve pessoa alguma.
+         */
+        post: operations["dismissCalendarReservation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/questionnaires": {
         parameters: {
             query?: never;
@@ -1088,12 +1212,46 @@ export interface components {
             readonly cadastur_id?: string | null;
             capacity?: number | null;
             public_area_code?: string | null;
+            public_listing: components["schemas"]["AccommodationPublicListing"];
             /** Format: int64 */
             version: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description Consentimento vivo de publicação na lista aberta, com o contato que ele autoriza. enabled falso é o estado inicial de toda hospedagem: estar cadastrada não publica contato. Publicada exige telefone, e consented_at guarda o instante do consentimento vigente — republicar o que já estava publicado não reescreve a data, e despublicar a elimina. */
+        AccommodationPublicListing: {
+            enabled: boolean;
+            phone: string | null;
+            whatsapp: boolean;
+            /** Format: uri */
+            website: string | null;
+            /** Format: date-time */
+            consented_at: string | null;
+        };
+        PublicAccommodationDirectory: {
+            /**
+             * Format: date-time
+             * @description Alteração mais recente entre as hospedagens publicadas, não o instante da consulta: dois pedidos iguais devolvem o mesmo documento.
+             */
+            updated_at: string;
+            count: number;
+            entries: components["schemas"]["PublicAccommodationEntry"][];
+        };
+        PublicAccommodationEntry: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            category: components["schemas"]["AccommodationCategory"];
+            capacity: number | null;
+            area_code: string | null;
+            /** @description E.164 sem separador, para virar link discável e link de WhatsApp. */
+            phone: string;
+            /** @description O número publicado atende por WhatsApp. */
+            whatsapp: boolean;
+            /** Format: uri */
+            website: string | null;
         };
         AccommodationPage: {
             items: components["schemas"]["Accommodation"][];
@@ -1104,6 +1262,12 @@ export interface components {
             category?: components["schemas"]["AccommodationInputCategory"];
             capacity?: number | null;
             public_area_code?: string | null;
+            /** @description Publica ou retira a hospedagem da lista aberta. Publicar sem telefone — nem no corpo, nem já gravado — é recusado com 409: a lista existe para o hóspede ligar. */
+            public_listing_enabled?: boolean;
+            public_contact_phone?: string | null;
+            public_contact_whatsapp?: boolean;
+            /** Format: uri */
+            public_website_url?: string | null;
         };
         /**
          * @description expired é o pedido que ninguém leu dentro do prazo, e não uma decisão: não tem decisor nem motivo. Vale igualmente para o recurso e para o filtro da fila, de propósito — um estado que a listagem não sabe pedir vira registro que a tela não sabe explicar.
@@ -1510,6 +1674,92 @@ export interface components {
         StayApprovalState: "pending" | "approved" | "rejected" | "expired";
         /** @enum {string} */
         StayProvenance: "assisted" | "self_service";
+        /**
+         * @description O provedor é campo, não abstração especulativa. Quando entrar o segundo, ele é uma linha nesta lista.
+         * @enum {string}
+         */
+        CalendarFeedProvider: "booking";
+        /**
+         * @description Suspenso é o feed que falhou seguidamente e parou de ser buscado; removido continua na base porque as estadias confirmadas a partir dele continuam de pé.
+         * @enum {string}
+         */
+        CalendarFeedStatus: "active" | "suspended" | "removed";
+        /**
+         * @description not_calendar é o caso comum de URL expirada: o extranet redireciona para a tela de login em vez de falhar, e a hospedagem precisa ver isso distinto de um host fora do ar.
+         * @enum {string}
+         */
+        CalendarFeedSyncOutcome: "ok" | "unreachable" | "not_calendar" | "malformed";
+        CalendarFeed: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            accommodation_id: string;
+            provider: components["schemas"]["CalendarFeedProvider"];
+            /** @description Nome do anúncio dado pela hospedagem, nunca de pessoa. */
+            label: string;
+            status: components["schemas"]["CalendarFeedStatus"];
+            /** Format: date-time */
+            last_synced_at: string | null;
+            last_sync_outcome: components["schemas"]["CalendarFeedSyncOutcome"] | null;
+            consecutive_failures: number;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        CalendarFeedList: {
+            items: components["schemas"]["CalendarFeed"][];
+        };
+        CreateCalendarFeedRequest: {
+            provider: components["schemas"]["CalendarFeedProvider"];
+            label: string;
+            /**
+             * Format: uri
+             * @description Endereço .ics exportado do extranet. É segredo portador: entra por aqui, fica cifrado em repouso e não volta em nenhuma resposta.
+             */
+            url: string;
+        };
+        /**
+         * @description unknown é a resposta honesta para um resumo que ninguém escreveu para nós. O Booking.com não separa reserva de bloqueio de manutenção com confiabilidade, e adivinhar inflaria a presença publicada.
+         * @enum {string}
+         */
+        CalendarReservationKind: "reserved" | "blocked" | "unknown";
+        /**
+         * @description withdrawn é a reserva que sumiu do feed. Sumiço não é cancelamento: a plataforma não diz que foi cancelada, apenas deixa de mostrá-la, e por isso a retirada nunca alcança o que já virou estadia.
+         * @enum {string}
+         */
+        CalendarReservationState: "pending" | "confirmed" | "dismissed" | "withdrawn";
+        CalendarReservation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            feed_id: string;
+            /** Format: date */
+            arrival_on: string;
+            /** Format: date */
+            departure_on: string;
+            kind: components["schemas"]["CalendarReservationKind"];
+            state: components["schemas"]["CalendarReservationState"];
+            /** Format: uuid */
+            stay_id: string | null;
+            /** Format: date-time */
+            first_seen_at: string;
+            /** Format: date-time */
+            last_seen_at: string;
+            /** Format: int64 */
+            version: number;
+        };
+        CalendarReservationList: {
+            items: components["schemas"]["CalendarReservation"][];
+        };
+        ConfirmCalendarReservationRequest: {
+            /** @description Vem de quem recebeu os hóspedes. O calendário nunca traz este número, e é por isso que a confirmação é humana. */
+            expected_guest_count: number;
+            /** Format: uuid */
+            client_submission_id: string;
+        };
         RejectStayRequest: {
             /** @enum {string} */
             reason_code: "identity_not_verified" | "not_a_guest" | "duplicate" | "data_incorrect" | "other";
@@ -2085,6 +2335,54 @@ export interface components {
                 "application/json": components["schemas"]["StayMutationResult"];
             };
         };
+        /** @description Feeds de calendário da acomodação, sem a URL de nenhum deles. */
+        CalendarFeedList: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CalendarFeedList"];
+            };
+        };
+        /** @description Comando aplicado ou reproduzido por replay idempotente. */
+        CalendarFeedSucceeded: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                "Cache-Control": components["headers"]["NoStore"];
+                ETag: components["headers"]["EntityTag"];
+                "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CalendarFeed"];
+            };
+        };
+        /** @description Fila de reservas importadas da acomodação. */
+        CalendarReservationList: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CalendarReservationList"];
+            };
+        };
+        /** @description Decisão aplicada ou reproduzida por replay idempotente. */
+        CalendarReservationSucceeded: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                "Cache-Control": components["headers"]["NoStore"];
+                ETag: components["headers"]["EntityTag"];
+                "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CalendarReservation"];
+            };
+        };
         /** @description Decisão aplicada ou reproduzida por replay idempotente. */
         AccommodationAccessRequestSucceeded: {
             headers: {
@@ -2182,6 +2480,12 @@ export interface components {
         AccommodationAccessRequestId: string;
         /** @description Recorte da fila; ausente devolve todos os estados. */
         AccommodationAccessRequestState: components["schemas"]["AccommodationAccessRequestApprovalState"];
+        CalendarFeedId: string;
+        CalendarReservationId: string;
+        /** @description Recorte da fila; ausente devolve todos os estados. */
+        CalendarReservationStateFilter: components["schemas"]["CalendarReservationState"];
+        /** @description A fila é limitada ao calendário de uma acomodação e não usa cursor: um token assinado numa lista que cabe na tela seria peso sem ganho. */
+        CalendarPageLimit: number;
         MembershipId: string;
         StayId: string;
         InviteToken: string;
@@ -2410,6 +2714,35 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             500: components["responses"]["InternalServerProblem"];
+        };
+    };
+    listPublicAccommodations: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lista corrente de hospedagens publicadas. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["PublicCache"];
+                    ETag: components["headers"]["PublicEntityTag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicAccommodationDirectory"];
+                };
+            };
+            304: components["responses"]["PublicNotModified"];
+            400: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     getPublicSummary: {
@@ -3846,6 +4179,162 @@ export interface operations {
             409: components["responses"]["ProblemWithRetry"];
             412: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listCalendarFeeds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accommodation_id: components["parameters"]["AccommodationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["CalendarFeedList"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createCalendarFeed: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                accommodation_id: components["parameters"]["AccommodationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCalendarFeedRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["CalendarFeedSucceeded"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    removeCalendarFeed: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                feed_id: components["parameters"]["CalendarFeedId"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["EmptyObject"];
+        responses: {
+            200: components["responses"]["CalendarFeedSucceeded"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listCalendarReservations: {
+        parameters: {
+            query?: {
+                /** @description Recorte da fila; ausente devolve todos os estados. */
+                state?: components["parameters"]["CalendarReservationStateFilter"];
+                /** @description A fila é limitada ao calendário de uma acomodação e não usa cursor: um token assinado numa lista que cabe na tela seria peso sem ganho. */
+                limit?: components["parameters"]["CalendarPageLimit"];
+            };
+            header?: never;
+            path: {
+                accommodation_id: components["parameters"]["AccommodationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["CalendarReservationList"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmCalendarReservation: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                reservation_id: components["parameters"]["CalendarReservationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmCalendarReservationRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["CalendarReservationSucceeded"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    dismissCalendarReservation: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                reservation_id: components["parameters"]["CalendarReservationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["EmptyObject"];
+        responses: {
+            200: components["responses"]["CalendarReservationSucceeded"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["ProblemWithRetry"];
+            412: components["responses"]["Problem"];
             428: components["responses"]["Problem"];
             500: components["responses"]["InternalServerProblem"];
             503: components["responses"]["Problem"];

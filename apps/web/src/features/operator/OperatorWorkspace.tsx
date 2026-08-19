@@ -1,7 +1,12 @@
+import { useState } from "react";
+
 import { useAuthSession } from "../../shared/auth/AuthSession";
 import { AccommodationAccessPanel } from "../accommodation/AccommodationAccessPanel";
+import { PublicListingPanel } from "../accommodation/PublicListingPanel";
 import { useAccommodations } from "../accommodation/use-accommodations";
 import { ApprovalQueue } from "../approval/ApprovalQueue";
+import { CalendarFeedPanel } from "../calendar/CalendarFeedPanel";
+import { CalendarReservationQueue } from "../calendar/CalendarReservationQueue";
 import { PerformancePanel } from "../performance/PerformancePanel";
 import { AccommodationPicker } from "./AccommodationPicker";
 import { StayBoard } from "./StayBoard";
@@ -55,8 +60,11 @@ function SelfServicePanels({ accommodation }: { accommodation: Accommodation }) 
 }
 
 export function OperatorWorkspace() {
-  const { accommodations, loading, operation, selected, setSelected } =
+  const { accommodations, load, loading, operation, selected, setSelected } =
     useAccommodations("Carregando suas hospedagens");
+  // Confirmar uma reserva importada cria estadia, e o quadro carrega por estado
+  // próprio: sem este contador ele mostraria a lista de antes da confirmação.
+  const [stayReload, setStayReload] = useState(0);
 
   return (
     <div className="workspace">
@@ -73,7 +81,19 @@ export function OperatorWorkspace() {
 
       {selected === null ? null : (
         <>
-          <StayBoard accommodation={selected} />
+          <StayBoard accommodation={selected} reloadToken={stayReload} />
+          <CalendarReservationQueue
+            accommodationId={selected.id}
+            onConfirmed={() => setStayReload((current) => current + 1)}
+          />
+          <CalendarFeedPanel accommodationId={selected.id} />
+          <PublicListingPanel
+            key={selected.id}
+            accommodation={selected}
+            onSaved={() => void load()}
+          />
+          {/* O comparativo é leitura retrospectiva: vem depois do que a
+              hospedagem precisa decidir hoje. */}
           <PerformancePanel accommodation={selected} />
           <SelfServicePanels accommodation={selected} />
         </>

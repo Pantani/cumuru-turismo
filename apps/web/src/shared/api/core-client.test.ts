@@ -98,16 +98,22 @@ function contractCases(): ReadonlyArray<
     ["markStayNoShow", "POST", `/api/v1/stays/${stayId}/no-show`, 200, { ETag: '"1"', "Idempotency-Replayed": "false" }, (client) => client.markStayNoShow(stayId, { reason_code: "guest_absent" }, '"1"', "idem-12345678")],
     ["getInvite", "GET", `/api/v1/invites/${stayId}`, 200, {}, (client) => client.getInvite(stayId)],
     ["submitInviteGroup", "POST", `/api/v1/invites/${stayId}/submit`, 200, { ETag: '"1"', "Idempotency-Replayed": "false", "Survey-Capability": "payload.signature" }, (client) => client.submitInviteGroup(stayId, groupBody, "idem-12345678")],
+    ["listCalendarFeeds", "GET", `/api/v1/accommodations/${stayId}/calendar-feeds`, 200, {}, (client) => client.listCalendarFeeds(stayId)],
+    ["createCalendarFeed", "POST", `/api/v1/accommodations/${stayId}/calendar-feeds`, 201, { ETag: '"1"', "Idempotency-Replayed": "false" }, (client) => client.createCalendarFeed(stayId, { provider: "booking", label: "Chalé 3", url: "https://ical.booking.com/v1/export?t=9f2a" }, "idem-12345678")],
+    ["removeCalendarFeed", "POST", `/api/v1/calendar-feeds/${stayId}/remove`, 200, { ETag: '"1"', "Idempotency-Replayed": "false" }, (client) => client.removeCalendarFeed(stayId, '"1"', "idem-12345678")],
+    ["listCalendarReservations", "GET", `/api/v1/accommodations/${stayId}/calendar-reservations`, 200, {}, (client) => client.listCalendarReservations(stayId)],
+    ["confirmCalendarReservation", "POST", `/api/v1/calendar-reservations/${stayId}/confirm`, 200, { ETag: '"1"', "Idempotency-Replayed": "false" }, (client) => client.confirmCalendarReservation(stayId, { expected_guest_count: 2, client_submission_id: stayId }, '"1"', "idem-12345678")],
+    ["dismissCalendarReservation", "POST", `/api/v1/calendar-reservations/${stayId}/dismiss`, 200, { ETag: '"1"', "Idempotency-Replayed": "false" }, (client) => client.dismissCalendarReservation(stayId, '"1"', "idem-12345678")],
   ];
 }
 
 describe("cliente tipado do núcleo", () => {
-  it("declara exatamente as 21 operações do contrato da fase", () => {
+  it("declara exatamente as 27 operações do contrato da fase", () => {
     expectTypeOf(coreOperationNames).toMatchTypeOf<
       ReadonlyArray<keyof operations>
     >();
-    expect(coreOperationNames).toHaveLength(21);
-    expect(new Set(coreOperationNames).size).toBe(21);
+    expect(coreOperationNames).toHaveLength(27);
+    expect(new Set(coreOperationNames).size).toBe(27);
   });
 
   it("envia o onboarding fechado com autorização e chave idempotente", async () => {

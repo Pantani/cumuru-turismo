@@ -6,6 +6,8 @@ export const appPaths = [
   "/i",
   // Pública e sem token: é por aqui que uma hospedagem sem conta pede acesso.
   "/convite",
+  // Pública e sem token: a lista de hospedagens para quem procura onde ficar.
+  "/hospedagens",
   "/ativacao",
   "/pesquisa",
   "/acesso",

@@ -17,6 +17,8 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
 	"github.com/Pantani/cumuru/apps/api/internal/activation"
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
+	"github.com/Pantani/cumuru/apps/api/internal/calendarfeed"
+	"github.com/Pantani/cumuru/apps/api/internal/directory"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/idempotency"
 	"github.com/Pantani/cumuru/apps/api/internal/questionnaire"
@@ -66,9 +68,11 @@ type Dependencies struct {
 	Stays                          *stay.Service
 	SelfServiceEnabled             bool
 	AccessRequests                 *accessrequest.Service
+	CalendarFeeds                  *calendarfeed.Service
 	Activation                     *activation.Service
 	Questionnaires                 *questionnaire.Service
 	PublicAnalytics                analytics.PublicReader
+	PublicDirectory                directory.PublicReader
 	AnalyticsQuality               analytics.QualityReader
 	AnalyticsFunnel                analytics.FunnelReader
 	OwnPerformance                 analytics.OwnPerformanceReader
@@ -181,20 +185,31 @@ func (d Dependencies) registerFeatureRoutes(mux *http.ServeMux, metrics *httpMet
 		d.registerQuestionnaireRoutes(mux, metrics)
 	}
 	d.registerOpenChannelRoutes(mux, metrics)
+	d.registerCalendarFeedRoutes(mux, metrics)
 	d.registerAnalyticsRoutes(mux, metrics)
+}
+
+type openChannelSurface struct {
+	present  bool
+	register func(*http.ServeMux, *httpMetrics)
 }
 
 // The open channel is registered only when the feature is on, so a disabled feature
 // answers 404 instead of exposing a half-configured route.
 func (d Dependencies) registerOpenChannelRoutes(mux *http.ServeMux, metrics *httpMetrics) {
-	if d.Stays != nil && d.SelfServiceEnabled {
-		d.registerSelfServiceRoutes(mux, metrics)
+	for _, surface := range d.openChannelSurfaces() {
+		if surface.present {
+			surface.register(mux, metrics)
+		}
 	}
-	if d.Activation != nil {
-		d.registerActivationRoutes(mux, metrics)
-	}
-	if d.AccessRequests != nil {
-		d.registerAccessRequestRoutes(mux, metrics)
+}
+
+func (d Dependencies) openChannelSurfaces() []openChannelSurface {
+	return []openChannelSurface{
+		{d.Stays != nil && d.SelfServiceEnabled, d.registerSelfServiceRoutes},
+		{d.Activation != nil, d.registerActivationRoutes},
+		{d.AccessRequests != nil, d.registerAccessRequestRoutes},
+		{d.PublicDirectory != nil, d.registerDirectoryRoutes},
 	}
 }
 
@@ -524,7 +539,7 @@ var serviceProblems = []problemMapping{
 	{http.StatusForbidden, "forbidden", "Operação não permitida",
 		[]error{
 			accommodation.ErrForbidden, stay.ErrForbidden, activation.ErrForbidden,
-			accessrequest.ErrForbidden,
+			accessrequest.ErrForbidden, calendarfeed.ErrForbidden,
 		}},
 	// The refusal of a minor gets its own code so the form can point at the
 	// assisted channel. It depends only on the submitted body and never on
@@ -536,6 +551,7 @@ var serviceProblems = []problemMapping{
 		[]error{
 			accommodation.ErrInvalidInput, stay.ErrInvalidInput,
 			questionnaire.ErrInvalidInput, activation.ErrInvalidInput,
+			calendarfeed.ErrInvalidInput,
 		}},
 	// The access request has no 422 in the contract: writeAccessRequestError
 	// intercepts ErrInvalidInput before this table and answers 400.
@@ -543,13 +559,13 @@ var serviceProblems = []problemMapping{
 		[]error{
 			accommodation.ErrNotFound, stay.ErrNotFound, questionnaire.ErrNotFound,
 			questionnaire.ErrCapabilityInvalid, activation.ErrNotFound,
-			accessrequest.ErrNotFound,
+			accessrequest.ErrNotFound, calendarfeed.ErrNotFound,
 		}},
 	{http.StatusPreconditionFailed, "precondition-failed", "Versão desatualizada",
 		[]error{
 			accommodation.ErrPreconditionFailed, stay.ErrPreconditionFailed,
 			questionnaire.ErrPreconditionFailed, activation.ErrPreconditionFailed,
-			accessrequest.ErrPreconditionFailed,
+			accessrequest.ErrPreconditionFailed, calendarfeed.ErrPreconditionFailed,
 		}},
 	{http.StatusConflict, "invite-consumed", "Convite já consumido",
 		[]error{stay.ErrInviteConsumed}},
@@ -557,6 +573,7 @@ var serviceProblems = []problemMapping{
 		[]error{
 			accommodation.ErrConflict, stay.ErrConflict, questionnaire.ErrConflict,
 			activation.ErrConflict, accessrequest.ErrConflict,
+			calendarfeed.ErrConflict,
 		}},
 }
 

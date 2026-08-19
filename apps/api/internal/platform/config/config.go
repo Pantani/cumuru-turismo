@@ -70,6 +70,7 @@ type Config struct {
 	Questionnaire     QuestionnaireConfig
 	Analytics         AnalyticsConfig
 	SelfService       SelfServiceConfig
+	CalendarFeed      CalendarFeedConfig
 }
 
 type LookupEnv func(string) (string, bool)
@@ -180,6 +181,7 @@ func baseConfig(
 		Questionnaire: features.questionnaire,
 		Analytics:     features.analytics,
 		SelfService:   features.selfService,
+		CalendarFeed:  features.calendarFeed,
 	}
 }
 
@@ -200,6 +202,7 @@ type featureConfigs struct {
 	questionnaire QuestionnaireConfig
 	analytics     AnalyticsConfig
 	selfService   SelfServiceConfig
+	calendarFeed  CalendarFeedConfig
 }
 
 func loadFeatures(environment Environment, process Process, lookup LookupEnv) (featureConfigs, error) {
@@ -207,7 +210,7 @@ func loadFeatures(environment Environment, process Process, lookup LookupEnv) (f
 	if err != nil {
 		return featureConfigs{}, err
 	}
-	questionnaire, err := loadQuestionnaire(environment, core, lookup)
+	features, err := loadCoreDependentFeatures(environment, core, lookup)
 	if err != nil {
 		return featureConfigs{}, err
 	}
@@ -215,12 +218,33 @@ func loadFeatures(environment Environment, process Process, lookup LookupEnv) (f
 	if err != nil {
 		return featureConfigs{}, err
 	}
+	features.core = core
+	features.analytics = analytics
+	return features, nil
+}
+
+// The three features below read the core keyrings to prove they do not share a
+// key with them, so they load together and after the core.
+func loadCoreDependentFeatures(
+	environment Environment,
+	core CoreConfig,
+	lookup LookupEnv,
+) (featureConfigs, error) {
+	questionnaire, err := loadQuestionnaire(environment, core, lookup)
+	if err != nil {
+		return featureConfigs{}, err
+	}
 	selfService, err := loadSelfService(environment, core, lookup)
 	if err != nil {
 		return featureConfigs{}, err
 	}
+	calendarFeed, err := loadCalendarFeed(environment, core, lookup)
+	if err != nil {
+		return featureConfigs{}, err
+	}
 	return featureConfigs{
-		core: core, questionnaire: questionnaire, analytics: analytics, selfService: selfService,
+		questionnaire: questionnaire, selfService: selfService,
+		calendarFeed: calendarFeed,
 	}, nil
 }
 

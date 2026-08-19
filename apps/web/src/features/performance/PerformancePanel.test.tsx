@@ -15,6 +15,13 @@ const accommodation: Accommodation = {
   category: "formal_lodging",
   status: "active",
   capacity: 12,
+  public_listing: {
+    enabled: false,
+    phone: null,
+    whatsapp: false,
+    website: null,
+    consented_at: null,
+  },
   version: 1,
   created_at: "2026-08-01T00:00:00Z",
   updated_at: "2026-08-01T00:00:00Z",

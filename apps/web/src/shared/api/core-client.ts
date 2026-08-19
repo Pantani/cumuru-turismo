@@ -37,6 +37,12 @@ export const coreOperationNames = [
   "markStayNoShow",
   "getInvite",
   "submitInviteGroup",
+  "listCalendarFeeds",
+  "createCalendarFeed",
+  "removeCalendarFeed",
+  "listCalendarReservations",
+  "confirmCalendarReservation",
+  "dismissCalendarReservation",
 ] as const satisfies readonly (keyof operations)[];
 
 type CoreOperation = (typeof coreOperationNames)[number];
@@ -87,6 +93,12 @@ const successContracts = {
   markStayNoShow: command,
   getInvite: { status: 200 },
   submitInviteGroup: command,
+  listCalendarFeeds: { status: 200 },
+  createCalendarFeed: { status: 201, etag: true, replay: true },
+  removeCalendarFeed: command,
+  listCalendarReservations: { status: 200 },
+  confirmCalendarReservation: command,
+  dismissCalendarReservation: command,
 } as const satisfies Record<CoreOperation, SuccessContract>;
 
 type OperationStatus<Operation extends CoreOperation> =
@@ -131,6 +143,16 @@ export interface StayListFilters {
 export type PerformanceWindow =
   operations["getAccommodationPerformance"]["parameters"]["query"]["window"];
 
+/**
+ * A fila do calendário não usa cursor: ela é limitada ao calendário de uma
+ * acomodação, e um token assinado numa lista que cabe na tela seria peso sem
+ * ganho.
+ */
+export interface CalendarReservationFilters {
+  limit?: number;
+  state?: Schemas["CalendarReservationState"];
+}
+
 const MERGE_PATCH = "application/merge-patch+json";
 
 function concurrencyHeaders(etag: string, idempotencyKey?: string) {
@@ -172,6 +194,21 @@ export function createCoreClient(options: HttpClientOptions) {
     request(operation, {
       method: "POST",
       path: `${stay(stayId)}/${path}`,
+      body,
+      headers: concurrencyHeaders(etag, idempotencyKey),
+    });
+
+  const calendarReservationCommand = <Operation extends CoreOperation>(
+    operation: Operation,
+    reservationId: string,
+    path: string,
+    body: unknown,
+    etag: string,
+    idempotencyKey: string,
+  ) =>
+    request(operation, {
+      method: "POST",
+      path: `/api/v1/calendar-reservations/${segment(reservationId)}/${path}`,
       body,
       headers: concurrencyHeaders(etag, idempotencyKey),
     });
@@ -357,6 +394,64 @@ export function createCoreClient(options: HttpClientOptions) {
         path: `/api/v1/invites/${segment(capability)}`,
         authenticated: false,
       }),
+    listCalendarFeeds: (accommodationId: string) =>
+      read("listCalendarFeeds", `${accommodation(accommodationId)}/calendar-feeds`),
+    createCalendarFeed: (
+      accommodationId: string,
+      body: JsonRequest<"createCalendarFeed">,
+      idempotencyKey: string,
+    ) =>
+      request("createCalendarFeed", {
+        method: "POST",
+        path: `${accommodation(accommodationId)}/calendar-feeds`,
+        body,
+        headers: { "Idempotency-Key": idempotencyKey },
+      }),
+    removeCalendarFeed: (feedId: string, etag: string, idempotencyKey: string) =>
+      request("removeCalendarFeed", {
+        method: "POST",
+        path: `/api/v1/calendar-feeds/${segment(feedId)}/remove`,
+        body: {},
+        headers: concurrencyHeaders(etag, idempotencyKey),
+      }),
+    listCalendarReservations: (
+      accommodationId: string,
+      filters: CalendarReservationFilters = {},
+    ) =>
+      read(
+        "listCalendarReservations",
+        `${accommodation(accommodationId)}/calendar-reservations${queryString({
+          state: filters.state,
+          limit: filters.limit,
+        })}`,
+      ),
+    confirmCalendarReservation: (
+      reservationId: string,
+      body: JsonRequest<"confirmCalendarReservation">,
+      etag: string,
+      idempotencyKey: string,
+    ) =>
+      calendarReservationCommand(
+        "confirmCalendarReservation",
+        reservationId,
+        "confirm",
+        body,
+        etag,
+        idempotencyKey,
+      ),
+    dismissCalendarReservation: (
+      reservationId: string,
+      etag: string,
+      idempotencyKey: string,
+    ) =>
+      calendarReservationCommand(
+        "dismissCalendarReservation",
+        reservationId,
+        "dismiss",
+        {},
+        etag,
+        idempotencyKey,
+      ),
     submitInviteGroup: (
       capability: string,
       body: JsonRequest<"submitInviteGroup">,

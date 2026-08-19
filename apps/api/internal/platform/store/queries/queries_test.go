@@ -37,6 +37,28 @@ func TestCoreQueriesKeepAuthorizationAndLocksInSQL(t *testing.T) {
 	)
 }
 
+// A rota da lista é aberta: o recorte precisa estar na consulta, e não no
+// chamador, senão o primeiro handler com defeito publica o cadastro inteiro.
+func TestPublicDirectoryQueryFiltersAndProjectsInSQL(t *testing.T) {
+	t.Parallel()
+
+	query := namedQuery(
+		t, readSQL(t, "accommodation.sql"), "ListPublicAccommodationDirectory",
+	)
+	assertContainsAll(t, query,
+		"a.public_listing_enabled = true",
+		"a.status = 'active'",
+		"a.public_contact_phone",
+		"ORDER BY a.name, a.id",
+	)
+	assertSQLDoesNotContain(t, query,
+		"cadastur_id",
+		"organization_id",
+		"oidc_subject",
+		"public_listing_consented_at",
+	)
+}
+
 func TestCorePlatformQueriesAreClosedAndMinimal(t *testing.T) {
 	t.Parallel()
 

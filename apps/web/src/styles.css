@@ -124,6 +124,76 @@ textarea {
   font: inherit;
 }
 
+/* Caixa de texto padrão do produto. Antes só os campos dentro de um cartão
+   conhecido eram estilizados, e qualquer formulário fora dessa lista caía no
+   controle do navegador — mais estreito, cinza e fora do ritmo do resto da
+   página.
+
+   A regra fica no nível do tipo (0,0,1): o `:where()` zera só a lista de tipos
+   recusados, para que ela não conte. Assim qualquer classe vence, e os campos
+   deliberadamente menores (`.month-field`, `.section-heading`) seguem mandando
+   no próprio tamanho. Envolver o grupo inteiro em `:where()` para chegar a
+   0,0,0 seria pior, não mais previsível: o reset `input, select, textarea {
+   font: inherit }` acima também é 0,0,1 e passaria a vencer, e o campo herdaria
+   o peso do rótulo (650) ou do corpo (400) no lugar dos 450 daqui. */
+input:where(:not([type="checkbox"], [type="radio"], [type="file"])),
+select,
+textarea {
+  width: 100%;
+  min-height: 3.125rem;
+  padding: 0.875rem 1rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  border-radius: var(--radius-field);
+  font-weight: 450;
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+input:where(:not([type="checkbox"], [type="radio"], [type="file"])):hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+
+/* A seta do sistema não segue o tema nem o tamanho do resto: cada navegador
+   desenha a sua. Trocamos por um chevron nosso, feito de dois gradientes —
+   gradiente aceita `currentColor`, e imagem em `data:` não aceitaria, então
+   a seta acompanha a cor do texto — inclusive quando o campo desabilita.
+   Fora `[multiple]` e `[size]`, que viram lista e não têm indicador. */
+select:where(:not([multiple], [size])) {
+  appearance: none;
+  padding-right: 2.75rem;
+  background-image:
+    linear-gradient(
+      45deg,
+      transparent 50%,
+      color-mix(in srgb, currentColor 62%, transparent) 50%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, currentColor 62%, transparent) 50%,
+      transparent 50%
+    );
+  background-position:
+    right 1.31rem center,
+    right 1rem center;
+  background-size: 0.32rem 0.32rem;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+select:where(:not([multiple], [size])):disabled {
+  cursor: not-allowed;
+}
+
+:where(input, select, textarea)[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
 a {
   color: inherit;
 }
@@ -906,7 +976,10 @@ h4 {
   min-height: 2.75rem;
   padding: 0.6rem 2.2rem 0.6rem 0.75rem;
   color: var(--ink);
-  background: var(--surface);
+  background-color: var(--surface);
+  background-position:
+    right 1.06rem center,
+    right 0.75rem center;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -919,7 +992,7 @@ h4 {
 
 .section-heading select:disabled {
   color: var(--ink-3);
-  background: var(--surface-sunken);
+  background-color: var(--surface-sunken);
   cursor: not-allowed;
 }
 
@@ -1315,40 +1388,7 @@ h4 {
   display: grid;
   align-content: start;
   gap: 0.35rem;
-}
-
-.form-card input,
-.form-card select,
-.form-card textarea,
-.operation-card input,
-.operation-card select,
-.operation-card textarea,
-.login-card input,
-.onboarding-card input,
-.onboarding-card select,
-.new-stay-form input,
-.panel-card input,
-.panel-card select {
-  width: 100%;
-  min-height: 3.125rem;
-  padding: 0.875rem 1rem;
-  color: var(--ink);
-  background: var(--bg);
-  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
-  border-radius: var(--radius-field);
-  font-weight: 450;
-  transition:
-    border-color var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease);
-}
-
-.form-card input:hover,
-.operation-card input:hover,
-.login-card input:hover,
-.onboarding-card input:hover,
-.new-stay-form input:hover,
-.panel-card input:hover {
-  border-color: var(--brand);
+  margin: 0;
 }
 
 .form-card textarea,
@@ -1357,16 +1397,6 @@ h4 {
   line-height: 1.55;
   font-family: var(--font-num);
   font-size: 0.85rem;
-}
-
-.form-card [aria-invalid="true"],
-.operation-card [aria-invalid="true"],
-.login-card [aria-invalid="true"],
-.onboarding-card [aria-invalid="true"],
-.new-stay-form [aria-invalid="true"],
-.panel-card [aria-invalid="true"] {
-  border-color: var(--danger);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
 }
 
 .field-error {
@@ -2752,6 +2782,17 @@ button.quiet-action:disabled {
   line-height: 1.5;
 }
 
+.listing-panel {
+  display: grid;
+  gap: 1rem;
+  padding-top: var(--space-block);
+  border-top: 1px solid var(--line);
+}
+
+.listing-panel h2 {
+  margin: 0;
+}
+
 .approval-queue,
 .poster-panel,
 .activation-panel {
@@ -2960,4 +3001,136 @@ button.quiet-action:disabled {
   margin: 0;
   color: var(--ink-2);
   line-height: 1.6;
+}
+
+/* Lista pública de hospedagens. O cartão existe para uma ação só — ligar —,
+   então o telefone é o elemento de maior peso do bloco, e categoria, localidade
+   e capacidade ficam em linha secundária. */
+.directory {
+  display: grid;
+  gap: var(--space-block);
+}
+
+.directory-summary {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.9rem;
+}
+
+.directory-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+.directory-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.directory-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.directory-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.directory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.85rem;
+}
+
+.directory-meta > span + span::before {
+  content: "·";
+  margin-right: 0.5rem;
+}
+
+.directory-contact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.directory-call {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.directory-empty {
+  margin: 0;
+  color: var(--ink-3);
+}
+
+
+/*
+ * Calendário importado da plataforma de hospedagem. As duas listas são densas
+ * de propósito: quem abre a fila tem uma decisão por linha a tomar, e cartões
+ * grandes empurrariam a segunda decisão para fora da tela do celular.
+ */
+.calendar-feed-form {
+  display: grid;
+  gap: var(--space-block);
+  margin-bottom: var(--space-block);
+}
+
+.field-hint {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.calendar-feed-list,
+.calendar-reservation-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calendar-feed-row,
+.calendar-reservation-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.calendar-feed-detail {
+  margin: 0.3rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.calendar-reservation-row .field-control {
+  max-width: 9rem;
+}
+
+.calendar-reservation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }

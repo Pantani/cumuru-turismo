@@ -21,7 +21,7 @@ func (d Dependencies) accommodationPerformance(
 	}
 	slice, ok := observedPresenceSlice(request)
 	if !ok {
-		writeInvalidAnalyticsRequest(writer, request)
+		writePublicBadRequest(writer, request)
 		return
 	}
 	value, err := d.OwnPerformance.Performance(
@@ -55,13 +55,13 @@ func writeOwnPerformanceError(
 ) {
 	switch {
 	case errors.Is(err, analytics.ErrInvalidOwnPerformance):
-		writeInvalidAnalyticsRequest(writer, request)
+		writePublicBadRequest(writer, request)
 	case errors.Is(err, analytics.ErrOwnPerformanceNotFound):
 		writeProblem(
 			writer, request, http.StatusNotFound,
 			"not-found", "Recurso não encontrado",
 		)
 	default:
-		writeAnalyticsUnavailable(writer, request)
+		writePublicUnavailable(writer, request)
 	}
 }
