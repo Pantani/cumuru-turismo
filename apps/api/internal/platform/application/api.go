@@ -14,6 +14,7 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/accommodation"
 	"github.com/Pantani/cumuru/apps/api/internal/activation"
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
+	"github.com/Pantani/cumuru/apps/api/internal/calendarfeed"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/database"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/httpapi"
@@ -107,10 +108,14 @@ func apiHandlers(
 	if err != nil {
 		return nil, nil, errors.New("access request repository initialization failed")
 	}
+	calendarFeeds, err := calendarFeedService(platformStore, cfg)
+	if err != nil {
+		return nil, nil, errors.New("calendar feed service initialization failed")
+	}
 	return httpapi.New(apiDependencies(
 		cfg, build, logger, tracing, verifier,
 		platformStore, accommodationService, stayService, questionnaireService,
-		publicAnalytics, analyticsQuality, activations, accessRequests,
+		publicAnalytics, analyticsQuality, activations, accessRequests, calendarFeeds,
 	))
 }
 
@@ -166,6 +171,7 @@ func apiDependencies(
 	analyticsQuality analytics.QualityReader,
 	activationService *activation.Service,
 	accessRequestService *accessrequest.Service,
+	calendarFeedService *calendarfeed.Service,
 ) httpapi.Dependencies {
 	return httpapi.Dependencies{
 		Readiness:                      platformStore,
@@ -177,6 +183,7 @@ func apiDependencies(
 		Stays:                          stayService,
 		SelfServiceEnabled:             cfg.SelfService.Enabled,
 		AccessRequests:                 accessRequestService,
+		CalendarFeeds:                  calendarFeedService,
 		Activation:                     activationService,
 		Questionnaires:                 questionnaireService,
 		PublicAnalytics:                publicAnalytics,
@@ -255,6 +262,37 @@ func accessRequestService(
 		return nil, err
 	}
 	return accessrequest.NewService(repository), nil
+}
+
+// calendarFeedService follows the same rule: nil when the feature is off, and
+// the six routes simply do not exist instead of existing without a usable
+// sealing key — a feed stored under an empty key would be a bearer URL in the
+// clear (ADR-043).
+func calendarFeedService(
+	platformStore *store.Store,
+	cfg config.Config,
+) (*calendarfeed.Service, error) {
+	if !cfg.CalendarFeed.Enabled {
+		return nil, nil
+	}
+	sealer, err := calendarFeedSealer(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return calendarfeed.NewService(store.NewCalendarFeedRepository(platformStore), sealer)
+}
+
+func calendarFeedSealer(cfg config.Config) (*calendarfeed.URLSealer, error) {
+	return calendarfeed.NewURLSealer(
+		calendarfeed.Keyring{
+			CurrentVersion: cfg.CalendarFeed.URLKeys.CurrentVersion,
+			Keys:           cfg.CalendarFeed.URLKeys.Keys,
+		},
+		calendarfeed.Keyring{
+			CurrentVersion: cfg.CalendarFeed.FingerprintKeys.CurrentVersion,
+			Keys:           cfg.CalendarFeed.FingerprintKeys.Keys,
+		},
+	)
 }
 
 func openServices(

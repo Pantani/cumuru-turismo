@@ -55,6 +55,20 @@ x-core-local-environment: &core-local-environment
   ACTIVATION_CONTEXT_RATE_LIMIT: ${ACTIVATION_CONTEXT_RATE_LIMIT:-30}
   ACTIVATION_SUBMIT_RATE_LIMIT: ${ACTIVATION_SUBMIT_RATE_LIMIT:-10}
   APPROVAL_EXPIRY_BATCH_SIZE: ${APPROVAL_EXPIRY_BATCH_SIZE:-200}
+  # Calendário da plataforma de hospedagem: importação por iCal. Sem esta
+  # habilitação as seis rotas não são registradas e o worker não busca nada,
+  # porque a funcionalidade faz requisição de saída para host informado por
+  # usuário e guarda URL portadora — meia configuração não pode ter superfície
+  # nenhuma (ADR-043).
+  CALENDAR_FEED_ENABLED: ${CALENDAR_FEED_ENABLED:-true}
+  # Dois rings, e nenhum deles pode coincidir com outro: um precisa ser
+  # reversível para o worker abrir a URL, o outro nunca pode ser.
+  CALENDAR_FEED_URL_CURRENT_VERSION: ${CALENDAR_FEED_URL_CURRENT_VERSION:-local-v1}
+  CALENDAR_FEED_URL_KEYS: ${CALENDAR_FEED_URL_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtY2FsZW5kYXItdXJsLTE=}
+  CALENDAR_FEED_FINGERPRINT_CURRENT_VERSION: ${CALENDAR_FEED_FINGERPRINT_CURRENT_VERSION:-local-v1}
+  CALENDAR_FEED_FINGERPRINT_KEYS: ${CALENDAR_FEED_FINGERPRINT_KEYS:-local-v1=Y3VtdXJ1LWxvY2FsLXRlc3QtY2FsZW5kYXItZnAtMDE=}
+  CALENDAR_FEED_FETCH_TIMEOUT: ${CALENDAR_FEED_FETCH_TIMEOUT:-10s}
+  CALENDAR_FEED_BATCH_SIZE: ${CALENDAR_FEED_BATCH_SIZE:-25}
 
 services:
   postgres:

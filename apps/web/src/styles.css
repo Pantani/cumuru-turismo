@@ -2897,3 +2897,58 @@ button.quiet-action:disabled {
   gap: 1rem;
   flex-wrap: wrap;
 }
+
+/*
+ * Calendário importado da plataforma de hospedagem. As duas listas são densas
+ * de propósito: quem abre a fila tem uma decisão por linha a tomar, e cartões
+ * grandes empurrariam a segunda decisão para fora da tela do celular.
+ */
+.calendar-feed-form {
+  display: grid;
+  gap: var(--space-block);
+  margin-bottom: var(--space-block);
+}
+
+.field-hint {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.calendar-feed-list,
+.calendar-reservation-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calendar-feed-row,
+.calendar-reservation-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.calendar-feed-detail {
+  margin: 0.3rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.calendar-reservation-row .field-control {
+  max-width: 9rem;
+}
+
+.calendar-reservation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}

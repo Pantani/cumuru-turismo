@@ -98,18 +98,18 @@ migration_files="$(
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_presence_history_window.down.sql\n000002_presence_history_window.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_presence_history_window.down.sql\n000002_presence_history_window.up.sql\n000003_calendar_feed.down.sql\n000003_calendar_feed.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
 
-run_migrate up 2
+run_migrate up 3
 actual_migration_state="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${actual_migration_state}" = "2:false"
+test "${actual_migration_state}" = "3:false"
 
 psql_as cumuru_migration cumuru-local-migration-only <<'SQL'
 INSERT INTO core.organizations (id, name)
@@ -1654,9 +1654,9 @@ psql_as cumuru_migration cumuru-local-migration-only \
       );
   " >/dev/null
 
-# Round trip completo: a baseline e a janela histórica sobem, descem e
-# reaplicam de forma limpa.
-run_migrate down 2
+# Round trip completo: a baseline, a janela histórica e o feed de calendário
+# sobem, descem e reaplicam de forma limpa.
+run_migrate down 3
 schemas_left="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
@@ -1676,12 +1676,12 @@ schemas_left="$(
 )"
 test "${schemas_left}" = "0"
 
-run_migrate up 2
+run_migrate up 3
 final_version="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${final_version}" = "2:false"
+test "${final_version}" = "3:false"
 
-echo "migrations zero-to-two, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
+echo "migrations zero-to-three, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"

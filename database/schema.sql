@@ -571,6 +571,112 @@ CREATE TABLE core.group_submissions (
   UNIQUE (stay_id, client_submission_id)
 );
 
+-- Origem declarada das datas de uma acomodação. A URL é segredo portador e fica
+-- cifrada em repouso; a impressão digital existe só para recusar o mesmo feed
+-- cadastrado duas vezes na mesma acomodação (ADR-043).
+CREATE TABLE core.calendar_feeds (
+  id uuid PRIMARY KEY,
+  accommodation_id uuid NOT NULL REFERENCES core.accommodations(id),
+  provider text NOT NULL,
+  label text NOT NULL,
+  url_ciphertext bytea NOT NULL,
+  url_nonce bytea NOT NULL,
+  url_key_version text NOT NULL,
+  url_fingerprint bytea NOT NULL,
+  url_fingerprint_key_version text NOT NULL,
+  status text NOT NULL DEFAULT 'active',
+  last_synced_at timestamptz,
+  last_sync_outcome text,
+  consecutive_failures integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  version bigint NOT NULL DEFAULT 1,
+  CONSTRAINT calendar_feeds_provider_valid
+    CHECK (provider IN ('booking')),
+  CONSTRAINT calendar_feeds_label_not_blank
+    CHECK (btrim(label) <> '' AND char_length(label) <= 120),
+  CONSTRAINT calendar_feeds_url_material_present
+    CHECK (
+      octet_length(url_ciphertext) > 0
+      AND octet_length(url_nonce) > 0
+      AND octet_length(url_fingerprint) > 0
+    ),
+  CONSTRAINT calendar_feeds_key_versions_not_blank
+    CHECK (
+      btrim(url_key_version) <> ''
+      AND btrim(url_fingerprint_key_version) <> ''
+    ),
+  CONSTRAINT calendar_feeds_status_valid
+    CHECK (status IN ('active', 'suspended', 'removed')),
+  CONSTRAINT calendar_feeds_sync_outcome_valid
+    CHECK (
+      last_sync_outcome IS NULL
+      OR last_sync_outcome IN ('ok', 'unreachable', 'not_calendar', 'malformed')
+    ),
+  CONSTRAINT calendar_feeds_sync_outcome_follows_sync
+    CHECK ((last_synced_at IS NULL) = (last_sync_outcome IS NULL)),
+  CONSTRAINT calendar_feeds_failures_nonnegative
+    CHECK (consecutive_failures >= 0),
+  CONSTRAINT calendar_feeds_version_positive
+    CHECK (version > 0)
+);
+
+CREATE UNIQUE INDEX calendar_feeds_accommodation_url_idx
+  ON core.calendar_feeds (accommodation_id, url_fingerprint)
+  WHERE status <> 'removed';
+
+CREATE INDEX calendar_feeds_due_idx
+  ON core.calendar_feeds (last_synced_at NULLS FIRST)
+  WHERE status = 'active';
+
+-- Intenção de estadia observada no calendário da plataforma. Vira core.stays
+-- só por confirmação humana, porque o arquivo não traz número de hóspedes e não
+-- separa reserva de bloqueio de manutenção com confiabilidade (ADR-043).
+CREATE TABLE core.calendar_reservations (
+  id uuid PRIMARY KEY,
+  feed_id uuid NOT NULL REFERENCES core.calendar_feeds(id),
+  external_uid_hmac bytea NOT NULL,
+  external_uid_key_version text NOT NULL,
+  arrival_on date NOT NULL,
+  departure_on date NOT NULL,
+  kind text NOT NULL,
+  state text NOT NULL DEFAULT 'pending',
+  stay_id uuid REFERENCES core.stays(id),
+  first_seen_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  withdrawn_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  version bigint NOT NULL DEFAULT 1,
+  CONSTRAINT calendar_reservations_uid_present
+    CHECK (
+      octet_length(external_uid_hmac) > 0
+      AND btrim(external_uid_key_version) <> ''
+    ),
+  CONSTRAINT calendar_reservations_dates_valid
+    CHECK (departure_on > arrival_on),
+  CONSTRAINT calendar_reservations_kind_valid
+    CHECK (kind IN ('reserved', 'blocked', 'unknown')),
+  CONSTRAINT calendar_reservations_state_valid
+    CHECK (state IN ('pending', 'confirmed', 'dismissed', 'withdrawn')),
+  CONSTRAINT calendar_reservations_stay_follows_state
+    CHECK ((state = 'confirmed') = (stay_id IS NOT NULL)),
+  CONSTRAINT calendar_reservations_withdrawal_valid
+    CHECK ((state = 'withdrawn') = (withdrawn_at IS NOT NULL)),
+  CONSTRAINT calendar_reservations_seen_order_valid
+    CHECK (last_seen_at >= first_seen_at),
+  CONSTRAINT calendar_reservations_version_positive
+    CHECK (version > 0),
+  UNIQUE (feed_id, external_uid_hmac)
+);
+
+CREATE INDEX calendar_reservations_queue_idx
+  ON core.calendar_reservations (feed_id, arrival_on, id)
+  WHERE state = 'pending';
+
+CREATE UNIQUE INDEX calendar_reservations_stay_idx
+  ON core.calendar_reservations (stay_id)
+  WHERE stay_id IS NOT NULL;
+
 CREATE TABLE survey.questionnaires (
   id uuid PRIMARY KEY,
   stable_key text NOT NULL UNIQUE,

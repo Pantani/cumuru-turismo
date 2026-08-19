@@ -98,6 +98,14 @@ const (
 	ActionAccessRequestApproved Action = "accommodation_access_request.approved"
 	ActionAccessRequestRejected Action = "accommodation_access_request.rejected"
 	ActionAccessRequestExpired  Action = "accommodation_access_request.expired"
+	// O feed de calendário é origem declarada, não estadia. Ele tem ações
+	// próprias porque cadastrar de onde vêm as datas e registrar quem esteve
+	// hospedado são fatos diferentes, e a confirmação já emite stay.created
+	// no mesmo instante (ADR-043).
+	ActionCalendarFeedRegistered       Action = "calendar_feed.registered"
+	ActionCalendarFeedRemoved          Action = "calendar_feed.removed"
+	ActionCalendarReservationConfirmed Action = "calendar_reservation.confirmed"
+	ActionCalendarReservationDismissed Action = "calendar_reservation.dismissed"
 )
 
 type EntityType string
@@ -112,42 +120,48 @@ const (
 	// EntityAccessRequest exists before any organization does, and a rejected or
 	// expired request never has one. That is why it joins the organization-less
 	// group of validOrganization.
-	EntityAccessRequest EntityType = "accommodation_access_request"
+	EntityAccessRequest       EntityType = "accommodation_access_request"
+	EntityCalendarFeed        EntityType = "calendar_feed"
+	EntityCalendarReservation EntityType = "calendar_reservation"
 )
 
 var actionEntities = map[Action]EntityType{
-	ActionAccommodationCreated:   EntityAccommodation,
-	ActionAccommodationUpdated:   EntityAccommodation,
-	ActionMembershipCreated:      EntityMembership,
-	ActionMembershipUpdated:      EntityMembership,
-	ActionStayCreated:            EntityStay,
-	ActionStayUpdated:            EntityStay,
-	ActionStayInvited:            EntityStay,
-	ActionStayGroupSubmitted:     EntityStay,
-	ActionStayCheckedIn:          EntityStay,
-	ActionStayCheckedOut:         EntityStay,
-	ActionStayCancelled:          EntityStay,
-	ActionStayApproved:           EntityStay,
-	ActionStayRejected:           EntityStay,
-	ActionStayApprovalExpired:    EntityStay,
-	ActionAccommodationInvited:   EntityAccommodation,
-	ActionAccommodationRevoked:   EntityAccommodation,
-	ActionActivationIssued:       EntityAccommodation,
-	ActionActivationCompleted:    EntityAccommodation,
-	ActionStayNoShow:             EntityStay,
-	ActionQuestionnaireCreated:   EntityQuestionnaire,
-	ActionQuestionnaireCloned:    EntityQuestionnaireVersion,
-	ActionQuestionnaireUpdated:   EntityQuestionnaireVersion,
-	ActionQuestionnaireReview:    EntityQuestionnaireVersion,
-	ActionQuestionnaireChanges:   EntityQuestionnaireVersion,
-	ActionQuestionnaireApproved:  EntityQuestionnaireVersion,
-	ActionQuestionnairePublished: EntityQuestionnaireVersion,
-	ActionQuestionnaireRetired:   EntityQuestionnaireVersion,
-	ActionSurveyRecorded:         EntitySurveyResponse,
-	ActionAccessRequestCreated:   EntityAccessRequest,
-	ActionAccessRequestApproved:  EntityAccessRequest,
-	ActionAccessRequestRejected:  EntityAccessRequest,
-	ActionAccessRequestExpired:   EntityAccessRequest,
+	ActionAccommodationCreated:         EntityAccommodation,
+	ActionAccommodationUpdated:         EntityAccommodation,
+	ActionMembershipCreated:            EntityMembership,
+	ActionMembershipUpdated:            EntityMembership,
+	ActionStayCreated:                  EntityStay,
+	ActionStayUpdated:                  EntityStay,
+	ActionStayInvited:                  EntityStay,
+	ActionStayGroupSubmitted:           EntityStay,
+	ActionStayCheckedIn:                EntityStay,
+	ActionStayCheckedOut:               EntityStay,
+	ActionStayCancelled:                EntityStay,
+	ActionStayApproved:                 EntityStay,
+	ActionStayRejected:                 EntityStay,
+	ActionStayApprovalExpired:          EntityStay,
+	ActionAccommodationInvited:         EntityAccommodation,
+	ActionAccommodationRevoked:         EntityAccommodation,
+	ActionActivationIssued:             EntityAccommodation,
+	ActionActivationCompleted:          EntityAccommodation,
+	ActionStayNoShow:                   EntityStay,
+	ActionQuestionnaireCreated:         EntityQuestionnaire,
+	ActionQuestionnaireCloned:          EntityQuestionnaireVersion,
+	ActionQuestionnaireUpdated:         EntityQuestionnaireVersion,
+	ActionQuestionnaireReview:          EntityQuestionnaireVersion,
+	ActionQuestionnaireChanges:         EntityQuestionnaireVersion,
+	ActionQuestionnaireApproved:        EntityQuestionnaireVersion,
+	ActionQuestionnairePublished:       EntityQuestionnaireVersion,
+	ActionQuestionnaireRetired:         EntityQuestionnaireVersion,
+	ActionSurveyRecorded:               EntitySurveyResponse,
+	ActionAccessRequestCreated:         EntityAccessRequest,
+	ActionAccessRequestApproved:        EntityAccessRequest,
+	ActionAccessRequestRejected:        EntityAccessRequest,
+	ActionAccessRequestExpired:         EntityAccessRequest,
+	ActionCalendarFeedRegistered:       EntityCalendarFeed,
+	ActionCalendarFeedRemoved:          EntityCalendarFeed,
+	ActionCalendarReservationConfirmed: EntityCalendarReservation,
+	ActionCalendarReservationDismissed: EntityCalendarReservation,
 }
 
 type PurposeCode string
@@ -256,6 +270,10 @@ var entityPurposes = map[EntityType]PurposeCode{
 	EntityQuestionnaireVersion: PurposeQuestionnaireGovernance,
 	EntitySurveyResponse:       PurposeTourismSurvey,
 	EntityAccessRequest:        PurposeAccommodationOnboarding,
+	// O feed existe para produzir estadia, e a finalidade acompanha o efeito:
+	// importar calendário é operação de estadia, não onboarding.
+	EntityCalendarFeed:        PurposeStayOperation,
+	EntityCalendarReservation: PurposeStayOperation,
 }
 
 // PurposeFor returns the finalidade recorded for an entity type, and the empty

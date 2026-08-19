@@ -101,6 +101,10 @@ const (
 	OperationCreateAccessRequest         Operation = "createAccommodationAccessRequest"
 	OperationApproveAccessRequest        Operation = "approveAccommodationAccessRequest"
 	OperationRejectAccessRequest         Operation = "rejectAccommodationAccessRequest"
+	OperationCreateCalendarFeed          Operation = "createCalendarFeed"
+	OperationRemoveCalendarFeed          Operation = "removeCalendarFeed"
+	OperationConfirmCalendarReservation  Operation = "confirmCalendarReservation"
+	OperationDismissCalendarReservation  Operation = "dismissCalendarReservation"
 )
 
 // The allow-list is explicit rather than derived, so adding a constant without
@@ -133,6 +137,10 @@ var validOperations = map[Operation]bool{
 	OperationCreateAccessRequest:         true,
 	OperationApproveAccessRequest:        true,
 	OperationRejectAccessRequest:         true,
+	OperationCreateCalendarFeed:          true,
+	OperationRemoveCalendarFeed:          true,
+	OperationConfirmCalendarReservation:  true,
+	OperationDismissCalendarReservation:  true,
 }
 
 // Valid reports whether the operation may be recorded against an idempotency

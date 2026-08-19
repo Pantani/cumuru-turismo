@@ -2,6 +2,8 @@ import { useAuthSession } from "../../shared/auth/AuthSession";
 import { AccommodationAccessPanel } from "../accommodation/AccommodationAccessPanel";
 import { useAccommodations } from "../accommodation/use-accommodations";
 import { ApprovalQueue } from "../approval/ApprovalQueue";
+import { CalendarFeedPanel } from "../calendar/CalendarFeedPanel";
+import { CalendarReservationQueue } from "../calendar/CalendarReservationQueue";
 import { AccommodationPicker } from "./AccommodationPicker";
 import { StayBoard } from "./StayBoard";
 import type { Accommodation } from "./stay-lifecycle";
@@ -73,6 +75,8 @@ export function OperatorWorkspace() {
       {selected === null ? null : (
         <>
           <StayBoard accommodation={selected} />
+          <CalendarReservationQueue accommodationId={selected.id} />
+          <CalendarFeedPanel accommodationId={selected.id} />
           <SelfServicePanels accommodation={selected} />
         </>
       )}

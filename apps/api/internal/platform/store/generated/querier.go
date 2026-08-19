@@ -35,6 +35,10 @@ type Querier interface {
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) (CompleteIdempotencyKeyRow, error)
 	CompletePublicationRun(ctx context.Context, arg CompletePublicationRunParams) (int64, error)
 	CompleteReconciliationRun(ctx context.Context, arg CompleteReconciliationRunParams) (int64, error)
+	// A estadia foi criada na mesma transação: a constraint recusa 'confirmed' sem
+	// stay_id, então a fila não tem como carimbar confirmação sem que a estadia
+	// exista.
+	ConfirmCalendarReservation(ctx context.Context, arg ConfirmCalendarReservationParams) (ConfirmCalendarReservationRow, error)
 	// Uso único, atômico com a escrita do hash pelo chamador. Zero linhas é o mesmo
 	// 404 uniforme de token ausente, errado, expirado, consumido ou revogado.
 	ConsumeActivationCapability(ctx context.Context, arg ConsumeActivationCapabilityParams) (ConsumeActivationCapabilityRow, error)
@@ -65,6 +69,10 @@ type Querier interface {
 	// CreateAccommodationMembership é mais permissiva (<> 'closed') e não serve.
 	CreateActivationManagerMembership(ctx context.Context, arg CreateActivationManagerMembershipParams) (CreateActivationManagerMembershipRow, error)
 	CreateAssistedGroupSubmission(ctx context.Context, arg CreateAssistedGroupSubmissionParams) (CreateAssistedGroupSubmissionRow, error)
+	// A URL não aparece no RETURNING e não aparecerá: ela é segredo portador, e
+	// devolvê-la transformaria a tela que qualquer operador abre num jeito de ler o
+	// calendário do anúncio em outro lugar (ADR-043).
+	CreateCalendarFeed(ctx context.Context, arg CreateCalendarFeedParams) (CreateCalendarFeedRow, error)
 	CreateInvite(ctx context.Context, arg CreateInviteParams) (CreateInviteRow, error)
 	CreateInviteGroupSubmission(ctx context.Context, arg CreateInviteGroupSubmissionParams) (CreateInviteGroupSubmissionRow, error)
 	CreateQuestionnaire(ctx context.Context, arg CreateQuestionnaireParams) (SurveyQuestionnaire, error)
@@ -85,6 +93,10 @@ type Querier interface {
 	// então a estadia sobrevive sem violar invariante.
 	DeleteSelfServiceStayVisitors(ctx context.Context, stayID pgtype.UUID) (int64, error)
 	DeleteStagedMetricCellsForRun(ctx context.Context, publicationRunID pgtype.UUID) (int64, error)
+	// Dispensar é dizer que aquilo não era estadia — bloqueio de manutenção, uso do
+	// dono, reserva que a hospedagem já registrou à mão. Não há motivo de lista
+	// fechada porque nada disso descreve pessoa alguma.
+	DismissCalendarReservation(ctx context.Context, arg DismissCalendarReservationParams) (DismissCalendarReservationRow, error)
 	EraseExpiredSurveyFreeText(ctx context.Context, cutoff pgtype.Timestamptz) (int32, error)
 	// A varredura do worker lê e escreve exatamente o que o grant permite: enxerga
 	// id, approval_state e expires_at para achar o vencido, escreve o estado, os
@@ -185,6 +197,12 @@ type Querier interface {
 	ListActiveAccommodationCoverage(ctx context.Context, arg ListActiveAccommodationCoverageParams) ([]ListActiveAccommodationCoverageRow, error)
 	ListActiveMetricCatalog(ctx context.Context, privacyPolicyVersion string) ([]AnalyticsMetricCatalog, error)
 	ListActiveTenantMemberships(ctx context.Context, arg ListActiveTenantMembershipsParams) ([]ListActiveTenantMembershipsRow, error)
+	// O removido fica fora da listagem e dentro da tabela: as estadias confirmadas
+	// a partir dele continuam de pé, e a origem permanece como explicação.
+	ListCalendarFeeds(ctx context.Context, accommodationID pgtype.UUID) ([]ListCalendarFeedsRow, error)
+	// A junção com o feed é a autorização: a fila pertence à acomodação, e não ao
+	// feed, porque a hospedagem que tem três anúncios vê uma fila só.
+	ListCalendarReservations(ctx context.Context, arg ListCalendarReservationsParams) ([]ListCalendarReservationsRow, error)
 	ListConsentRequirementsForVersion(ctx context.Context, questionnaireVersionID pgtype.UUID) ([]SurveyConsentRequirement, error)
 	ListCurrentPreferenceCells(ctx context.Context, periodSelector string) ([]PublicDataCurrentPreference, error)
 	ListCurrentPresenceCells(ctx context.Context, periodSelector string) ([]PublicDataCurrentPresence, error)
@@ -195,6 +213,15 @@ type Querier interface {
 	ListCurrentPresenceCellsInRange(ctx context.Context, arg ListCurrentPresenceCellsInRangeParams) ([]PublicDataCurrentPresence, error)
 	ListCurrentQualityRows(ctx context.Context, windowCode string) ([]AnalyticsCurrentQuality, error)
 	ListCurrentSummaryCells(ctx context.Context) ([]PublicDataCurrentSummary, error)
+	// Sem FOR UPDATE de propósito: entre a leitura e a escrita do resultado há
+	// uma requisição HTTP para fora, e segurar trava de linha durante ela
+	// prenderia a transação no relógio de outra pessoa. O recorte por
+	// last_synced_at já basta — no pior caso um ciclo concorrente refaz a mesma
+	// sincronização, que é idempotente.
+	//
+	// Nunca sincronizado vem primeiro, porque é o feed que a hospedagem acabou
+	// de cadastrar e está olhando a tela para ver funcionar.
+	ListDueCalendarFeeds(ctx context.Context, arg ListDueCalendarFeedsParams) ([]ListDueCalendarFeedsRow, error)
 	ListEligiblePreferenceCounts(ctx context.Context, arg ListEligiblePreferenceCountsParams) ([]ListEligiblePreferenceCountsRow, error)
 	ListMetricMappings(ctx context.Context, arg ListMetricMappingsParams) ([]AnalyticsMetricMapping, error)
 	ListPresenceDaysForStay(ctx context.Context, stayID pgtype.UUID) ([]AnalyticsPresenceDay, error)
@@ -217,12 +244,23 @@ type Querier interface {
 	// estado enxerguem a mesma linha. O estado e a versão voltam para que ausente,
 	// já decidido e versão errada sejam três respostas diferentes.
 	LockAccommodationAccessRequestForDecision(ctx context.Context, requestID pgtype.UUID) (LockAccommodationAccessRequestForDecisionRow, error)
+	// A acomodação volta junto para que a autorização decida sobre a linha travada,
+	// e não sobre o que o cliente disse que ela era.
+	LockCalendarFeedForDecision(ctx context.Context, feedID pgtype.UUID) (LockCalendarFeedForDecisionRow, error)
+	LockCalendarReservationForDecision(ctx context.Context, reservationID pgtype.UUID) (LockCalendarReservationForDecisionRow, error)
 	LockIdempotencyKey(ctx context.Context, arg LockIdempotencyKeyParams) (PlatformIdempotencyRecord, error)
 	LockMembershipSetForManager(ctx context.Context, arg LockMembershipSetForManagerParams) ([]LockMembershipSetForManagerRow, error)
 	LockQuestionnaire(ctx context.Context, id pgtype.UUID) (SurveyQuestionnaire, error)
 	LockQuestionnaireVersion(ctx context.Context, id pgtype.UUID) (SurveyQuestionnaireVersion, error)
 	LockStayForCommand(ctx context.Context, arg LockStayForCommandParams) (LockStayForCommandRow, error)
 	LockSurveyCapability(ctx context.Context, tokenHmac []byte) (SurveyCapability, error)
+	// A suspensão vem decidida do domínio e chega como argumento: o SQL carimba, e
+	// o limite continua sendo uma regra legível em Go em vez de uma aritmética
+	// escondida numa cláusula CASE.
+	MarkCalendarFeedFailed(ctx context.Context, arg MarkCalendarFeedFailedParams) error
+	// O sucesso zera a contagem de falhas: o que interessa é a sequência corrente,
+	// não o histórico, porque o objetivo é suspender quem está quebrado agora.
+	MarkCalendarFeedSynced(ctx context.Context, arg MarkCalendarFeedSyncedParams) error
 	MarkReconciliationRunRunning(ctx context.Context, id pgtype.UUID) (int64, error)
 	PromoteCurrentPublication(ctx context.Context, publicationVersion int64) (int64, error)
 	PublishQuestionnaireVersion(ctx context.Context, arg PublishQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
@@ -238,9 +276,15 @@ type Querier interface {
 	RejectSelfServiceStay(ctx context.Context, arg RejectSelfServiceStayParams) (RejectSelfServiceStayRow, error)
 	ReleaseLocalDemoRunLock(ctx context.Context) (bool, error)
 	ReleaseSeedRunLock(ctx context.Context) (bool, error)
+	// Zero linhas significa que a linha mudou entre a trava e a escrita, o que é
+	// conflito e não ausência.
+	RemoveCalendarFeed(ctx context.Context, arg RemoveCalendarFeedParams) (RemoveCalendarFeedRow, error)
 	RequestQuestionnaireVersionChanges(ctx context.Context, arg RequestQuestionnaireVersionChangesParams) (SurveyQuestionnaireVersion, error)
 	RetireCurrentPublishedVersion(ctx context.Context, arg RetireCurrentPublishedVersionParams) error
 	RetireQuestionnaireVersion(ctx context.Context, arg RetireQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
+	// Uma reserva que sumiu e voltou é a mesma reserva. Sem isto ela permaneceria
+	// retirada para sempre, porque o upsert acima só alcança o que está pendente.
+	ReviveWithdrawnCalendarReservation(ctx context.Context, arg ReviveWithdrawnCalendarReservationParams) error
 	// RevokeAccountSessions closes every open session of an account. A rotation
 	// ends the sessions the previous secret opened, including the one that
 	// requested it.
@@ -270,6 +314,13 @@ type Querier interface {
 	UpdateAccommodationMembership(ctx context.Context, arg UpdateAccommodationMembershipParams) (UpdateAccommodationMembershipRow, error)
 	UpdateDraftQuestionnaireVersion(ctx context.Context, arg UpdateDraftQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	UpdateStay(ctx context.Context, arg UpdateStayParams) (UpdateStayRow, error)
+	// O UID cego é a identidade da reserva na origem, e por isso o conflito é o
+	// caminho normal e não a exceção: toda sincronização revê o mesmo calendário.
+	//
+	// A atualização não toca estado já decidido. Datas mudadas na plataforma
+	// alcançam o que ainda está na fila; o que a hospedagem já confirmou é estadia,
+	// e estadia se corrige na tela dela, não por um arquivo remoto.
+	UpsertCalendarReservation(ctx context.Context, arg UpsertCalendarReservationParams) error
 	UpsertPresenceDay(ctx context.Context, arg UpsertPresenceDayParams) (int64, error)
 	// The row count is the signal the caller needs: a fresh insert and a re-run
 	// under the same organization both touch one row, so zero means the guard
@@ -278,6 +329,10 @@ type Querier interface {
 	UpsertSeedMembership(ctx context.Context, arg UpsertSeedMembershipParams) error
 	UpsertSeedOrganization(ctx context.Context, arg UpsertSeedOrganizationParams) error
 	ValidatePublicRuntimeSession(ctx context.Context) (ValidatePublicRuntimeSessionRow, error)
+	// Some do feed quem foi cancelado na plataforma, e o arquivo não diz isso: diz
+	// apenas que não está mais lá. Por isso a retirada alcança só a fila pendente —
+	// desaparecimento nunca cancela estadia já confirmada (ADR-043).
+	WithdrawUnseenCalendarReservations(ctx context.Context, arg WithdrawUnseenCalendarReservationsParams) error
 }
 
 var _ Querier = (*Queries)(nil)

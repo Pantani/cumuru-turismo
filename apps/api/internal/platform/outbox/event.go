@@ -28,6 +28,12 @@ const (
 	// would force inventing a registration identifier for the rejected request,
 	// which has none.
 	AggregateAccessRequest AggregateType = "accommodation_access_request"
+
+	// O feed é agregado próprio: a reserva importada muda de versão a cada
+	// sincronização, e pendurá-la na estadia faria a estadia versionar por
+	// causa de um arquivo remoto (ADR-043).
+	AggregateCalendarFeed        AggregateType = "calendar_feed"
+	AggregateCalendarReservation AggregateType = "calendar_reservation"
 )
 
 type EventType string
@@ -65,6 +71,10 @@ const (
 	EventAccessRequestCreated               EventType = "accommodation_access_request.created"
 	EventAccessRequestApproved              EventType = "accommodation_access_request.approved"
 	EventAccessRequestRejected              EventType = "accommodation_access_request.rejected"
+	EventCalendarFeedRegistered             EventType = "calendar_feed.registered"
+	EventCalendarFeedRemoved                EventType = "calendar_feed.removed"
+	EventCalendarReservationConfirmed       EventType = "calendar_reservation.confirmed"
+	EventCalendarReservationDismissed       EventType = "calendar_reservation.dismissed"
 )
 
 var eventAggregates = map[EventType]AggregateType{
@@ -100,6 +110,10 @@ var eventAggregates = map[EventType]AggregateType{
 	EventAccessRequestCreated:               AggregateAccessRequest,
 	EventAccessRequestApproved:              AggregateAccessRequest,
 	EventAccessRequestRejected:              AggregateAccessRequest,
+	EventCalendarFeedRegistered:             AggregateCalendarFeed,
+	EventCalendarFeedRemoved:                AggregateCalendarFeed,
+	EventCalendarReservationConfirmed:       AggregateCalendarReservation,
+	EventCalendarReservationDismissed:       AggregateCalendarReservation,
 }
 
 type Event struct {
