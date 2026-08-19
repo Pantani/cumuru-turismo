@@ -17,6 +17,7 @@ worker agrega presença e o painel público mostra os indicadores anônimos.
 | `questionnaire` | Autoria e versionamento do questionário e pesquisa pública | implementada |
 | `analytics` | Presença, cobertura, supressão, publicação anônima e painéis | implementada |
 | `self-service` | Autocadastro por cartaz/QR, ativação de conta e fila de aprovação | implementada |
+| `calendar-feed` | Importação do calendário do Booking.com por iCal e fila de confirmação | implementada |
 | `fnrh` | Envio à FNRH Digital | não implementada; bloqueada por gates externos |
 
 **Todo o runtime opera como `PROTOTYPE_ONLY`.** Use exclusivamente dados,
@@ -62,6 +63,29 @@ Jornadas disponíveis na aplicação web:
 
 `/registro`, `/pesquisa`, `/i` e `/ativacao` só funcionam com a capability no
 fragmento da URL: abertas diretamente, permanecem bloqueadas por construção.
+
+## Calendário do Booking.com
+
+A hospedagem que vende pelo Booking.com pode colar, na área dela, o endereço do
+calendário do anúncio — o mesmo `.ics` que o extranet exporta em **Tarifas e
+disponibilidade → Calendário → Sincronizar calendários → Exportar**. As datas
+passam a chegar sozinhas e a hospedagem só confirma quantas pessoas vieram.
+
+Três limites que o desenho assume em vez de esconder:
+
+- **o arquivo não traz identidade.** As plataformas pararam de exportá-la, e
+  isso aqui é a fronteira certa: o Observatório não guarda nome de hóspede;
+- **o arquivo não traz número de hóspedes.** Por isso a estadia só nasce quando
+  alguém confirma informando quantas pessoas vieram;
+- **o arquivo não separa reserva de bloqueio de manutenção com confiabilidade.**
+  A fila mostra o que a plataforma disse e pergunta; nada vira presença
+  publicada sem confirmação humana.
+
+Integração direta com a API do Booking.com não está no escopo e não é possível
+para este projeto: o Connectivity API é reservado a parceiro homologado que
+gerencia preço, disponibilidade e conteúdo em tempo real — a descrição de um
+channel manager. A decisão completa está em
+[`ADR-044`](docs/decisoes/ADR-044-importacao-de-calendario-da-plataforma-de-hospedagem.md).
 
 ## Resultado pretendido
 

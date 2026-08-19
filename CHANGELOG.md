@@ -21,6 +21,19 @@ arquivo.
   elimina o carimbo de consentimento;
 - painel "Aparecer na lista pública" na área da hospedagem, que publica e
   retira o contato sob a mesma versão otimista das demais edições;
+- importação do calendário do Booking.com por iCal: a hospedagem cadastra o
+  endereço `.ics` do anúncio, o worker lê a cada duas horas e as datas entram
+  como reserva importada. `POST /accommodations/{accommodation_id}/calendar-feeds`,
+  `GET` da mesma rota, `POST /calendar-feeds/{feed_id}/remove`,
+  `GET /accommodations/{accommodation_id}/calendar-reservations`,
+  `POST /calendar-reservations/{reservation_id}/confirm` e `/dismiss` no
+  contrato, atrás de `CALENDAR_FEED_ENABLED`
+  ([ADR-044](docs/decisoes/ADR-044-importacao-de-calendario-da-plataforma-de-hospedagem.md));
+- `core.calendar_feeds` e `core.calendar_reservations` com a URL do feed cifrada
+  em repouso por AES-GCM com keyring versionado, o identificador da reserva na
+  origem guardado sob HMAC e nenhuma coluna de identidade — a estadia só nasce
+  por confirmação humana informando o número de hóspedes, que o arquivo não
+  traz;
 - autenticação local por e-mail e senha com Argon2id, sessão opaca, bloqueio
   por tentativas e `POST /auth/login`, `POST /auth/logout` e `GET /auth/session`
   no contrato, permitindo entrar sem CNPJ, Cadastur ou chave federal

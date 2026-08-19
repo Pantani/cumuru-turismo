@@ -147,6 +147,14 @@ afterEach(() => {
   toCanvas.mockReset();
 });
 
+/**
+ * O rótulo exato, e não /Cadastrar/: a área da hospedagem tem outros botões
+ * que começam com o mesmo verbo — cadastrar calendário é ato dela —, e o que
+ * estes dois testes negam é o cadastro de hospedagem, que é ato da
+ * administração.
+ */
+const ONBOARDING_BUTTON = "Cadastrar";
+
 describe("área da hospedagem", () => {
   it("lista as hospedagens do operador sem pedir identificador", async () => {
     stubApi({});
@@ -176,7 +184,7 @@ describe("área da hospedagem", () => {
       await screen.findByRole("link", { name: "página de pedido de acesso" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /Cadastrar/ }),
+      screen.queryByRole("button", { name: ONBOARDING_BUTTON }),
     ).toBeNull();
   });
 
@@ -188,7 +196,7 @@ describe("área da hospedagem", () => {
     });
 
     await screen.findByRole("button", { name: /Pousada Farol Fictícia/ });
-    expect(screen.queryByRole("button", { name: /Cadastrar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: ONBOARDING_BUTTON })).toBeNull();
   });
 
   /**
