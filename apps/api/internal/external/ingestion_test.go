@@ -241,6 +241,31 @@ func TestStorageFailureIsWriteErrorNotHTTPError(t *testing.T) {
 	}
 }
 
+// A fetch that never got a response has no HTTP status to record. Persisting 0
+// would invent a code the protocol does not have and send whoever debugs it
+// hunting for a server that answered, when none did. The column stays nullable
+// precisely so that "never answered" and "answered 500" remain distinguishable
+// in the trail — the same reason write_error exists apart from http_error.
+func TestFetchWithoutResponseRecordsNoHTTPStatus(t *testing.T) {
+	stub := newStubUpstream(t, fixtureHandler(t, "open_meteo_forecast.json"))
+	repository, ingestion := ingestionOver(t, stub)
+	// Upstream goes away before the cycle: no connection, no body, no status.
+	stub.server.Close()
+
+	ingestion.RunCycle(context.Background())
+
+	run := repository.lastRun()
+	if run.Outcome != OutcomeHTTPError {
+		t.Fatalf("outcome = %q, want %q", run.Outcome, OutcomeHTTPError)
+	}
+	if run.HTTPStatus != nil {
+		t.Fatalf(
+			"http_status = %d, want nil when the upstream never responded",
+			*run.HTTPStatus,
+		)
+	}
+}
+
 // A write that fails before the run row exists is still a write failure. It
 // never reaches `fetch_runs` — there is no row to carry it — so the documented
 // meaning of `write_error`, "the source responded and was read", stays exactly

@@ -187,8 +187,15 @@ func (i *Ingestion) fetchAndStore(
 	runID uuid.UUID,
 ) RunResult {
 	response, outcome := i.fetcher.Fetch(ctx, target)
-	status := int32(response.status)
-	result := RunResult{Outcome: outcome, HTTPStatus: &status}
+	// Sem resposta HTTP — DNS, recusa de conexão, timeout de transporte — não
+	// existe status a gravar. Persistir 0 inventaria um código que o protocolo
+	// não tem e faria a trilha afirmar "o servidor respondeu 0" onde ninguém
+	// respondeu. A coluna é nula justamente para distinguir os dois casos.
+	result := RunResult{Outcome: outcome}
+	if response.status > 0 {
+		status := int32(response.status)
+		result.HTTPStatus = &status
+	}
 	if outcome != OutcomeOK {
 		return result
 	}

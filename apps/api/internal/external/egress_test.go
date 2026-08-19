@@ -21,7 +21,7 @@ func TestFetcherRefusesHostsOutsideTheAllowlist(t *testing.T) {
 		"credentials":   "https://127.0.0.1@attacker.invalid/v1",
 		"link local":    "https://169.254.169.254/latest/meta-data",
 		"unix scheme":   "file:///etc/passwd",
-		"missing sched": "//127.0.0.1/v1/forecast",
+		"missing scheme": "//127.0.0.1/v1/forecast",
 	}
 	fetcher := allowlistFetcher(t)
 	for name, candidate := range cases {

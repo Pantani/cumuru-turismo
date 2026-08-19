@@ -11,15 +11,16 @@ import (
 
 var errUpstreamPayloadInvalid = errors.New("upstream payload is invalid")
 
-// ObservedPoint is one daily fact, already carrying the digest that decides
-// idempotence. Equal digest is a no-op; a different one enters as a new
-// revision, because ERA5 backfills data that was already published and
-// replacing the value in place would erase the trail.
+// ObservedPoint is one daily fact as the upstream reported it. The digest that
+// decides idempotence is derived at write time by digestOf, not carried here:
+// keeping a second copy on the struct would let the value and its digest drift
+// apart. Equal digest is a no-op; a different one enters as a new revision,
+// because ERA5 backfills data that was already published and replacing the
+// value in place would erase the trail.
 type ObservedPoint struct {
 	PeriodStart time.Time
 	PeriodEnd   time.Time
 	Value       float64
-	Digest      string
 }
 
 // The daily block of Open-Meteo. Unknown fields are tolerated — the upstream
