@@ -18,6 +18,12 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'privacy_officer') THEN
     CREATE ROLE privacy_officer NOLOGIN;
   END IF;
+  -- A ingestão externa corre sob papel próprio (ADR-045 §1): reusar
+  -- worker_runtime daria à camada externa a leitura de core/survey/analytics
+  -- e destruiria a direcionalidade que a onda 8 existe para provar.
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'external_runtime') THEN
+    CREATE ROLE external_runtime NOLOGIN;
+  END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cumuru_migration') THEN
     CREATE ROLE cumuru_migration
@@ -39,17 +45,24 @@ BEGIN
       LOGIN PASSWORD 'cumuru-local-public-only'
       IN ROLE public_runtime;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cumuru_external') THEN
+    CREATE ROLE cumuru_external
+      LOGIN PASSWORD 'cumuru-local-external-only'
+      IN ROLE external_runtime;
+  END IF;
 END
 $$;
 
 GRANT CONNECT, CREATE, TEMPORARY ON DATABASE cumuru TO migration_admin;
 GRANT USAGE, CREATE ON SCHEMA public TO migration_admin;
 GRANT CONNECT ON DATABASE cumuru
-  TO app_runtime, worker_runtime, public_runtime, privacy_officer;
+  TO app_runtime, worker_runtime, public_runtime, privacy_officer,
+    external_runtime;
 REVOKE CREATE, TEMPORARY ON DATABASE cumuru
-  FROM PUBLIC, public_runtime, cumuru_public;
+  FROM PUBLIC, public_runtime, cumuru_public, external_runtime, cumuru_external;
 
 ALTER ROLE cumuru_migration SET search_path = public;
 ALTER ROLE cumuru_app SET search_path = core, platform, public;
 ALTER ROLE cumuru_worker SET search_path = core, platform, public;
 ALTER ROLE cumuru_public SET search_path = public_data, public;
+ALTER ROLE cumuru_external SET search_path = external, public;

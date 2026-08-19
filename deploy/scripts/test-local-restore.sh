@@ -146,7 +146,8 @@ database_fingerprint() {
             'survey',
             'analytics',
             'public_data',
-            'platform'
+            'platform',
+            'external'
           )
         ),
         (
@@ -157,7 +158,9 @@ database_fingerprint() {
               'current_summary',
               'current_presence',
               'current_preferences',
-              'current_methodology'
+              'current_methodology',
+              'current_external_context',
+              'current_external_sources'
             )
         )
       )
@@ -226,7 +229,7 @@ VALUES (
 );
 SQL
 
-expected_fingerprint="$(latest_migration_version):false:1:1:1:1:6:4"
+expected_fingerprint="$(latest_migration_version):false:1:1:1:1:7:6"
 source_fingerprint="$(database_fingerprint "${SOURCE_DATABASE}")"
 assert_fingerprint "origem" "${source_fingerprint}" "${expected_fingerprint}"
 
@@ -284,12 +287,13 @@ schema_owners="$(
           'survey',
           'analytics',
           'public_data',
-          'platform'
+          'platform',
+          'external'
         )
         AND owner.rolname = 'cumuru_migration'
     "
 )"
-test "${schema_owners}" = "6"
+test "${schema_owners}" = "7"
 
 function_owners="$(
   psql_as "${RESTORE_DATABASE}" postgres "${ADMIN_PASSWORD}" \
@@ -342,6 +346,16 @@ public_view_privileges="$(
           'public_data.current_methodology',
           'SELECT'
         )::integer,
+        has_table_privilege(
+          'public_runtime',
+          'public_data.current_external_context',
+          'SELECT'
+        )::integer,
+        has_table_privilege(
+          'public_runtime',
+          'public_data.current_external_sources',
+          'SELECT'
+        )::integer,
         has_database_privilege(
           'public_runtime',
           current_database(),
@@ -355,7 +369,7 @@ public_view_privileges="$(
       )
     "
 )"
-test "${public_view_privileges}" = "1:1:1:1:0:0"
+test "${public_view_privileges}" = "1:1:1:1:1:1:0:0"
 
 psql_as "${RESTORE_DATABASE}" cumuru_public cumuru-local-public-only \
   --command="SELECT count(*) FROM public_data.current_summary" \
@@ -367,6 +381,24 @@ expect_psql_failure \
   cumuru-local-public-only \
   "public_runtime unexpectedly read a transactional table after restore" \
   "SELECT count(*) FROM core.organizations"
+
+psql_as "${RESTORE_DATABASE}" cumuru_public cumuru-local-public-only \
+  --command="SELECT count(*) FROM public_data.current_external_context" \
+  >/dev/null
+
+expect_psql_failure \
+  "${RESTORE_DATABASE}" \
+  cumuru_public \
+  cumuru-local-public-only \
+  "public_runtime unexpectedly read external.observations after restore" \
+  "SELECT count(*) FROM external.observations"
+
+expect_psql_failure \
+  "${RESTORE_DATABASE}" \
+  cumuru_worker \
+  cumuru-local-worker-only \
+  "worker_runtime unexpectedly read external.observations after restore" \
+  "SELECT count(*) FROM external.observations"
 
 # app_runtime holds SELECT (id) on platform.audit_events (RETURNING id needs
 # it — see the grant in the 000001 baseline), so count(*) succeeds by design:

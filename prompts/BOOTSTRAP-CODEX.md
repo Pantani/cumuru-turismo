@@ -288,3 +288,125 @@ O gate de complexidade deste repositório é 5/8, não 10.
 Ao terminar, execute todos os gates aplicáveis e apresente PASS/FAIL/UNVERIFIED,
 arquivos principais, migrações, riscos e próximo passo.
 ```
+
+## Prompt 8 — Contexto externo
+
+```text
+Leia AGENTS.md e os documentos do blueprint. Confirme que as Fases 1 e 4 estão
+verdes. Implemente somente a Fase 8 de
+.agents/skills/cumuru-bootstrap/references/phase-matrix.md.
+
+Esta fase não sucede a Fase 7; ela depende das Fases 1 e 4 e invalida qualquer
+auditoria 6A anterior, porque muda a fronteira pública.
+
+Leia a ADR-045 antes de qualquer patch. Ela já está aceita e é a lei da fase.
+Ela emenda por escrito a ADR-030 (o acesso positivo do papel público passa de
+quatro para seis views de public_data) e a ADR-032 (append-only a partir de
+000005).
+
+A restrição dura, não negociável: dado externo é contexto e nunca insumo. Ele
+não entra em analytics, em public_data.metric_cells, no forecast nem na
+cobertura. A estrutura já recusa: analytics.Cell exige SampleSize e
+AccommodationCount, e metric_cells_values_valid exige published_value % 10 = 0,
+absurdo para temperatura ou altura de maré. As únicas saídas seriam amostra
+fictícia ou um ramo de bypass em ProtectCells. Ambas são proibidas.
+analytics/policy.go, presence*.go, publication.go e coverage.go ficam
+congelados.
+
+Implemente:
+
+1. Schema external e migration 000003, append-only.
+   Seis relações: sources, series, observations, fetch_runs, tide_stations e
+   tide_harmonics. Unidade e período moram em series, nunca na observação;
+   mudar unidade é series_code novo, nunca ALTER in-place. A idempotência de
+   escrita é (source_code, series_code, period_start, payload_digest): digest
+   igual é no-op, digest diferente insere revision + 1, porque revisão de série
+   é fato e ERA5 backfilla dado já publicado. fetch_runs é obrigatória: sem
+   ela, indisponível é indistinguível de não rodou, e o card lê o outcome da
+   última run, não a ausência de linhas.
+
+2. Direcionalidade por ACL, não por convenção.
+   A ingestão corre sob external_runtime, papel novo, login cumuru_external.
+   worker_runtime é o papel de reconciliação de analytics e não recebe nenhum
+   privilégio em external, nem USAGE. external_runtime não recebe SELECT em
+   core, survey, analytics nem public_data. Os dois convivem no mesmo processo
+   do worker, em pools distintos. Nenhuma FK atravessa external para core,
+   survey, analytics ou public_data.
+
+3. As views públicas da camada.
+   public_data.current_external_context e public_data.current_external_sources
+   moram em public_data, não em external. A primeira filtra public_exposable; a
+   segunda existe porque o Cadastur é creditado sem card (U-7), e uma view com
+   forma de card não tem linha onde ele caiba. Ela lê as tabelas base sob os privilégios do dono da
+   view, então public_runtime continua sem qualquer privilégio em external e o
+   search_path do pool público permanece pg_catalog, public_data.
+   publicRuntimeSearchPath não é alterado. Acrescente external a
+   application_schemas em store/queries/public.sql apenas do lado negativo: sem
+   isso, um grant indevido ao papel público em external não seria detectado.
+
+4. GET /public/context.
+   Documento único, security vazio, sem seletor, tag external e
+   x-cumuru-feature external-context. Reuse PublicCache, PublicEntityTag e o
+   ETag existente com operation context; não crie um segundo algoritmo.
+   PublicMetadata fica intocado: schema fechado com consts, e alargar o enum de
+   unidade contaminaria a metadata da série protegida. data_mode é por card,
+   porque uma página que mistura clima real com presença fictícia sob um rótulo
+   global mente nas duas direções. Proveniência é obrigatória também no ramo
+   unavailable: fonte, licença e atribuição existem porque a fonte existe, não
+   porque o fetch deu certo. attribution_text vem do banco, não é montado em Go.
+   Status é published ou unavailable, nunca protected. reason_code é lista
+   fechada. Fonte morta é 200 com o card unavailable; 503 só quando o documento
+   inteiro não puder ser montado.
+
+5. Ingestão no worker.
+   Fonte única: Open-Meteo Forecast e Archive, ponto único do município,
+   agregado diário. Egresso só no worker, nunca no caminho de requisição. URL,
+   host, path e parâmetros constantes: nenhum byte vindo de requisição HTTP
+   entra na URL externa, o que fecha SSRF e vazamento de cadência na mesma
+   trava. Somente https, allowlist de host em configuração e não em banco,
+   redirect para fora da allowlist recusado, teto de tamanho de resposta,
+   timeout próprio e orçamento de lote dedicado, porque DATABASE_TIMEOUT é de
+   requisição. Agenda ancorada no calendário civil America/Bahia. User-Agent
+   institucional fixo, sem tenant, organização, acomodação, operador ou sujeito
+   OIDC. Log de egresso só com host, status e duração; nunca URL com query,
+   corpo ou headers. Breaker e métricas por source_code e outcome.
+
+6. Maré.
+   O card nasce e permanece unavailable com reason_code
+   constants_not_imported. As constantes harmônicas do CHM não têm API e o
+   BNDO pode exigir Termo de Compromisso que veda repasse a terceiro; publicar
+   predição derivada num painel público é exatamente repasse. É gate de
+   direitos, não de dado. Não fabrique constante e não use
+   sea_level_height_msl como maré: a própria doc da fonte declara acurácia
+   limitada em área costeira. Maré baixa é quando se caminha no recife.
+
+7. Cadastur.
+   Entra apenas como fonte creditada e link, sem contagem calculada pela
+   plataforma, sem card com valor e sem série de universo. Publicar o universo N
+   ao lado da cobertura entregaria não_reportantes = N menos round(r vezes N), e
+   numa vila com conjunto enumerável de pousadas isso individualiza quem não
+   reporta. public_exposable é coluna com CHECK e ACL, e o Cadastur é o caso
+   declarado false.
+
+8. Aba web separada.
+   Em apps/web/src/features/analytics, aba própria, sem eixo, escala ou legenda
+   compartilhados com o gráfico de presença. Proibida aritmética atravessando a
+   fronteira, inclusive no cliente: é ali que a brecha apareceria, com a API
+   pura e a UI reconstituindo a quantidade suprimida. A CSP connect-src 'self'
+   não é relaxada; logo de fonte é self ou data:. Com value nulo, o DOM não
+   contém numeral, não desenha ponto no eixo e não desenha barra de altura zero.
+
+Nenhum gate depende de rede pública: o upstream é stub HTTP local servindo
+fixtures gravadas. Corrija as asserções literais que a migration 000003 quebra
+em test-migrations.sh e test-local-restore.sh, incluindo a contagem de schemas
+remanescentes após o down, que hoje não inclui external e deixaria schema órfão
+passar em silêncio.
+
+Critério central de aceite: com o stub parado, as quatro rotas públicas de
+analytics mantêm corpo e ETag idênticos, /public/context responde 200 com o
+card unavailable, e o DOM do card não contém nenhum numeral.
+
+Toda tarefa que altera código roda make post-task-quality depois dos testes
+estreitos e antes de DONE, e o artifact registra comando, exit code e o
+marcador exato POST_TASK_QUALITY=PASS.
+```

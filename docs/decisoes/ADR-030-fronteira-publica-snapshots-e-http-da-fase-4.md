@@ -5,6 +5,17 @@
 > Nota de baseline: o ADR-032 incorpora as migrations citadas neste documento
 > à `000001_initial_schema`; a numeração permanece como contexto histórico.
 
+> **Emendado pelo [ADR-045](ADR-045-camada-de-contexto-externo.md).** O acesso
+> positivo do papel público passa de quatro para **cinco** views de
+> `public_data`, com o acréscimo de `current_external_context`. A quinta view
+> mora em `public_data` e lê `external` sob os privilégios do dono da view, de
+> modo que `public_runtime` continua sem qualquer privilégio no schema
+> `external` e o `search_path` do pool público permanece
+> `pg_catalog, public_data`. O schema `external` é acrescentado à lista de
+> schemas varridos pela validação de sessão apenas do lado **negativo**, para
+> que um grant indevido seja detectado. A auditoria 6A fica invalidada por esta
+> emenda.
+
 ## Contexto
 
 A API atual usa somente o pool de `app_runtime`, e a migration `000004`

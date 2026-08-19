@@ -17,6 +17,15 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'privacy_officer') THEN
     CREATE ROLE privacy_officer NOLOGIN;
   END IF;
+  -- Papel de grupo da ingestão externa (ADR-045 §1). Precisa existir mesmo
+  -- onde a camada externa está desligada: a migration 000003 aborta se ele
+  -- faltar, e a cadeia de migrations roda em todo ambiente. O login
+  -- correspondente não é criado aqui porque nenhum processo implantado
+  -- ingere contexto externo — EXTERNAL_CONTEXT_ENABLED é false fora de
+  -- local|test, como QUESTIONNAIRE_ENABLED e ANALYTICS_ENABLED.
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'external_runtime') THEN
+    CREATE ROLE external_runtime NOLOGIN;
+  END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cumuru_migration') THEN
     CREATE ROLE cumuru_migration LOGIN;
@@ -51,9 +60,10 @@ GRANT CONNECT, CREATE, TEMPORARY ON DATABASE {{ cumuru_database_name }}
   TO migration_admin;
 GRANT USAGE, CREATE ON SCHEMA public TO migration_admin;
 GRANT CONNECT ON DATABASE {{ cumuru_database_name }}
-  TO app_runtime, worker_runtime, public_runtime, privacy_officer;
+  TO app_runtime, worker_runtime, public_runtime, privacy_officer,
+    external_runtime;
 REVOKE CREATE, TEMPORARY ON DATABASE {{ cumuru_database_name }}
-  FROM PUBLIC, public_runtime, cumuru_public;
+  FROM PUBLIC, public_runtime, cumuru_public, external_runtime;
 
 ALTER ROLE cumuru_migration SET search_path = public;
 ALTER ROLE cumuru_app SET search_path = core, platform, public;

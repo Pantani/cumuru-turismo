@@ -416,6 +416,18 @@ type AnalyticsStagedMetricCell struct {
 	ProtectionStatus   string         `json:"protection_status"`
 }
 
+// Torna "indisponível" distinguível de "não rodou"; o card lê o outcome.
+type ExternalFetchRun struct {
+	ID                   pgtype.UUID        `json:"id"`
+	SourceCode           string             `json:"source_code"`
+	StartedAt            pgtype.Timestamptz `json:"started_at"`
+	FinishedAt           pgtype.Timestamptz `json:"finished_at"`
+	Outcome              string             `json:"outcome"`
+	HttpStatus           *int32             `json:"http_status"`
+	ObservationsWritten  int32              `json:"observations_written"`
+	BatchBudgetExhausted bool               `json:"batch_budget_exhausted"`
+}
+
 type PlatformIdempotencyRecord struct {
 	ActorKeyHmac          []byte             `json:"actor_key_hmac"`
 	ActorKeyVersion       string             `json:"actor_key_version"`
@@ -433,6 +445,45 @@ type PlatformIdempotencyRecord struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
 	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+}
+
+// Recorte público da camada externa; filtra public_exposable e credita a fonte.
+type PublicDataCurrentExternalContext struct {
+	CardCode              *string            `json:"card_code"`
+	SourceCode            string             `json:"source_code"`
+	SeriesCode            string             `json:"series_code"`
+	UnitCode              string             `json:"unit_code"`
+	PeriodKind            string             `json:"period_kind"`
+	DataMode              string             `json:"data_mode"`
+	Derived               bool               `json:"derived"`
+	DerivationCode        *string            `json:"derivation_code"`
+	UnavailableReasonCode *string            `json:"unavailable_reason_code"`
+	DefinitionVersion     int32              `json:"definition_version"`
+	DeclaredLagSeconds    int64              `json:"declared_lag_seconds"`
+	Publisher             string             `json:"publisher"`
+	LicenseCode           string             `json:"license_code"`
+	LicenseUrl            string             `json:"license_url"`
+	AttributionText       string             `json:"attribution_text"`
+	TermsUrl              string             `json:"terms_url"`
+	PeriodStart           pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd             pgtype.Timestamptz `json:"period_end"`
+	ObservedValue         pgtype.Numeric     `json:"observed_value"`
+	QualityFlag           *string            `json:"quality_flag"`
+	RetrievedAt           pgtype.Timestamptz `json:"retrieved_at"`
+	Revision              *int32             `json:"revision"`
+	SourceRevisionLabel   *string            `json:"source_revision_label"`
+	LastFetchOutcome      *string            `json:"last_fetch_outcome"`
+	LastFetchFinishedAt   pgtype.Timestamptz `json:"last_fetch_finished_at"`
+}
+
+// Créditos das fontes ativas; atribuição e link, sem contagem nem série.
+type PublicDataCurrentExternalSource struct {
+	SourceCode      string `json:"source_code"`
+	Publisher       string `json:"publisher"`
+	LicenseCode     string `json:"license_code"`
+	LicenseUrl      string `json:"license_url"`
+	AttributionText string `json:"attribution_text"`
+	TermsUrl        string `json:"terms_url"`
 }
 
 type PublicDataCurrentPreference struct {

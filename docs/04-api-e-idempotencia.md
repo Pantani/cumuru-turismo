@@ -77,10 +77,27 @@ GET  /public/summary
 GET  /public/presence
 GET  /public/preferences
 GET  /public/methodology
+GET  /public/context
 ```
 
 Somente combinações pré-aprovadas. Nenhuma consulta SQL dinâmica baseada em
 filtros arbitrários.
+
+`/public/context` é a camada de contexto externo (ADR-045) e não é medição da
+plataforma: documento único, sem seletor, com proveniência, licença e texto de
+atribuição por card — inclusive no card indisponível, porque a obrigação de
+atribuir não depende de a busca ter dado certo. Cada card carrega o próprio
+`data_mode`, já que fonte externa real e fixture de protótipo não podem
+compartilhar um rótulo global. O status é `published` ou `unavailable`, nunca
+`protected`: essa palavra, na série protegida, significa reprovado pelo limiar
+k-anônimo, e reusá-la aqui afirmaria que a supressão rodou sobre dado que nunca
+passou por ela. Fonte morta é `200` com aquele card `unavailable`; `503` só
+quando o documento inteiro não puder ser montado.
+
+A rota lê duas views de `public_data` e nenhuma tabela base:
+`current_external_context` para os cards e `current_external_sources` para os
+créditos. Os créditos moram em view separada porque o Cadastur é creditado sem
+card — não há linha com forma de card onde ele caiba.
 
 ### Registro por convite
 

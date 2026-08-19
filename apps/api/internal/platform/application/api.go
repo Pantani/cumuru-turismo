@@ -16,6 +16,7 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
 	"github.com/Pantani/cumuru/apps/api/internal/calendarfeed"
 	"github.com/Pantani/cumuru/apps/api/internal/directory"
+	"github.com/Pantani/cumuru/apps/api/internal/external"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/database"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/httpapi"
@@ -25,6 +26,7 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/platform/telemetry"
 	"github.com/Pantani/cumuru/apps/api/internal/questionnaire"
 	"github.com/Pantani/cumuru/apps/api/internal/stay"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -55,7 +57,7 @@ func runAPIWithTelemetry(
 	tracing *telemetry.Provider,
 ) error {
 	platformStore, accommodationService, stayService, questionnaireService,
-		publicAnalytics, analyticsQuality, closeDatabase, err := openServices(ctx, cfg)
+		readers, closeDatabase, err := openServices(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -68,7 +70,7 @@ func runAPIWithTelemetry(
 	publicHandler, operationsHandler, err := apiHandlers(
 		cfg, build, logger, tracing, verifier,
 		platformStore, accommodationService, stayService, questionnaireService,
-		publicAnalytics, analyticsQuality,
+		readers,
 	)
 	if err != nil {
 		return err
@@ -98,8 +100,7 @@ func apiHandlers(
 	accommodationService *accommodation.Service,
 	stayService *stay.Service,
 	questionnaireService *questionnaire.Service,
-	publicAnalytics analytics.PublicReader,
-	analyticsQuality analytics.QualityReader,
+	readers publicReaders,
 ) (http.Handler, http.Handler, error) {
 	activations, err := activationService(platformStore, cfg)
 	if err != nil {
@@ -121,8 +122,7 @@ func apiHandlers(
 	return httpapi.New(apiDependencies(
 		cfg, build, logger, tracing, verifier,
 		platformStore, accommodationService, stayService, questionnaireService,
-		publicAnalytics, publicDirectory, analyticsQuality, activations,
-		accessRequests, calendarFeeds,
+		readers, publicDirectory, activations, accessRequests, calendarFeeds,
 	))
 }
 
@@ -174,9 +174,8 @@ func apiDependencies(
 	accommodationService *accommodation.Service,
 	stayService *stay.Service,
 	questionnaireService *questionnaire.Service,
-	publicAnalytics analytics.PublicReader,
+	readers publicReaders,
 	publicDirectory directory.PublicReader,
-	analyticsQuality analytics.QualityReader,
 	activationService *activation.Service,
 	accessRequestService *accessrequest.Service,
 	calendarFeedService *calendarfeed.Service,
@@ -194,9 +193,10 @@ func apiDependencies(
 		CalendarFeeds:                  calendarFeedService,
 		Activation:                     activationService,
 		Questionnaires:                 questionnaireService,
-		PublicAnalytics:                publicAnalytics,
+		PublicAnalytics:                readers.analytics,
 		PublicDirectory:                publicDirectory,
-		AnalyticsQuality:               analyticsQuality,
+		AnalyticsQuality:               readers.quality,
+		PublicContext:                  readers.context,
 		CORSAllowedOrigins:             cfg.Core.CORSAllowedOrigins,
 		TrustedProxyCIDRs:              cfg.TrustedProxyCIDRs,
 		CursorKeys:                     cfg.Core.CursorKeys,
@@ -312,14 +312,13 @@ func openServices(
 	*accommodation.Service,
 	*stay.Service,
 	*questionnaire.Service,
-	analytics.PublicReader,
-	analytics.QualityReader,
+	publicReaders,
 	func(),
 	error,
 ) {
 	pool, err := database.Open(ctx, cfg.DatabaseURL, cfg.DatabaseTimeout)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, publicReaders{}, nil, err
 	}
 	platformStore, err := store.NewQuestionnaire(
 		pool, cfg.DatabaseTimeout, cfg.Core, cfg.Questionnaire,
@@ -328,37 +327,45 @@ func openServices(
 	)
 	if err != nil {
 		pool.Close()
-		return nil, nil, nil, nil, nil, nil, nil,
+		return nil, nil, nil, nil, publicReaders{}, nil,
 			errors.New("questionnaire repository initialization failed")
 	}
 	accommodationService, stayService, questionnaireService, err := services(platformStore)
 	if err != nil {
 		pool.Close()
-		return nil, nil, nil, nil, nil, nil, nil,
+		return nil, nil, nil, nil, publicReaders{}, nil,
 			errors.New("repository initialization failed")
 	}
-	publicAnalytics, analyticsQuality, closePublic, err := openAnalyticsServices(
-		ctx, cfg, platformStore,
-	)
+	readers, closePublic, err := openAnalyticsServices(ctx, cfg, platformStore)
 	if err != nil {
 		pool.Close()
-		return nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, publicReaders{}, nil, err
 	}
 	closeDatabases := func() {
 		closePublic()
 		pool.Close()
 	}
 	return platformStore, accommodationService, stayService, questionnaireService,
-		publicAnalytics, analyticsQuality, closeDatabases, nil
+		readers, closeDatabases, nil
+}
+
+// publicReaders groups what the public surfaces read. The external context
+// joins the group rather than getting a pool of its own on the API side: it is
+// served by the same `public_runtime` connection, which sees the view in
+// `public_data` and holds no privilege in the `external` schema.
+type publicReaders struct {
+	analytics analytics.PublicReader
+	quality   analytics.QualityReader
+	context   external.ContextReader
 }
 
 func openAnalyticsServices(
 	ctx context.Context,
 	cfg config.Config,
 	platformStore *store.Store,
-) (analytics.PublicReader, analytics.QualityReader, func(), error) {
+) (publicReaders, func(), error) {
 	if !cfg.Analytics.Enabled {
-		return nil, nil, func() {}, nil
+		return publicReaders{}, func() {}, nil
 	}
 	publicPool, err := store.OpenPublicPool(
 		ctx,
@@ -366,14 +373,32 @@ func openAnalyticsServices(
 		cfg.Analytics.PublicDatabaseTimeout,
 	)
 	if err != nil {
-		return nil, nil, nil, errors.New("public analytics repository initialization failed")
+		return publicReaders{}, nil,
+			errors.New("public analytics repository initialization failed")
 	}
-	publicRepository := store.NewPublicAnalyticsRepository(
-		publicPool,
-		cfg.Analytics.PublicDatabaseTimeout,
+	readers := publicReaders{
+		analytics: store.NewPublicAnalyticsRepository(
+			publicPool, cfg.Analytics.PublicDatabaseTimeout,
+		),
+		quality: store.NewAnalyticsRepository(platformStore, cfg.Analytics),
+		context: externalContextReader(cfg, publicPool),
+	}
+	return readers, publicPool.Close, nil
+}
+
+// A nil reader leaves GET /public/context unregistered, so a disabled layer is
+// a 404 and never a half-configured surface. The API never opens the ingestion
+// pool: EXTERNAL_DATABASE_URL is read by the worker alone.
+func externalContextReader(
+	cfg config.Config,
+	publicPool *pgxpool.Pool,
+) external.ContextReader {
+	if !cfg.ExternalContext.Enabled {
+		return nil
+	}
+	return store.NewExternalContextRepository(
+		publicPool, cfg.Analytics.PublicDatabaseTimeout,
 	)
-	qualityRepository := store.NewAnalyticsRepository(platformStore, cfg.Analytics)
-	return publicRepository, qualityRepository, publicPool.Close, nil
 }
 
 // verifierFor chains the local session verifier ahead of the OIDC one. The two

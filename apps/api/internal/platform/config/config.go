@@ -71,6 +71,7 @@ type Config struct {
 	Analytics         AnalyticsConfig
 	SelfService       SelfServiceConfig
 	CalendarFeed      CalendarFeedConfig
+	ExternalContext   ExternalContextConfig
 }
 
 type LookupEnv func(string) (string, bool)
@@ -176,12 +177,13 @@ func baseConfig(
 			Endpoint: required(lookup, "OTEL_ENDPOINT"),
 			Timeout:  reader.duration("OTEL_TIMEOUT", 5*time.Second),
 		},
-		Auth:          auth,
-		Core:          features.core,
-		Questionnaire: features.questionnaire,
-		Analytics:     features.analytics,
-		SelfService:   features.selfService,
-		CalendarFeed:  features.calendarFeed,
+		Auth:            auth,
+		Core:            features.core,
+		Questionnaire:   features.questionnaire,
+		Analytics:       features.analytics,
+		SelfService:     features.selfService,
+		CalendarFeed:    features.calendarFeed,
+		ExternalContext: features.externalContext,
 	}
 }
 
@@ -198,11 +200,12 @@ func applyProcessAddresses(cfg *Config, process Process, lookup LookupEnv) {
 }
 
 type featureConfigs struct {
-	core          CoreConfig
-	questionnaire QuestionnaireConfig
-	analytics     AnalyticsConfig
-	selfService   SelfServiceConfig
-	calendarFeed  CalendarFeedConfig
+	core            CoreConfig
+	questionnaire   QuestionnaireConfig
+	analytics       AnalyticsConfig
+	selfService     SelfServiceConfig
+	calendarFeed    CalendarFeedConfig
+	externalContext ExternalContextConfig
 }
 
 func loadFeatures(environment Environment, process Process, lookup LookupEnv) (featureConfigs, error) {
@@ -210,42 +213,53 @@ func loadFeatures(environment Environment, process Process, lookup LookupEnv) (f
 	if err != nil {
 		return featureConfigs{}, err
 	}
-	features, err := loadCoreDependentFeatures(environment, core, lookup)
-	if err != nil {
-		return featureConfigs{}, err
-	}
-	analytics, err := loadAnalytics(environment, process, lookup)
-	if err != nil {
-		return featureConfigs{}, err
-	}
-	features.core = core
-	features.analytics = analytics
-	return features, nil
+	return loadCoreDependentFeatures(core, environment, process, lookup)
 }
 
-// The three features below read the core keyrings to prove they do not share a
-// key with them, so they load together and after the core.
+// Cada funcionalidade carrega pela mesma lista: acrescentar uma custa uma
+// entrada, e não mais um ramo numa função que já nomeia todas. As dependentes
+// do núcleo leem os keyrings dele para provar que não compartilham chave, e por
+// isso carregam depois do núcleo.
 func loadCoreDependentFeatures(
-	environment Environment,
 	core CoreConfig,
+	environment Environment,
+	process Process,
 	lookup LookupEnv,
 ) (featureConfigs, error) {
-	questionnaire, err := loadQuestionnaire(environment, core, lookup)
-	if err != nil {
-		return featureConfigs{}, err
+	features := featureConfigs{core: core}
+	loaders := []func() error{
+		func() error {
+			loaded, err := loadQuestionnaire(environment, core, lookup)
+			features.questionnaire = loaded
+			return err
+		},
+		func() error {
+			loaded, err := loadAnalytics(environment, process, lookup)
+			features.analytics = loaded
+			return err
+		},
+		func() error {
+			loaded, err := loadSelfService(environment, core, lookup)
+			features.selfService = loaded
+			return err
+		},
+		func() error {
+			loaded, err := loadCalendarFeed(environment, core, lookup)
+			features.calendarFeed = loaded
+			return err
+		},
+		func() error {
+			loaded, err := loadExternalContext(environment, process, lookup)
+			features.externalContext = loaded
+			return err
+		},
 	}
-	selfService, err := loadSelfService(environment, core, lookup)
-	if err != nil {
-		return featureConfigs{}, err
+	for _, load := range loaders {
+		if err := load(); err != nil {
+			return featureConfigs{}, err
+		}
 	}
-	calendarFeed, err := loadCalendarFeed(environment, core, lookup)
-	if err != nil {
-		return featureConfigs{}, err
-	}
-	return featureConfigs{
-		questionnaire: questionnaire, selfService: selfService,
-		calendarFeed: calendarFeed,
-	}, nil
+	return features, nil
 }
 
 func (c Config) validate() error {
@@ -268,6 +282,14 @@ func (c Config) validate() error {
 		c.SelfService.validate,
 		func() error {
 			return c.Analytics.validate(
+				c.Process,
+				c.Environment,
+				c.DatabaseURL,
+				c.requiresHTTPS(),
+			)
+		},
+		func() error {
+			return c.ExternalContext.validate(
 				c.Process,
 				c.Environment,
 				c.DatabaseURL,

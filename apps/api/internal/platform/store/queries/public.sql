@@ -5,6 +5,11 @@ SET ROLE public_runtime;
 SET search_path = pg_catalog, public_data;
 
 -- name: ValidatePublicRuntimeSession :one
+-- `external` entra nesta lista pelo lado NEGATIVO (ADR-045, emenda ao
+-- ADR-030): a varredura só detecta grant indevido no que ela varre, então sem
+-- `external` aqui um SELECT concedido por engano a `public_runtime` em
+-- `external.*` passaria despercebido. `expected_schema_usage` continua só com
+-- `public_data`, porque o papel público não recebe USAGE em `external`.
 WITH application_schemas AS (
   SELECT 'identity'::text AS schema_name
   UNION ALL SELECT 'core'::text
@@ -12,6 +17,7 @@ WITH application_schemas AS (
   UNION ALL SELECT 'analytics'::text
   UNION ALL SELECT 'public_data'::text
   UNION ALL SELECT 'platform'::text
+  UNION ALL SELECT 'external'::text
 ),
 expected_select AS (
   SELECT
@@ -20,6 +26,8 @@ expected_select AS (
   UNION ALL SELECT 'public_data'::text, 'current_presence'::text
   UNION ALL SELECT 'public_data'::text, 'current_preferences'::text
   UNION ALL SELECT 'public_data'::text, 'current_methodology'::text
+  UNION ALL SELECT 'public_data'::text, 'current_external_context'::text
+  UNION ALL SELECT 'public_data'::text, 'current_external_sources'::text
 ),
 checked_roles AS (
   SELECT current_user::text AS role_name

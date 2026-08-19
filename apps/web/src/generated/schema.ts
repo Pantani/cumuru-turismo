@@ -220,6 +220,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar contexto externo creditado
+         * @description Documento único da camada de contexto externo. Cada card carrega a própria proveniência, licença e texto de atribuição, inclusive quando está indisponível, e o próprio data_mode: fonte externa real e fixture de protótipo não compartilham rótulo. Não é medição da plataforma e não se combina aritmeticamente com a série protegida.
+         */
+        get: operations["getPublicContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/analytics/quality": {
         parameters: {
             query?: never;
@@ -2106,6 +2126,105 @@ export interface components {
             allowed_presence_windows: ("recent_30_days" | "recent_90_days" | "recent_365_days" | "recent_730_days" | "next_30_days" | "month")[];
             allowed_preference_periods: "last_complete_month"[];
         };
+        /** @enum {string} */
+        ExternalSourceCode: "open_meteo_forecast" | "open_meteo_archive" | "open_meteo_marine" | "wikimedia_pageviews" | "ibge_aggregates" | "brasilapi_holidays" | "cadastur" | "chm_harmonics";
+        /** @enum {string} */
+        ExternalUnitCode: "celsius" | "millimetre" | "metre" | "metre_per_second" | "pageview" | "person" | "brl" | "count" | "degree";
+        ExternalCoveredPeriod: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            /** @constant */
+            end_exclusive: true;
+            /** @constant */
+            time_zone: "America/Bahia";
+        };
+        /** @description Fonte creditada do documento. Cadastur aparece aqui e somente aqui: atribuição e link, sem contagem calculada pela plataforma, sem card com valor e sem série de universo publicada. */
+        ExternalCreditedSource: {
+            source_code: components["schemas"]["ExternalSourceCode"];
+            publisher: string;
+            license_code: string;
+            /** Format: uri */
+            license_url: string;
+            attribution_text: string;
+            /** Format: uri */
+            terms_url: string;
+        };
+        /** @description Proveniência por célula, obrigatória também no ramo indisponível: fonte, licença e atribuição existem porque a fonte existe, não porque a requisição deu certo. Schema próprio, sem relação com PublicMetadata, que descreve a série protegida. */
+        ExternalProvenance: {
+            source_code: components["schemas"]["ExternalSourceCode"];
+            publisher: string;
+            license_code: string;
+            /** Format: uri */
+            license_url: string;
+            attribution_text: string;
+            /** Format: uri */
+            terms_url: string;
+            /** Format: date-time */
+            retrieved_at: string;
+            /**
+             * Format: date-time
+             * @description Instante a que o dado se refere na origem, distinto do horário da coleta. Ausente quando a fonte não publicou período algum.
+             */
+            observed_at?: string;
+            covered_period: components["schemas"]["ExternalCoveredPeriod"];
+            /** @description Defasagem que a fonte declara, distinta da defasagem observada. */
+            declared_lag_seconds: number;
+            /** @description Revisão da observação servida. Zero quando não há observação. */
+            revision: number;
+            derived: boolean;
+            /** @enum {string} */
+            derivation_code?: "tide_harmonic_prediction";
+            source_revision_label?: string;
+        };
+        ExternalSeriesPoint: {
+            /** Format: date-time */
+            period_start: string;
+            /** Format: date-time */
+            period_end: string;
+            /** @description Sem multipleOf, por assimetria deliberada contra /public/presence. Lá o arredondamento em base 10 é controle de divulgação; aqui não há nada a suprimir, e copiar o arredondamento sugeriria que a tubulação de supressão rodou sobre este número. */
+            value: number;
+        };
+        /** @enum {string} */
+        ExternalCardCode: "weather_daily" | "tide";
+        /**
+         * @description data_mode é por card. Uma página que mistura clima real com presença fictícia sob um rótulo global mente nas duas direções.
+         * @enum {string}
+         */
+        ExternalCardDataMode: "real_source" | "prototype_fixtures";
+        /** @description O card diz o que o número afirma; a proveniência diz de onde ele veio e se fomos nós que o calculamos. Por isso derived e derivation_code moram somente em ExternalProvenance: o mesmo fato em duas posições do payload pode divergir, e divergiria. */
+        PublishedContextCard: {
+            card_code: components["schemas"]["ExternalCardCode"];
+            /** @constant */
+            status: "published";
+            data_mode: components["schemas"]["ExternalCardDataMode"];
+            provenance: components["schemas"]["ExternalProvenance"];
+            unit_code: components["schemas"]["ExternalUnitCode"];
+            series: components["schemas"]["ExternalSeriesPoint"][];
+        };
+        /** @description Fonte morta é 200 com este ramo, nunca 503 do documento inteiro e nunca valor inventado, zero ou último valor conhecido servido em silêncio. Status é published ou unavailable, jamais protected: protected, na série protegida, significa reprovado pelo limiar k-anônimo, e reusar a palavra aqui afirmaria que a supressão rodou sobre dado que não passou por ela. */
+        UnavailableContextCard: {
+            card_code: components["schemas"]["ExternalCardCode"];
+            /** @constant */
+            status: "unavailable";
+            data_mode: components["schemas"]["ExternalCardDataMode"];
+            provenance: components["schemas"]["ExternalProvenance"];
+            /** @enum {string} */
+            reason_code: "source_unavailable" | "source_rate_limited" | "source_not_licensed" | "source_data_missing" | "constants_not_imported" | "stale_beyond_declared_lag";
+        };
+        PublicContextCard: components["schemas"]["PublishedContextCard"] | components["schemas"]["UnavailableContextCard"];
+        /** @description Documento único da camada externa, sem seletor. Não carrega data_mode no nível do documento: o rótulo é por card. Não carrega cobertura, razão, tamanho de amostra nem contagem de acomodações, e nenhuma superfície combina estes números com a série protegida. */
+        PublicContext: {
+            /** Format: date-time */
+            generated_at: string;
+            /** @constant */
+            layer: "external_context";
+            /** @constant */
+            disclaimer_code: "external_context_not_platform_measurement";
+            cards: components["schemas"]["PublicContextCard"][];
+            sources: components["schemas"]["ExternalCreditedSource"][];
+        };
         AvailableQualityCount: {
             /** @constant */
             status: "available";
@@ -2742,6 +2861,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicMethodology"];
+                };
+            };
+            304: components["responses"]["PublicNotModified"];
+            400: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getPublicContext: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contexto externo corrente, creditado card a card. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["PublicCache"];
+                    ETag: components["headers"]["PublicEntityTag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicContext"];
                 };
             };
             304: components["responses"]["PublicNotModified"];

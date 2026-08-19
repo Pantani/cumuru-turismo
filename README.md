@@ -168,6 +168,7 @@ contrato e nos alvos de teste:
 | `questionnaire` | `QuestionnaireConfig` | `questionnaire-client.ts` | `QUESTIONNAIRE_ENABLED` | `make questionnaire-integration` |
 | `analytics` | `AnalyticsConfig` | `analytics-client.ts` | `ANALYTICS_ENABLED` | `make analytics-integration` |
 | `self-service` | `SelfServiceConfig` | `self-service-client.ts` | `SELF_SERVICE_ENABLED` | `make self-service-integration` |
+| `external-context` | `ExternalContextConfig` | `context-client.ts` | `EXTERNAL_CONTEXT_ENABLED` | `make external-context-isolation` |
 
 No `contracts/openapi.yaml`, a extensão `x-cumuru-feature` marca a
 funcionalidade dona de cada operação, com o valor `deferred` para o que ainda
@@ -433,6 +434,60 @@ O documento é único, ordenado por nome, sem cursor e cacheável por inteiro
 navegador. Não há reserva, preço, disponibilidade nem avaliação: o Observatório
 não intermedeia hospedagem
 ([ADR-043](docs/decisoes/ADR-043-lista-publica-de-hospedagens.md)).
+### Contexto externo (`external-context`)
+
+Esta camada mostra **dado copiado de fora** — hoje o clima — ao lado dos
+números que o Observatório mede. As duas coisas aparecem na mesma tela e são de
+naturezas diferentes, e a distinção importa:
+
+- os números do Observatório são **medidos aqui**, passam por supressão para
+  não identificar ninguém e respondem por uma política de privacidade;
+- o contexto externo é **copiado de terceiro**, não tem amostra, não é
+  suprimível e responde por uma **licença**.
+
+**O que a camada não é, e nunca será:** dado externo jamais entra em presença,
+cobertura ou previsão. Não é um número do Observatório com outra roupa. Essa
+separação não é promessa escrita em documento: o banco tem um schema próprio
+(`external`) e o papel que calcula presença **não tem permissão nenhuma** ali,
+nos dois sentidos. Se alguém tentar cruzar as camadas, o PostgreSQL recusa.
+
+A rota é `GET /public/context`, com endereço e cache próprios, separada das
+quatro rotas de indicadores. Isso é de propósito nos dois sentidos: fonte
+externa fora do ar não atrasa nem derruba a publicação dos indicadores, e
+publicação de indicador não mexe no contexto externo.
+
+Cada card mostra a fonte, o publicador, a licença com link e o texto de
+atribuição — **inclusive quando o card está indisponível**, porque a obrigação
+de creditar quem produziu o dado existe porque a fonte existe, não porque a
+consulta deu certo. Cada card também diz se o dado é real ou fixture de
+protótipo, um por um: uma página que misturasse clima real com presença
+fictícia sob um único rótulo mentiria nas duas direções.
+
+Um card tem dois estados: **publicado**, com valor, ou **indisponível**, com um
+motivo de lista fechada. Indisponível mostra **traço**, nunca zero e nunca o
+último valor conhecido servido em silêncio. Zero é um número e afirma algo;
+traço afirma que não sabemos. Uma fonte fora do ar deixa aquele card
+indisponível e a aba continua de pé.
+
+**O card de maré nasce indisponível de propósito, e isso é decisão, não
+defeito.** Para publicar horário de maré é preciso usar as constantes oficiais
+da Marinha do Brasil, que só saem mediante pedido e podem exigir um termo que
+proíbe repassar os dados a terceiros — e um painel público é exatamente
+repasse. Enquanto não houver autorização escrita, o card existe, é creditado e
+diz que está indisponível. Nada de estimar por conta própria: maré baixa é
+quando se caminha no recife, e um horário errado não é imprecisão estatística,
+é uma pessoa na água na hora errada, num painel com a marca da Prefeitura.
+
+O **Cadastur** aparece como fonte creditada, com link, e **sem nenhum número
+calculado pela plataforma** — sem total de hospedagens, sem série, sem
+percentual. O motivo é concreto: publicar quantos estabelecimentos existem no
+município ao lado da cobertura já publicada permitiria a qualquer pessoa
+subtrair e descobrir **quantos não reportaram**. Numa vila onde todo mundo sabe
+quais são as pousadas, isso vira uma lista de nomes.
+
+A coleta acontece **somente no worker**, com endereço fixo, em horário
+ancorado no calendário. O navegador de quem visita o site **não chama nada**
+para fora, e nenhum dado de quem acessa vai junto de qualquer requisição.
 
 ### Imagens, proveniência e rede local
 
@@ -463,6 +518,21 @@ e full-stack usam subnets disjuntas para não colidir com a stack local.
 `core`, `questionnaire` e `analytics` com fixtures públicas e independentes,
 exclusivamente para `local`/`test`. Elas não são segredos e não podem ser
 promovidas.
+
+O contexto externo vem desligado: `EXTERNAL_CONTEXT_ENABLED` tem default
+`false`, e é assim que se quer — ligá-lo abre a primeira saída do sistema para
+a internet pública. Quando ligado, apenas o worker usa
+`EXTERNAL_DATABASE_URL`, que conecta com um usuário de banco próprio
+(`cumuru_external`) e diferente do usuário que calcula os indicadores. É essa
+diferença que faz as permissões valerem alguma coisa: o loader recusa a
+configuração se os dois usuários forem o mesmo.
+
+**Limitação conhecida:** hoje a ingestão só roda em `local` e `test`. Ligá-la
+em servidor exige, **antes**, criar o usuário `cumuru_external` e migrar o
+segredo de runtime já gravado — acrescentar a senha nova à validação sem migrar
+o segredo quebraria toda instalação existente. O passo a passo está na seção
+"Limitação conhecida" da
+[`ADR-045`](docs/decisoes/ADR-045-camada-de-contexto-externo.md).
 
 O autoatendimento é a exceção: `SELF_SERVICE_*` e `PROOF_OF_WORK_*` não estão
 em `.env.example` e vêm apenas de `compose.yaml`/`compose.local.yaml`. Quem

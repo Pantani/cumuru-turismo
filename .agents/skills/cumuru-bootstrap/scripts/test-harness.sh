@@ -40,7 +40,7 @@ grep -q 'TRIGGER_EVAL_CORPUS=PASS' <<<"${validation}"
 grep -q 'TRIGGER_ACTIVATION=UNVERIFIED' <<<"${validation}"
 grep -q 'POST_TASK_QUALITY_CONTRACT=PASS' <<<"${validation}"
 
-for phase in 1 2 3 4 5 6 7; do
+for phase in 1 2 3 4 5 6 7 8; do
   prompt="$(run_harness prompt "${phase}")"
   [[ -n "${prompt}" ]]
 done
@@ -93,6 +93,10 @@ write_phase_status 4 PASS
 
 # Phase 7 depends on phases 2 and 3 only; phase 5 and 6 never gate it.
 grep -q 'TITLE=Autoatendimento e aprovacao' <<<"$(run_harness phase 7)"
+grep -q 'TITLE=Contexto externo' <<<"$(run_harness phase 8)"
+grep -q 'DEPENDENCIES=Fases 1 e 4 PASS' <<<"$(run_harness phase 8)"
+grep -q 'EGRESS=WORKER_ONLY' <<<"$(run_harness dry-run 8)"
+grep -q 'TIDE_CARD=BLOCKED' <<<"$(run_harness dry-run 8)"
 dry_run_seven="$(run_harness dry-run 7)"
 grep -q 'ELIGIBILITY=ELIGIBLE_PROTOTYPE_ONLY' <<<"${dry_run_seven}"
 grep -q '^EXTERNAL_GATES=third_party_identity_basis$' <<<"${dry_run_seven}"

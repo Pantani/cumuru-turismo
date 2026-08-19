@@ -14,3 +14,27 @@ sql:
         emit_interface: true
         emit_pointers_for_null_types: true
         omit_unused_structs: true
+        # As três colunas abaixo vêm dos LEFT JOIN LATERAL de
+        # `public_data.current_external_context` e são NULL sempre que a
+        # lateral não devolve linha — série sem observação, fonte sem run. O
+        # sqlc infere a nulabilidade da coluna base (NOT NULL em
+        # `external.observations`/`external.fetch_runs`), não do join, e por
+        # isso as emitia como tipos de valor. Um NULL ali quebraria o
+        # `rows.Scan` da consulta inteira, e `GET /public/context` viraria 503
+        # — o oposto literal da ADR-045 §3, que manda 200 com o card
+        # `unavailable`. O ponteiro é também o que deixa o backend distinguir
+        # "sem observação" de "observação com valor nulo" ao escolher entre
+        # `source_data_missing` e `source_unavailable`.
+        overrides:
+          - column: public_data.current_external_context.quality_flag
+            go_type:
+              type: string
+              pointer: true
+          - column: public_data.current_external_context.revision
+            go_type:
+              type: int32
+              pointer: true
+          - column: public_data.current_external_context.last_fetch_outcome
+            go_type:
+              type: string
+              pointer: true
