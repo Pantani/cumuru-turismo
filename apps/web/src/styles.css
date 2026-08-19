@@ -124,6 +124,39 @@ textarea {
   font: inherit;
 }
 
+/* Caixa de texto padrão do produto. Fica na base, com especificidade zero
+   (`:where()`), porque antes só os campos dentro de um cartão conhecido eram
+   estilizados: qualquer formulário fora dessa lista caía no controle do
+   navegador — mais estreito, cinza e fora do ritmo do resto da página. Os
+   casos deliberadamente menores (`.month-field`, `.section-heading`) continuam
+   vencendo pela própria especificidade. */
+input:where(:not([type="checkbox"], [type="radio"], [type="file"])),
+select,
+textarea {
+  width: 100%;
+  min-height: 3.125rem;
+  padding: 0.875rem 1rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  border-radius: var(--radius-field);
+  font-weight: 450;
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+input:where(:not([type="checkbox"], [type="radio"], [type="file"])):hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+
+:where(input, select, textarea)[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
 a {
   color: inherit;
 }
@@ -1315,40 +1348,7 @@ h4 {
   display: grid;
   align-content: start;
   gap: 0.35rem;
-}
-
-.form-card input,
-.form-card select,
-.form-card textarea,
-.operation-card input,
-.operation-card select,
-.operation-card textarea,
-.login-card input,
-.onboarding-card input,
-.onboarding-card select,
-.new-stay-form input,
-.panel-card input,
-.panel-card select {
-  width: 100%;
-  min-height: 3.125rem;
-  padding: 0.875rem 1rem;
-  color: var(--ink);
-  background: var(--bg);
-  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
-  border-radius: var(--radius-field);
-  font-weight: 450;
-  transition:
-    border-color var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease);
-}
-
-.form-card input:hover,
-.operation-card input:hover,
-.login-card input:hover,
-.onboarding-card input:hover,
-.new-stay-form input:hover,
-.panel-card input:hover {
-  border-color: var(--brand);
+  margin: 0;
 }
 
 .form-card textarea,
@@ -1357,16 +1357,6 @@ h4 {
   line-height: 1.55;
   font-family: var(--font-num);
   font-size: 0.85rem;
-}
-
-.form-card [aria-invalid="true"],
-.operation-card [aria-invalid="true"],
-.login-card [aria-invalid="true"],
-.onboarding-card [aria-invalid="true"],
-.new-stay-form [aria-invalid="true"],
-.panel-card [aria-invalid="true"] {
-  border-color: var(--danger);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
 }
 
 .field-error {

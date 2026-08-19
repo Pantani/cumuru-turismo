@@ -176,6 +176,17 @@ arquivo.
 
 ### Corrigido
 
+- caixa de texto fora do padrão em todo formulário que não morava num cartão
+  conhecido: o estilo de campo estava preso a `.form-card`, `.panel-card`,
+  `.login-card`, `.operation-card`, `.onboarding-card` e `.new-stay-form`, então
+  os filtros do diretório, o calendário do Booking.com e a emissão de acesso
+  caíam no controle nativo do navegador — mais estreito, cinza e fora do ritmo
+  da página. O estilo passa a ser base global de `input`, `select` e `textarea`
+  com especificidade zero, e os campos deliberadamente menores continuam
+  vencendo pela própria regra; a borda de erro de `aria-invalid` deixa de valer
+  só dentro daqueles seis contêineres;
+- rótulo colado ao campo nos filtros de `/hospedagens`: os dois filtros usavam
+  `className="field"`, classe que não existe na folha de estilo;
 - `POST /accommodations` descrito no contrato como onboarding "com OIDC fake",
   trilho que a [ADR-037](docs/decisoes/ADR-037-autenticacao-local-por-email-e-senha.md)
   substituiu: `NewChainVerifier(session, federated)` aceita a sessão local de
