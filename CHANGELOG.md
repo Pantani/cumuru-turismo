@@ -46,11 +46,13 @@ arquivo.
   em banda de cinco pontos e só com o comparativo aberto. Ela **não** vira
   célula publicada: presença já sai em múltiplos de 10 e a cobertura em
   múltiplos de 5, então uma ocupação pública tornaria a capacidade da vila
-  derivável, e a média sobre a janela de 730 dias converge para o valor exato —
-  a diferença entre duas publicações denunciaria a capacidade do
-  estabelecimento recém-admitido, que é dado individualizado de
-  estabelecimento (Portaria MTur nº 41/2025). Um número por janela, para um
-  leitor identificado, é outra escala de exposição;
+  inferível. O arredondamento impede determinar o valor exato — capacidades
+  vizinhas produzem publicações idênticas —, mas 730 dias estreitam o intervalo
+  a uma faixa de poucos leitos, e a diferença entre duas publicações estreita do
+  mesmo modo a capacidade do estabelecimento recém-admitido. Atributo de
+  estabelecimento identificável, ainda que por faixa, é dado individualizado
+  (Portaria MTur nº 41/2025). Um número por janela, para um leitor identificado,
+  é outra escala de exposição;
 - lista pública de hospedagens em `/hospedagens` e
   `GET /api/v1/public/accommodations`, com nome, categoria, localidade,
   capacidade, telefone em E.164, WhatsApp e site das hospedagens ativas que

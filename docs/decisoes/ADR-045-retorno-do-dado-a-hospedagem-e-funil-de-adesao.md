@@ -59,15 +59,26 @@ A taxa de ocupação é o indicador mais pedido e não existia. Publicá-la como
 família nova, porém, equivale a publicar a capacidade da vila.
 
 Presença já é pública em múltiplos de 10 e a cobertura em múltiplos de 5. Com
-ocupação publicada, `capacidade ≈ presença / ocupação`. O arredondamento
-embaralha **um** dia; a capacidade, porém, é praticamente constante, e a janela
-publicada tem 730 dias desde a ampliação do histórico — a média de centenas de
-observações arredondadas independentemente converge para o valor exato.
+ocupação publicada, `capacidade ≈ presença / ocupação`.
 
-A partir daí, a diferença entre duas publicações consecutivas entrega a
-capacidade do estabelecimento recém-admitido. Isso é dado individualizado de
-estabelecimento, que a Portaria MTur nº 41/2025 veda divulgar publicamente
-([`docs/06`](../06-legal-e-governanca.md)).
+O arredondamento **não** torna a capacidade indeterminável, e também não permite
+determiná-la exatamente: como ele é uma função determinística da capacidade
+verdadeira, capacidades vizinhas produzem publicações idênticas — presença 50 com
+ocupação 50% é compatível com 100 e com 101 leitos, e nenhuma quantidade de dias
+separa as duas. O que 730 dias fazem é **estreitar o intervalo**: cada dia
+adicional descarta candidatas que seriam compatíveis com aquele dia isolado, até
+sobrar uma faixa curta em vez de um número.
+
+Uma faixa curta basta para o problema. Depois de uma admissão, a diferença entre
+duas publicações consecutivas estreita do mesmo modo a capacidade do
+estabelecimento que entrou — 120 e 121 permanecem indistinguíveis, 120 e 200 não.
+Atributo de um estabelecimento identificável, ainda que por intervalo, é dado
+individualizado de estabelecimento, que a Portaria MTur nº 41/2025 veda divulgar
+publicamente ([`docs/06`](../06-legal-e-governanca.md)).
+
+O limite de inferência é o que sustenta a decisão, não a exatidão: publicar a
+ocupação trocaria "ninguém sabe a capacidade de ninguém" por "qualquer leitor
+estreita a capacidade de cada estabelecimento a uma faixa de poucos leitos".
 
 Decisão:
 
