@@ -194,10 +194,18 @@ WHERE core.calendar_reservations.state = 'pending';
 -- name: ReviveWithdrawnCalendarReservation :exec
 -- Uma reserva que sumiu e voltou é a mesma reserva. Sem isto ela permaneceria
 -- retirada para sempre, porque o upsert acima só alcança o que está pendente.
+--
+-- As datas e a natureza vêm junto, e não só o estado: uma reserva costuma sumir
+-- e voltar justamente porque foi alterada na plataforma, e reviver só o estado
+-- devolveria à fila as datas antigas — que a hospedagem confirmaria como se
+-- fossem as de agora.
 UPDATE core.calendar_reservations AS reservation
 SET
   state = 'pending',
   withdrawn_at = NULL,
+  arrival_on = sqlc.arg(arrival_on),
+  departure_on = sqlc.arg(departure_on),
+  kind = sqlc.arg(kind),
   last_seen_at = sqlc.arg(seen_at),
   updated_at = sqlc.arg(seen_at),
   version = reservation.version + 1

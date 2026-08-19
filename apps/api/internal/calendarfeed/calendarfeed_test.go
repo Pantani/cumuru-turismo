@@ -122,7 +122,10 @@ func TestServiceRefusesAFeedItCannotStoreSafely(t *testing.T) {
 	refused := map[string]func(calendarfeed.CreateFeedCommand) calendarfeed.CreateFeedCommand{
 		"blank label":      func(c calendarfeed.CreateFeedCommand) calendarfeed.CreateFeedCommand { c.Label = "  "; return c },
 		"unknown provider": func(c calendarfeed.CreateFeedCommand) calendarfeed.CreateFeedCommand { c.Provider = "airbnb"; return c },
-		"unsafe url":       func(c calendarfeed.CreateFeedCommand) calendarfeed.CreateFeedCommand { c.URL = "http://localhost/x.ics"; return c },
+		"unsafe url": func(c calendarfeed.CreateFeedCommand) calendarfeed.CreateFeedCommand {
+			c.URL = "http://localhost/x.ics"
+			return c
+		},
 	}
 	for name, mutate := range refused {
 		t.Run(name, func(t *testing.T) {

@@ -657,15 +657,21 @@ UPDATE core.calendar_reservations AS reservation
 SET
   state = 'pending',
   withdrawn_at = NULL,
-  last_seen_at = $1,
-  updated_at = $1,
+  arrival_on = $1,
+  departure_on = $2,
+  kind = $3,
+  last_seen_at = $4,
+  updated_at = $4,
   version = reservation.version + 1
-WHERE reservation.feed_id = $2
-  AND reservation.external_uid_hmac = $3
+WHERE reservation.feed_id = $5
+  AND reservation.external_uid_hmac = $6
   AND reservation.state = 'withdrawn'
 `
 
 type ReviveWithdrawnCalendarReservationParams struct {
+	ArrivalOn       pgtype.Date        `json:"arrival_on"`
+	DepartureOn     pgtype.Date        `json:"departure_on"`
+	Kind            string             `json:"kind"`
 	SeenAt          pgtype.Timestamptz `json:"seen_at"`
 	FeedID          pgtype.UUID        `json:"feed_id"`
 	ExternalUidHmac []byte             `json:"external_uid_hmac"`
@@ -673,8 +679,20 @@ type ReviveWithdrawnCalendarReservationParams struct {
 
 // Uma reserva que sumiu e voltou é a mesma reserva. Sem isto ela permaneceria
 // retirada para sempre, porque o upsert acima só alcança o que está pendente.
+//
+// As datas e a natureza vêm junto, e não só o estado: uma reserva costuma sumir
+// e voltar justamente porque foi alterada na plataforma, e reviver só o estado
+// devolveria à fila as datas antigas — que a hospedagem confirmaria como se
+// fossem as de agora.
 func (q *Queries) ReviveWithdrawnCalendarReservation(ctx context.Context, arg ReviveWithdrawnCalendarReservationParams) error {
-	_, err := q.db.Exec(ctx, reviveWithdrawnCalendarReservation, arg.SeenAt, arg.FeedID, arg.ExternalUidHmac)
+	_, err := q.db.Exec(ctx, reviveWithdrawnCalendarReservation,
+		arg.ArrivalOn,
+		arg.DepartureOn,
+		arg.Kind,
+		arg.SeenAt,
+		arg.FeedID,
+		arg.ExternalUidHmac,
+	)
 	return err
 }
 

@@ -87,8 +87,16 @@ parece melhorá-lo.
   eliminasse a jornada vai continuar convidando o hóspede na mão.
 - O sistema passa a fazer requisição de saída para host informado por usuário,
   o que é superfície nova. O importador aceita apenas `https`, resolve com
-  timeout, limita o tamanho da resposta e não segue redirecionamento para outro
-  host — o `.ics` legítimo não precisa de nenhuma dessas coisas.
+  timeout, limita o tamanho da resposta e não segue redirecionamento que troque
+  de host, volte para `http` ou reintroduza credencial no endereço — o `.ics`
+  legítimo não precisa de nenhuma dessas coisas.
+- A recusa de endereço interno acontece **duas vezes, e a que vale é a
+  segunda**. Na hora de salvar, só dá para julgar o que foi digitado, e um nome
+  não é um endereço: `pousada.invalid` pode resolver para `127.0.0.1`, e pode
+  resolver diferente na segunda consulta. Por isso a checagem que decide roda no
+  momento de discar, depois da resolução, uma vez por conexão, sobre o endereço
+  que será realmente contatado. A validação do formulário continua existindo
+  para recusar cedo o literal óbvio, não porque baste.
 - **Limitação declarada:** o `.ics` é assinatura de disponibilidade, não de
   verdade. Reserva cancelada some do feed sem dizer que foi cancelada, e o
   sistema trata desaparecimento como retirada da fila, nunca como cancelamento

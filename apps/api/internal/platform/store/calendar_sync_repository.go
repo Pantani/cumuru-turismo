@@ -127,7 +127,10 @@ func (r *CalendarFeedRepository) applyObserved(
 	if err := q.ReviveWithdrawnCalendarReservation(
 		ctx, generated.ReviveWithdrawnCalendarReservationParams{
 			FeedID: idToPG(feedID), ExternalUidHmac: observed.UID.Digest,
-			SeenAt: timeToPG(now),
+			ArrivalOn:   dateToPG(observed.ArrivalOn),
+			DepartureOn: dateToPG(observed.DepartureOn),
+			Kind:        string(observed.Kind),
+			SeenAt:      timeToPG(now),
 		},
 	); err != nil {
 		return calendarfeed.ErrUnavailable

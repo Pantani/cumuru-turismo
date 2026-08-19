@@ -284,6 +284,11 @@ type Querier interface {
 	RetireQuestionnaireVersion(ctx context.Context, arg RetireQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	// Uma reserva que sumiu e voltou é a mesma reserva. Sem isto ela permaneceria
 	// retirada para sempre, porque o upsert acima só alcança o que está pendente.
+	//
+	// As datas e a natureza vêm junto, e não só o estado: uma reserva costuma sumir
+	// e voltar justamente porque foi alterada na plataforma, e reviver só o estado
+	// devolveria à fila as datas antigas — que a hospedagem confirmaria como se
+	// fossem as de agora.
 	ReviveWithdrawnCalendarReservation(ctx context.Context, arg ReviveWithdrawnCalendarReservationParams) error
 	// RevokeAccountSessions closes every open session of an account. A rotation
 	// ends the sessions the previous secret opened, including the one that

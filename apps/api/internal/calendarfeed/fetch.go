@@ -3,8 +3,11 @@ package calendarfeed
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -18,7 +21,8 @@ const maxRedirects = 3
 
 // HTTPFetcher is the only outbound caller in the system. Every rule it enforces
 // is one a genuine `.ics` never needs broken: encrypted transport, a bounded
-// body, a deadline, and no redirect that leaves the host the operator named.
+// body, a deadline, no redirect that leaves the host the operator named, and no
+// connection to an address inside the deployment.
 type HTTPFetcher struct {
 	client *http.Client
 	limit  int64
@@ -29,9 +33,42 @@ func NewHTTPFetcher(timeout time.Duration, limit int64) *HTTPFetcher {
 		limit = DefaultFetchLimit
 	}
 	return &HTTPFetcher{
-		client: &http.Client{Timeout: timeout, CheckRedirect: checkRedirect},
-		limit:  limit,
+		client: &http.Client{
+			Timeout:       timeout,
+			CheckRedirect: checkRedirect,
+			Transport:     guardedTransport(timeout),
+		},
+		limit: limit,
 	}
+}
+
+// guardedTransport is where the address guard actually holds. NormalizeFeedURL
+// can only judge what was typed, and a hostname is not an address: it may
+// resolve to 127.0.0.1 or to 10.0.0.0/8, and it may resolve differently on the
+// second lookup than on the first. Control runs after resolution, once per
+// connection, on the address about to be dialed — so a name that points inside
+// the deployment is refused whether it always did or only started to.
+func guardedTransport(timeout time.Duration) *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{
+		Timeout:         timeout,
+		ControlContext:  controlDialedAddress,
+		FallbackDelay:   -1,
+		KeepAliveConfig: net.KeepAliveConfig{Enable: false},
+	}).DialContext
+	return transport
+}
+
+func controlDialedAddress(_ context.Context, _, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return ErrUnavailable
+	}
+	parsed, err := netip.ParseAddr(host)
+	if err != nil || !routableAddress(parsed) {
+		return ErrUnavailable
+	}
+	return nil
 }
 
 func (f *HTTPFetcher) Fetch(ctx context.Context, address string) (string, error) {
@@ -69,8 +106,11 @@ func (f *HTTPFetcher) readBounded(body io.Reader) (string, error) {
 	return string(content), nil
 }
 
+// checkRedirect refuses the credential smuggled through a hop as well as the one
+// typed in the address: blocking it only at NormalizeFeedURL would leave a
+// redirect free to reintroduce exactly what the guard was written to stop.
 func checkRedirect(request *http.Request, via []*http.Request) error {
-	if len(via) >= maxRedirects {
+	if len(via) >= maxRedirects || request.URL.User != nil {
 		return ErrUnavailable
 	}
 	if !strings.EqualFold(request.URL.Scheme, "https") {

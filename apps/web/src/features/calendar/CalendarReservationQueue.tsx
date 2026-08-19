@@ -12,6 +12,8 @@ import {
 
 interface CalendarReservationQueueProps {
   accommodationId: string;
+  /** Confirmar cria estadia, e o quadro de estadias precisa saber. */
+  onConfirmed?: () => void;
 }
 
 const kindCopy: Record<string, string> = {
@@ -23,6 +25,20 @@ const kindCopy: Record<string, string> = {
 function formatDate(value: string) {
   const [year, month, day] = value.split("-");
   return `${day}/${month}/${year}`;
+}
+
+/**
+ * O campo é texto controlado: apagá-lo daria `Number("") === 0`, e confirmar
+ * mandaria uma estadia de zero pessoa para o servidor recusar. O limite é o
+ * mesmo de `core.stays`, então a tela recusa antes com uma frase em vez de
+ * depois com um código.
+ */
+function parseGuestCount(raw: string): number | null {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1 || value > 100) {
+    return null;
+  }
+  return value;
 }
 
 function ReservationRow({
@@ -38,6 +54,7 @@ function ReservationRow({
 }) {
   const fieldId = useId();
   const [guests, setGuests] = useState("2");
+  const parsed = parseGuestCount(guests);
 
   return (
     <li className="calendar-reservation-row">
@@ -59,15 +76,21 @@ function ReservationRow({
           min={1}
           max={100}
           value={guests}
+          aria-invalid={parsed === null}
           onChange={(event) => setGuests(event.target.value)}
         />
+        {parsed === null ? (
+          <span className="field-error" role="alert">
+            Informe de 1 a 100 pessoas.
+          </span>
+        ) : null}
       </label>
       <div className="calendar-reservation-actions">
         <button
           className="primary-action"
           type="button"
-          disabled={busy}
-          onClick={() => onConfirm(reservation, Number(guests))}
+          disabled={busy || parsed === null}
+          onClick={() => parsed !== null && onConfirm(reservation, parsed)}
         >
           Confirmar estadia
         </button>
@@ -87,6 +110,7 @@ function ReservationRow({
  */
 export function CalendarReservationQueue({
   accommodationId,
+  onConfirmed,
 }: CalendarReservationQueueProps) {
   const { coreClient: client } = useAuthSession();
   const { reservations, loading, reload } = useCalendarReservations(accommodationId);
@@ -108,9 +132,10 @@ export function CalendarReservationQueue({
       );
       if (done !== null) {
         await reload();
+        onConfirmed?.();
       }
     },
-    [client, operation, reload],
+    [client, onConfirmed, operation, reload],
   );
 
   const dismiss = useCallback(

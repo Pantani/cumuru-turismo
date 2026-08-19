@@ -130,6 +130,28 @@ describe("calendário da plataforma de hospedagem", () => {
     expect(confirmCall?.headers.get("If-Match")).toBe('"1"');
   });
 
+  /**
+   * O campo é texto: apagá-lo daria `Number("") === 0`, e confirmar mandaria
+   * uma estadia de zero pessoa para o servidor recusar com um código que a
+   * hospedagem não sabe ler.
+   */
+  it("não deixa confirmar sem um número de hóspedes válido", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+
+    renderWithSession(<CalendarReservationQueue accommodationId={accommodationId} />);
+
+    const guests = await screen.findByLabelText("Quantas pessoas");
+    await user.clear(guests);
+
+    expect(screen.getByRole("button", { name: "Confirmar estadia" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Informe de 1 a 100 pessoas.");
+    await user.click(screen.getByRole("button", { name: "Confirmar estadia" }));
+    expect(
+      calls.some((call) => new URL(call.url).pathname.endsWith("/confirm")),
+    ).toBe(false);
+  });
+
   it("oferece dispensar o que não era estadia", async () => {
     const calls = stubApi({ reservations: [reservation({ kind: "unknown" })] });
     const user = userEvent.setup();

@@ -51,13 +51,17 @@ export function useCalendarReservations(accommodationId: string) {
     select: (result) => result.data.items,
   });
 
-  const reload = useCallback(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: [RESERVATIONS_KEY, accommodationId],
-    });
-    // Confirmar cria estadia, então o quadro de estadias também está velho.
-    await queryClient.invalidateQueries({ queryKey: ["stays"] });
-  }, [accommodationId, queryClient]);
+  // Só a fila é invalidada aqui. Confirmar também deixa o quadro de estadias
+  // velho, mas ele não é TanStack Query — carrega por estado próprio —, então
+  // quem avisa é `onConfirmed`, e não uma invalidação de chave que ninguém
+  // observa.
+  const reload = useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: [RESERVATIONS_KEY, accommodationId],
+      }),
+    [accommodationId, queryClient],
+  );
 
   return {
     reservations: query.data ?? [],

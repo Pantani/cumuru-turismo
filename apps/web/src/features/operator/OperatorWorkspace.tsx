@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { useAuthSession } from "../../shared/auth/AuthSession";
 import { AccommodationAccessPanel } from "../accommodation/AccommodationAccessPanel";
 import { useAccommodations } from "../accommodation/use-accommodations";
@@ -58,6 +60,9 @@ function SelfServicePanels({ accommodation }: { accommodation: Accommodation }) 
 export function OperatorWorkspace() {
   const { accommodations, loading, operation, selected, setSelected } =
     useAccommodations("Carregando suas hospedagens");
+  // Confirmar uma reserva importada cria estadia, e o quadro carrega por estado
+  // próprio: sem este contador ele mostraria a lista de antes da confirmação.
+  const [stayReload, setStayReload] = useState(0);
 
   return (
     <div className="workspace">
@@ -74,8 +79,11 @@ export function OperatorWorkspace() {
 
       {selected === null ? null : (
         <>
-          <StayBoard accommodation={selected} />
-          <CalendarReservationQueue accommodationId={selected.id} />
+          <StayBoard accommodation={selected} reloadToken={stayReload} />
+          <CalendarReservationQueue
+            accommodationId={selected.id}
+            onConfirmed={() => setStayReload((current) => current + 1)}
+          />
           <CalendarFeedPanel accommodationId={selected.id} />
           <SelfServicePanels accommodation={selected} />
         </>

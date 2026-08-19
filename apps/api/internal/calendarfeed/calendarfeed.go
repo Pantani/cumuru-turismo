@@ -365,17 +365,27 @@ func checkFeedURLShape(parsed *url.URL) error {
 	return nil
 }
 
-// publicHost refuses the loopback, the link-local range and the private ranges
-// because a feed address pointing there is not a listing calendar: it is a way
-// to make the worker read something inside the deployment on the operator's
-// behalf. A bare hostname is accepted — resolution is the network's job — and
-// the worker still refuses to follow a redirect off the original host.
+// publicHost is the cheap, early refusal: an address literal pointing inside
+// the deployment is rejected before anything is stored. A bare hostname passes
+// here because a name is not an address — what it resolves to is decided later,
+// can differ between lookups, and is therefore checked at dial time by
+// controlDialedAddress, which is the guard that actually holds.
 func publicHost(host string) bool {
 	address, err := netip.ParseAddr(host)
 	if err != nil {
 		return !strings.EqualFold(host, "localhost")
 	}
-	return address.IsGlobalUnicast() &&
+	return routableAddress(address)
+}
+
+// routableAddress is the single definition of "outside", shared by the address
+// typed into the form and by every address the dialer is about to connect to.
+// IsGlobalUnicast already excludes loopback, multicast and the unspecified
+// address; private and link-local need saying because Go counts them as global
+// unicast.
+func routableAddress(address netip.Addr) bool {
+	return address.IsValid() &&
+		address.IsGlobalUnicast() &&
 		!address.IsPrivate() &&
 		!address.IsLinkLocalUnicast()
 }
