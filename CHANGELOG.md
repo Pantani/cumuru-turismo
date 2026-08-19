@@ -80,6 +80,18 @@ arquivo.
 
 ### Alterado
 
+- **a hospedagem fictícia do `local-demo` deixou de administrar o catálogo de
+  questionários.** A conta de operação carregava `questionnaires:manage` e
+  `questionnaires:approve`, então `/questionários` aparecia no menu de quem
+  apenas opera uma hospedagem. O catálogo é um instrumento único da plataforma:
+  nem o serviço nem o repositório de questionário cruzam `core.memberships`, de
+  modo que os escopos editam, aprovam, publicam e aposentam a versão que todas as
+  hospedagens respondem. Desenhar o instrumento é ato da administração; a
+  hospedagem responde. A publicação da fixture continua intacta, porque usa
+  principals próprios (`fixture-questionnaire-editor` e
+  `-reviewer`). Sem migration e sem escopo novo; banco local já semeado mantém
+  os escopos antigos na linha da conta, então rode `make docker-rm` antes do
+  próximo `local-demo`;
 - **o administrador deixou de ver "Suas hospedagens" e ganhou área própria.** A
   mesma tela servia às duas autoridades: quem entrava com a conta semeada de
   administração via a lista de hospedagens como se fossem suas, com quadro de

@@ -128,8 +128,6 @@ func TestDemoOperatorCanReachTheSelfServicePanels(t *testing.T) {
 		"stays:read:own":          {},
 		"stays:write":             {},
 		"stays:approve":           {},
-		"questionnaires:manage":   {},
-		"questionnaires:approve":  {},
 		"analytics:read:internal": {},
 	}
 	granted := demoOperatorScopes(t)
@@ -138,7 +136,7 @@ func TestDemoOperatorCanReachTheSelfServicePanels(t *testing.T) {
 	}
 }
 
-// accommodations:onboard is the only scope separating this fixture from the
+// accommodations:onboard is one of the scopes separating this fixture from the
 // seeded administrator, and nothing else in the codebase would fail if it came
 // back: the demo would simply let a lodging operator admit establishments to the
 // whole platform, because the invite queue of ADR-042 is not scoped by
@@ -148,6 +146,20 @@ func TestDemoOperatorCannotOnboardAccommodations(t *testing.T) {
 
 	if _, ok := demoOperatorScopes(t)["accommodations:onboard"]; ok {
 		t.Fatal("the demo operator must not hold accommodations:onboard")
+	}
+}
+
+// Same missing failure, one domain over: the questionnaire catalogue is global,
+// so these scopes would let a lodging operator rewrite, approve or retire the
+// instrument the whole platform answers.
+func TestDemoOperatorCannotManageQuestionnaires(t *testing.T) {
+	t.Parallel()
+
+	granted := demoOperatorScopes(t)
+	for _, scope := range []string{"questionnaires:manage", "questionnaires:approve"} {
+		if _, ok := granted[scope]; ok {
+			t.Fatalf("the demo operator must not hold %s", scope)
+		}
 	}
 }
 

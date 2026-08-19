@@ -105,8 +105,16 @@ func accountFixture(lookup func(string) (string, bool)) (store.LocalDemoAccount,
 			// SELF_SERVICE_ENABLED: "true", so the single runtime that loads this
 			// fixture always serves the routes the scope unlocks.
 			"stays:approve",
-			"questionnaires:manage",
-			"questionnaires:approve",
+			// questionnaires:manage and questionnaires:approve are absent for the
+			// same reason accommodations:onboard is: the questionnaire catalogue is
+			// a single platform-wide instrument, and neither questionnaire.Service
+			// nor its store joins anything against core.memberships. Whoever holds
+			// the scopes edits, approves, publishes and retires the questionnaire
+			// every lodging answers — designing the instrument is an act of the
+			// platform administrator, not of an account that operates one lodging.
+			// The demo fixture in questionnaire.go publishes under its own
+			// principals (fixture-questionnaire-editor / -reviewer), so seeding does
+			// not depend on this account holding them.
 			"analytics:read:internal",
 		},
 	}, nil
