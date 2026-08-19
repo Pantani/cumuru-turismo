@@ -315,7 +315,7 @@ congelados.
 
 Implemente:
 
-1. Schema external e migration 000003, append-only.
+1. Schema external e migration 000005, append-only.
    Seis relações: sources, series, observations, fetch_runs, tide_stations e
    tide_harmonics. Unidade e período moram em series, nunca na observação;
    mudar unidade é series_code novo, nunca ALTER in-place. A idempotência de
@@ -397,7 +397,7 @@ Implemente:
    contém numeral, não desenha ponto no eixo e não desenha barra de altura zero.
 
 Nenhum gate depende de rede pública: o upstream é stub HTTP local servindo
-fixtures gravadas. Corrija as asserções literais que a migration 000003 quebra
+fixtures gravadas. Corrija as asserções literais que a migration 000005 quebra
 em test-migrations.sh e test-local-restore.sh, incluindo a contagem de schemas
 remanescentes após o down, que hoje não inclui external e deixaria schema órfão
 passar em silêncio.

@@ -413,7 +413,7 @@ técnico; o card de maré nasce `unavailable` com
 ### Ordem de escrita
 
 1. Supervisor congela ADR-045, contrato, migration e grants.
-2. Platform materializa OpenAPI, `000003`, view, grants e geração.
+2. Platform materializa OpenAPI, `000005`, view, grants e geração.
 3. Backend implementa ingestão, breaker, handler e stub local de fixtures.
 4. Frontend implementa a aba separada e os três estados.
 5. QA prova isolamento com o upstream parado.
@@ -422,7 +422,7 @@ técnico; o card de maré nasce `unavailable` com
 
 | Owner | Escopo |
 | --- | --- |
-| platform | `contracts/**`, `apps/api/migrations/000003_*`, `database/schema.sql`, gerados, `store/queries/**`, config, provisionamento de papéis, `deploy/scripts/test-migrations.sh`, `test-local-restore.sh` |
+| platform | `contracts/**`, `apps/api/migrations/000005_*`, `database/schema.sql`, gerados, `store/queries/**`, config, provisionamento de papéis, `deploy/scripts/test-migrations.sh`, `test-local-restore.sh` |
 | backend | `apps/api/internal/external/**`, worker, handler, stub de fixtures |
 | frontend | `apps/web/src/features/analytics/**` (aba nova apenas) |
 

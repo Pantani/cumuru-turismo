@@ -2442,22 +2442,39 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA
   identity, core, survey, analytics, public_data, platform
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, public_runtime;
 
--- Direcionalidade da ADR-045 §1 aplicada por ACL: a ingestão externa escreve
--- em `external` e não alcança a série protegida; o papel que reconcilia a
--- série protegida (`worker_runtime`) não alcança `external`; o papel público
--- lê apenas a quinta view, que mora em `public_data` e lê as tabelas base sob
--- os privilégios do dono.
+-- Espelho literal do bloco de privilégios de
+-- `apps/api/migrations/000005_external_context.up.sql`. A cadeia executada é a
+-- migration; este arquivo existe para o sqlc e para a comparação de dump, e
+-- por isso precisa carregar os mesmos REVOKE, inclusive os de sequências,
+-- funções e default privileges — omiti-los faria um dump divergir sem que
+-- nada no runtime estivesse errado.
+-- Privilégios no padrão do ADR-030: REVOKE explícito antes de cada GRANT, e
+-- default privileges futuros fechados, como a 000011 original fez para
+-- `public_data`.
 REVOKE ALL ON SCHEMA external
-  FROM PUBLIC, app_runtime, worker_runtime, public_runtime, privacy_officer,
-    external_runtime;
+FROM PUBLIC, app_runtime, worker_runtime, public_runtime, privacy_officer,
+  external_runtime;
 REVOKE ALL ON ALL TABLES IN SCHEMA external
-  FROM PUBLIC, app_runtime, worker_runtime, public_runtime, privacy_officer,
-    external_runtime;
+FROM PUBLIC, app_runtime, worker_runtime, public_runtime, privacy_officer,
+  external_runtime;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA external
+FROM PUBLIC, app_runtime, worker_runtime, public_runtime, privacy_officer,
+  external_runtime;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA external
+FROM PUBLIC, app_runtime, worker_runtime, public_runtime, privacy_officer,
+  external_runtime;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA external
   REVOKE ALL ON TABLES FROM PUBLIC, app_runtime, worker_runtime,
     public_runtime, privacy_officer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA external
+  REVOKE ALL ON SEQUENCES FROM PUBLIC, app_runtime, worker_runtime,
+    public_runtime, privacy_officer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA external
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, app_runtime, worker_runtime,
+    public_runtime, privacy_officer;
 
+-- A ingestão externa, e só ela, escreve aqui.
 GRANT USAGE ON SCHEMA external TO external_runtime;
 GRANT SELECT, INSERT, UPDATE ON TABLE
   external.sources,
@@ -2466,22 +2483,53 @@ GRANT SELECT, INSERT, UPDATE ON TABLE
   external.fetch_runs,
   external.tide_stations,
   external.tide_harmonics
-  TO external_runtime;
+TO external_runtime;
+
+-- DELETE somente onde a varredura de retenção precisa apagar: observação
+-- vencida e run antiga. Catálogo, estação e harmônica são curados e não são
+-- varridos.
 GRANT DELETE ON TABLE
   external.observations,
   external.fetch_runs
-  TO external_runtime;
+TO external_runtime;
 
+-- Direcionalidade da ADR-045 §1: a ingestão externa não enxerga nada da série
+-- protegida nem do operacional.
 REVOKE ALL ON SCHEMA identity, core, survey, analytics, public_data, platform
-  FROM external_runtime;
+FROM external_runtime;
 REVOKE ALL ON ALL TABLES IN SCHEMA
   identity, core, survey, analytics, public_data, platform
-  FROM external_runtime;
+FROM external_runtime;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA
+  identity, core, survey, analytics, public_data, platform
+FROM external_runtime;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA
+  identity, core, survey, analytics, public_data, platform
+FROM external_runtime;
+REVOKE CREATE ON SCHEMA external FROM external_runtime;
 
+-- E o inverso, que é a prova mais importante da onda: o papel que reconcilia a
+-- série protegida não alcança a camada externa.
+REVOKE ALL ON SCHEMA external FROM worker_runtime, app_runtime;
+REVOKE ALL ON TABLE
+  external.sources,
+  external.series,
+  external.observations,
+  external.fetch_runs,
+  external.tide_stations,
+  external.tide_harmonics
+FROM worker_runtime, app_runtime, public_runtime, privacy_officer;
+
+-- O papel público lê a view, e só a view.
+REVOKE ALL ON TABLE
+  public_data.current_external_context,
+  public_data.current_external_sources
+FROM PUBLIC, app_runtime, worker_runtime, public_runtime, privacy_officer,
+  external_runtime;
 GRANT SELECT ON TABLE
   public_data.current_external_context,
   public_data.current_external_sources
-  TO public_runtime;
+TO public_runtime;
 
 GRANT USAGE, CREATE ON SCHEMA analytics TO migration_admin;
 GRANT USAGE ON SCHEMA survey, core, platform TO migration_admin;

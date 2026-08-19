@@ -500,6 +500,8 @@ BEGIN
     )
     OR pg_catalog.has_schema_privilege('external_runtime', 'core', 'USAGE')
     OR pg_catalog.has_schema_privilege('external_runtime', 'survey', 'USAGE')
+    OR pg_catalog.has_schema_privilege('external_runtime', 'identity', 'USAGE')
+    OR pg_catalog.has_schema_privilege('external_runtime', 'platform', 'USAGE')
   THEN
     RAISE EXCEPTION 'external ingestion role reached the protected series';
   END IF;

@@ -1666,7 +1666,7 @@ crossing_foreign_keys="$(
             source_schema.nspname = 'external'
             AND target_schema.nspname IN (
               'core', 'survey', 'analytics', 'public_data',
-              'identity', 'platform'
+              'identity', 'platform', 'auth'
             )
           )
           OR
@@ -1674,7 +1674,7 @@ crossing_foreign_keys="$(
             target_schema.nspname = 'external'
             AND source_schema.nspname IN (
               'core', 'survey', 'analytics', 'public_data',
-              'identity', 'platform'
+              'identity', 'platform', 'auth'
             )
           )
         )

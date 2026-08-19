@@ -46,8 +46,10 @@ arquivo.
   direcionalidade é ACL do PostgreSQL, não convenção de código, e é provada nos
   dois sentidos em `deploy/scripts/test-migrations.sh`, junto da asserção de que
   nenhuma chave estrangeira atravessa a fronteira;
-- quinta view pública `public_data.current_external_context`, que mora em
-  `public_data` e lê `external` sob os privilégios do dono — o papel público
+- duas views públicas novas em `public_data`: `current_external_context`, com os
+  cards, e `current_external_sources`, com os créditos das fontes ativas — é
+  esta que carrega a atribuição do Cadastur, creditado sem card por não ter
+  contagem publicada. As duas leem `external` sob os privilégios do dono — o papel público
   segue sem qualquer privilégio e sem `USAGE` no schema `external`, e o
   `search_path` do pool público não muda;
 - proveniência por card no payload público — fonte, licença, texto de

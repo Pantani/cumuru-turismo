@@ -235,6 +235,10 @@ WHERE (observation.source_code, observation.series_code, observation.period_star
   WHERE candidate.period_start
     < sqlc.arg(reference_at)::timestamptz
       - make_interval(days => series.retention_days)
+  -- Sem ordem estável, o LIMIT escolhe um conjunto arbitrário a cada ciclo e
+  -- a varredura pode nunca alcançar a observação mais antiga: o lote seguinte
+  -- reencontra as mesmas linhas. A ordem faz a retenção progredir.
+  ORDER BY candidate.period_start, candidate.revision
   LIMIT sqlc.arg(batch_limit)
 );
 

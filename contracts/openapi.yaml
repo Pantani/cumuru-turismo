@@ -6066,6 +6066,15 @@ components:
       then:
         properties:
           derivation_code: false
+      else:
+        # A propriedade é redeclarada aqui porque o validador não resolve
+        # `required` dentro de `else` contra as `properties` do schema pai, e
+        # um warning novo deixa o gate mais surdo para o próximo.
+        required: [derivation_code]
+        properties:
+          derivation_code:
+            type: string
+            enum: [tide_harmonic_prediction]
     ExternalSeriesPoint:
       type: object
       required: [period_start, period_end, value]

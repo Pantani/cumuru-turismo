@@ -279,13 +279,20 @@ release_fingerprint() {
     "
 }
 
+# A espera é por fonte, não global: a fase C insere a observação com
+# `SELECT ... FROM external.fetch_runs WHERE source_code = 'open_meteo_forecast'`,
+# e uma run de outra fonte satisfaria uma espera global sem satisfazer aquele
+# SELECT. O INSERT gravaria zero linha, o script seguiria, e a falha apareceria
+# depois como "weather card did not publish" — nomeando a causa errada.
 wait_for_fetch_run() {
+  local source_code="${1:-open_meteo_forecast}"
   local runs=""
   local attempt=0
   while test "${attempt}" -lt 90; do
     runs="$(
       psql_migration --tuples-only --no-align \
-        --command="SELECT count(*) FROM external.fetch_runs"
+        --command="SELECT count(*) FROM external.fetch_runs
+          WHERE source_code = '${source_code}'"
     )"
     if test "${runs}" -gt 0; then
       return 0
@@ -293,7 +300,7 @@ wait_for_fetch_run() {
     attempt=$((attempt + 1))
     sleep 1
   done
-  echo "external ingestion never recorded a fetch run" >&2
+  echo "external ingestion never recorded a fetch run for ${source_code}" >&2
   return 1
 }
 
@@ -338,23 +345,7 @@ wait_for_fetch_run
 capture_protected after
 assert_same_release before after
 
-protected_identical=true
-for entry in "${PROTECTED_ROUTES[@]}"; do
-  route="${entry%%:*}"
-  before_etag="$(header_value ETag "${BASE_DIR}/before-${route}.headers")"
-  after_etag="$(header_value ETag "${BASE_DIR}/after-${route}.headers")"
-  test -n "${before_etag}"
-  if test "${before_etag}" != "${after_etag}"; then
-    echo "public/${route} ETag changed with the external layer" >&2
-    protected_identical=false
-  fi
-  if ! cmp --silent \
-    "${BASE_DIR}/before-${route}.body" "${BASE_DIR}/after-${route}.body"; then
-    echo "public/${route} body changed with the external layer" >&2
-    protected_identical=false
-  fi
-done
-test "${protected_identical}" = "true"
+compare_phases before after "external layer enabled"
 echo "EXTERNAL_CONTEXT_PROTECTED_ROUTES_IDENTICAL=PASS"
 
 # O egresso saiu, foi recusado localmente e o log não carrega URL com query,

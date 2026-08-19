@@ -434,6 +434,7 @@ O documento é único, ordenado por nome, sem cursor e cacheável por inteiro
 navegador. Não há reserva, preço, disponibilidade nem avaliação: o Observatório
 não intermedeia hospedagem
 ([ADR-043](docs/decisoes/ADR-043-lista-publica-de-hospedagens.md)).
+
 ### Contexto externo (`external-context`)
 
 Esta camada mostra **dado copiado de fora** — hoje o clima — ao lado dos

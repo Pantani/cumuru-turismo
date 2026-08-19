@@ -309,7 +309,7 @@ São **duas**, e não uma, por uma razão que só apareceu em runtime: por U-7 o
 Cadastur é creditado **sem card**. Uma view com forma de card não tem linha onde
 ele caiba, e ler `external.sources` direto pelo papel público é impossível por
 construção — a regra §1 nega `USAGE` em `external` a esse papel, e a própria
-`000003` aborta se o privilégio existir. A lista de créditos precisa, portanto,
+`000005` aborta se o privilégio existir. A lista de créditos precisa, portanto,
 da sua própria view em `public_data`. A alternativa seria abrir `external` ao
 papel público, que é exatamente o que esta ADR proíbe.
 
@@ -389,7 +389,7 @@ incompleto deixa schema órfão e o teste passa em silêncio.
 O provisionamento de papéis em deploy
 (`deploy/ansible/roles/cumuru_host/templates/bootstrap-roles.sql.j2`) cria o
 papel de grupo `external_runtime` — **obrigatório em todo ambiente**, porque a
-migration `000003` aborta com `required database role is missing` se ele faltar,
+migration `000005` aborta com `required database role is missing` se ele faltar,
 e a cadeia de migrations roda em staging e produção. Mas **não** cria o login
 `cumuru_external`.
 

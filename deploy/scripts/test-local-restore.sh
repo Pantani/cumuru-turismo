@@ -393,6 +393,13 @@ expect_psql_failure \
   "public_runtime unexpectedly read external.observations after restore" \
   "SELECT count(*) FROM external.observations"
 
+# Controle positivo antes da negativa: prova que este papel conecta e lê o que
+# lhe cabe. Sem ele, `expect_psql_failure` não distingue "ACL negou" de
+# "conexão recusada", "papel ausente" ou "senha errada" — todas saem não-zero e
+# passariam como se a fronteira estivesse provada.
+psql_as "${RESTORE_DATABASE}" cumuru_worker cumuru-local-worker-only \
+  --command="SELECT count(*) FROM analytics.presence_days" >/dev/null
+
 expect_psql_failure \
   "${RESTORE_DATABASE}" \
   cumuru_worker \
