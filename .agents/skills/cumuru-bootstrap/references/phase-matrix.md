@@ -375,7 +375,12 @@ Duas naturezas diferentes, e nenhuma delas é de disponibilidade de dado.
 
 `EXTERNAL_SOURCE_LICENSE` é **por fonte**: licença identificada por URL
 versionada, texto de atribuição redigido, limite de uso declarado e
-compatibilidade com o uso pretendido. Fonte sem esse gate **não renderiza card
+compatibilidade com o uso pretendido. A chave do manifesto é binária, mas a
+evidência **precisa trazer uma entrada nominal para cada `source_code` do
+vocabulário fechado da migration** — inclusive as que não publicam card, com o
+motivo. Um `PASS` global sobre evidência que descreve uma fonte só autorizaria
+em silêncio as demais, e o vocabulário é estático justamente para que essa
+conferência seja possível sem ler o banco. Fonte sem esse gate **não renderiza card
 público**, mesmo que a ingestão funcione. `PROTOTYPE_ONLY` **não** o dispensa,
 porque atribuição CC-BY não depende de o software ser protótipo.
 

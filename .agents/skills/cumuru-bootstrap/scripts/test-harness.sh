@@ -97,6 +97,29 @@ grep -q 'TITLE=Contexto externo' <<<"$(run_harness phase 8)"
 grep -q 'DEPENDENCIES=Fases 1 e 4 PASS' <<<"$(run_harness phase 8)"
 grep -q 'EGRESS=WORKER_ONLY' <<<"$(run_harness dry-run 8)"
 grep -q 'TIDE_CARD=BLOCKED' <<<"$(run_harness dry-run 8)"
+
+# The phase 8 licence gate governs publication, not eligibility: the layer stays
+# implementable against recorded fixtures, exactly as phase 7 stays implementable
+# without its legal-basis gate. What the gate must decide is whether a card may
+# be published, so both states are asserted here — a gate that is never observed
+# failing is a gate nobody can trust.
+dry_run_eight="$(run_harness dry-run 8)"
+grep -q 'PUBLIC_CARDS=BLOCKED' <<<"${dry_run_eight}"
+grep -q 'ELIGIBILITY=' <<<"${dry_run_eight}"
+mkdir -p "${TEST_WORKSPACE}/evidence" "${TEST_WORKSPACE}/phase-8"
+printf 'Verified test attestation.\n' \
+  >"${TEST_WORKSPACE}/evidence/external-source-license.md"
+printf '%s\n' \
+  'EXTERNAL_SOURCE_LICENSE=PASS' \
+  'EXTERNAL_SOURCE_LICENSE_EVIDENCE=evidence/external-source-license.md' \
+  'TIDE_HARMONIC_CONSTANTS=BLOCKED' \
+  'TIDE_HARMONIC_CONSTANTS_EVIDENCE=evidence/tide-harmonic-constants.md' \
+  >"${TEST_WORKSPACE}/phase-8/external-gates.env"
+dry_run_eight="$(run_harness dry-run 8)"
+grep -q 'PUBLIC_CARDS=ELIGIBLE' <<<"${dry_run_eight}"
+# The tide gate is rights, not data: evidence for the licence must not unblock it.
+grep -q 'TIDE_CARD=BLOCKED' <<<"${dry_run_eight}"
+rm -R -- "${TEST_WORKSPACE}/phase-8" "${TEST_WORKSPACE}/evidence"
 dry_run_seven="$(run_harness dry-run 7)"
 grep -q 'ELIGIBILITY=ELIGIBLE_PROTOTYPE_ONLY' <<<"${dry_run_seven}"
 grep -q '^EXTERNAL_GATES=third_party_identity_basis$' <<<"${dry_run_seven}"
