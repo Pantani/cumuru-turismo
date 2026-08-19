@@ -140,6 +140,20 @@ export interface StayListFilters {
   status?: Schemas["StayStatus"];
 }
 
+/**
+ * `month` só acompanha `window=month`. O servidor recusa o par inconsistente em
+ * vez de ignorá-lo, então mandá-lo em outra janela renderia 400 — e o cliente
+ * tipado seria uma promessa que o contrato não cumpre. Mesma regra de
+ * `presenceQuery` no cliente de analytics.
+ */
+function performanceQuery(window: PerformanceWindow, month?: string) {
+  const query = new URLSearchParams({ window });
+  if (window === "month" && month !== undefined) {
+    query.set("month", month);
+  }
+  return `?${query.toString()}`;
+}
+
 export type PerformanceWindow =
   operations["getAccommodationPerformance"]["parameters"]["query"]["window"];
 
@@ -252,7 +266,7 @@ export function createCoreClient(options: HttpClientOptions) {
     ) =>
       read(
         "getAccommodationPerformance",
-        `${accommodation(id)}/performance${queryString({ window, month })}`,
+        `${accommodation(id)}/performance${performanceQuery(window, month)}`,
       ),
     updateAccommodation: (
       id: string,

@@ -329,10 +329,15 @@ type Querier interface {
 	// recusa é resposta, não abandono, e misturar as duas esconderia justamente o
 	// que o questionário precisa saber sobre si mesmo.
 	SummarizeSurveyFunnel(ctx context.Context, arg SummarizeSurveyFunnelParams) (SummarizeSurveyFunnelRow, error)
-	// O denominador do comparativo, e nada além dele. Os dois números decidem se a
-	// vila pode aparecer ao lado do dado próprio e morrem no processo: a resposta
-	// HTTP carrega apenas o veredito, porque "somos sete com 210 leitos" já é
-	// informação sobre terceiros.
+	// O denominador do comparativo, e nada além dele. Os números decidem se a vila
+	// pode aparecer ao lado do dado próprio e morrem no processo: a resposta HTTP
+	// carrega apenas o veredito, porque "somos sete com 210 leitos" já é informação
+	// sobre terceiros.
+	//
+	// Uma passagem por acomodação, não duas: `reported` sai de count(*) na mesma
+	// varredura que soma as pessoas-dia. Vem de count(*), e não de person_days > 0,
+	// porque uma hospedagem que reportou pesos pequenos arredondaria para zero e
+	// deixaria de contar como reportante.
 	SummarizeVillageReporting(ctx context.Context, arg SummarizeVillageReportingParams) (SummarizeVillageReportingRow, error)
 	TouchAuthSession(ctx context.Context, arg TouchAuthSessionParams) error
 	UpdateAccommodation(ctx context.Context, arg UpdateAccommodationParams) (UpdateAccommodationRow, error)

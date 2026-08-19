@@ -308,6 +308,34 @@ describe("cliente tipado do núcleo", () => {
     expect(request.headers.get("if-match")).toBe('"1"');
   });
 
+  it("só serializa month dentro de window=month, como o servidor exige", async () => {
+    // Uma resposta nova por chamada: o corpo de um Response só pode ser lido
+    // uma vez, e este teste faz duas requisições.
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () =>
+      Response.json(
+        {
+          metadata: {},
+          window: "recent_90_days",
+          comparison: { status: "unavailable" },
+          occupancy: {},
+          series: [],
+        },
+        { headers: responseHeaders },
+      ),
+    );
+    const client = createCoreClient({ fetcher, getAccessToken: () => token });
+
+    // O par inconsistente é recusado pelo servidor, não ignorado: mandá-lo
+    // renderia 400 difícil de diagnosticar em vez de uma janela válida.
+    await client.getAccommodationPerformance(stayId, "recent_90_days", "2026-05");
+    const withoutMonth = fetcher.mock.calls[0]?.[0] as Request;
+    expect(new URL(withoutMonth.url).search).toBe("?window=recent_90_days");
+
+    await client.getAccommodationPerformance(stayId, "month", "2026-05");
+    const withMonth = fetcher.mock.calls[1]?.[0] as Request;
+    expect(new URL(withMonth.url).search).toBe("?window=month&month=2026-05");
+  });
+
   it.each([
     ["status 2xx inesperado", 200, { ...responseHeaders, ETag: '"1"', Location: "/api/v1/stays/x", "Idempotency-Replayed": "false" }],
     ["ETag ausente", 201, { ...responseHeaders, Location: "/api/v1/stays/x", "Idempotency-Replayed": "false" }],

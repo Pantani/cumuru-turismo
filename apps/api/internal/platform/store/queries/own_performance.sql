@@ -21,40 +21,33 @@ GROUP BY fact.presence_on
 ORDER BY fact.presence_on;
 
 -- name: SummarizeVillageReporting :one
--- O denominador do comparativo, e nada além dele. Os dois números decidem se a
--- vila pode aparecer ao lado do dado próprio e morrem no processo: a resposta
--- HTTP carrega apenas o veredito, porque "somos sete com 210 leitos" já é
--- informação sobre terceiros.
+-- O denominador do comparativo, e nada além dele. Os números decidem se a vila
+-- pode aparecer ao lado do dado próprio e morrem no processo: a resposta HTTP
+-- carrega apenas o veredito, porque "somos sete com 210 leitos" já é informação
+-- sobre terceiros.
+--
+-- Uma passagem por acomodação, não duas: `reported` sai de count(*) na mesma
+-- varredura que soma as pessoas-dia. Vem de count(*), e não de person_days > 0,
+-- porque uma hospedagem que reportou pesos pequenos arredondaria para zero e
+-- deixaria de contar como reportante.
 SELECT
-  count(*) FILTER (WHERE reporting.reported)::integer AS accommodations,
+  count(*) FILTER (WHERE observed.reported)::integer AS accommodations,
   coalesce(
-    sum(reporting.capacity) FILTER (WHERE reporting.reported), 0
+    sum(accommodation.capacity) FILTER (WHERE observed.reported), 0
   )::bigint AS capacity,
-  coalesce(sum(reporting.person_days), 0)::bigint AS person_days
-FROM (
+  coalesce(sum(observed.person_days), 0)::bigint AS person_days
+FROM core.accommodations AS accommodation
+CROSS JOIN LATERAL (
   SELECT
-    accommodation.capacity,
-    (
-      SELECT coalesce(round(sum(fact.weight)), 0)
-      FROM analytics.presence_days AS fact
-      JOIN core.stays AS stay
-        ON stay.id = fact.stay_id
-      WHERE stay.accommodation_id = accommodation.id
-        AND fact.kind = 'observed'
-        AND fact.presence_on >= sqlc.arg(start_on)
-        AND fact.presence_on < sqlc.arg(end_on)
-    ) AS person_days,
-    EXISTS (
-      SELECT 1
-      FROM analytics.presence_days AS fact
-      JOIN core.stays AS stay
-        ON stay.id = fact.stay_id
-      WHERE stay.accommodation_id = accommodation.id
-        AND fact.kind = 'observed'
-        AND fact.presence_on >= sqlc.arg(start_on)
-        AND fact.presence_on < sqlc.arg(end_on)
-    ) AS reported
-  FROM core.accommodations AS accommodation
-  WHERE accommodation.status = 'active'
-    AND accommodation.capacity IS NOT NULL
-) AS reporting;
+    coalesce(round(sum(fact.weight)), 0) AS person_days,
+    count(*) > 0 AS reported
+  FROM analytics.presence_days AS fact
+  JOIN core.stays AS stay
+    ON stay.id = fact.stay_id
+  WHERE stay.accommodation_id = accommodation.id
+    AND fact.kind = 'observed'
+    AND fact.presence_on >= sqlc.arg(start_on)
+    AND fact.presence_on < sqlc.arg(end_on)
+) AS observed
+WHERE accommodation.status = 'active'
+  AND accommodation.capacity IS NOT NULL;
