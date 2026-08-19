@@ -41,7 +41,7 @@ function DirectoryFilters({
   const { t } = useLocale();
   return (
     <div className="directory-filters">
-      <p className="field">
+      <p className="field-control">
         <label htmlFor="directory-search">{t("directory.search.label")}</label>
         <input
           id="directory-search"
@@ -51,7 +51,7 @@ function DirectoryFilters({
           onChange={(event) => onTerm(event.target.value)}
         />
       </p>
-      <p className="field">
+      <p className="field-control">
         <label htmlFor="directory-category">{t("directory.filter.label")}</label>
         <select
           id="directory-category"
