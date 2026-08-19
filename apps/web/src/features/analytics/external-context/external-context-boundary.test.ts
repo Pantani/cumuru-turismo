@@ -9,7 +9,7 @@
  * escrita (ADR-045 §4).
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -18,14 +18,20 @@ const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(here, "../../../..");
 const repoRoot = resolve(webRoot, "../..");
 
-/** Só os módulos que vão para o bundle; fixture e teste ficam de fora. */
-const PRODUCTION_MODULES = [
-  "ExternalContextTab.tsx",
-  "context-client.ts",
-  "context-copy.ts",
-  "context-freshness.ts",
-  "context-payload.ts",
-] as const;
+/**
+ * Os módulos que vão para o bundle, lidos do diretório e não de uma lista.
+ *
+ * Lista fixa é a falha silenciosa desta suíte: um módulo novo aqui deixaria de
+ * ser varrido sem que nenhum teste ficasse vermelho, e uma garantia de
+ * fronteira que para de cobrir código sem avisar é pior que garantia nenhuma.
+ * Fixture e teste ficam de fora porque não entram no bundle.
+ */
+const PRODUCTION_MODULES = readdirSync(here).filter(
+  (name) =>
+    /\.tsx?$/u.test(name) &&
+    !name.includes(".test.") &&
+    !name.includes("-fixtures"),
+);
 
 function moduleSource(name: string): string {
   return readFileSync(resolve(here, name), "utf8");
@@ -39,6 +45,26 @@ function withoutComments(source: string): string {
   return source
     .replaceAll(/\/\*[\s\S]*?\*\//gu, " ")
     .replaceAll(/(^|[^:\\])\/\/.*$/gmu, "$1");
+}
+
+/**
+ * Reduz o código a uma sequência de palavras separadas por espaço, quebrando
+ * também nas maiúsculas internas.
+ *
+ * Substring pura acusa `ratio` dentro de `duration`, `operation` e
+ * `declaration` — falso positivo com mensagem enganosa esperando o primeiro
+ * `requestDuration`. Fronteira de palavra (`\b`) resolve isso e abre outro
+ * buraco: deixaria passar `coverageRatio`, que é exatamente o nome que a
+ * proibição existe para pegar. Quebrar a maiúscula interna fecha os dois:
+ * `duration` continua uma palavra só, e `coverageRatio` vira duas.
+ */
+function tokenized(source: string): string {
+  const words = source
+    .replaceAll(/([a-z0-9])([A-Z])/gu, "$1 $2")
+    .replaceAll(/[^A-Za-z0-9]+/gu, " ")
+    .toLowerCase()
+    .trim();
+  return ` ${words} `;
 }
 
 const FORBIDDEN_IMPORTS = [
@@ -85,11 +111,21 @@ describe("fronteira entre a camada externa e a camada medida", () => {
     }
   });
 
+  it("varre todo módulo de produção do diretório, e não uma lista fixa", () => {
+    // Piso, não teto: a derivação impede cobertura silenciosamente parcial, e
+    // esta asserção impede que um caminho errado faça a suíte passar varrendo
+    // zero arquivo.
+    expect(PRODUCTION_MODULES.length).toBeGreaterThan(0);
+    expect(PRODUCTION_MODULES).toContain("ExternalContextTab.tsx");
+    expect(PRODUCTION_MODULES).not.toContain("context-fixtures.ts");
+  });
+
   it("não nomeia cobertura, razão, amostra nem série protegida no código", () => {
     for (const name of PRODUCTION_MODULES) {
-      const code = withoutComments(moduleSource(name));
+      const code = tokenized(withoutComments(moduleSource(name)));
       for (const identifier of FORBIDDEN_IDENTIFIERS) {
-        expect(`${name}:${identifier}:${code.includes(identifier)}`).toBe(
+        const found = code.includes(tokenized(identifier));
+        expect(`${name}:${identifier}:${found}`).toBe(
           `${name}:${identifier}:false`,
         );
       }

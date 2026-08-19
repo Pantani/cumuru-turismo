@@ -66,6 +66,27 @@ describe("allowlist do documento de contexto externo", () => {
     }))).toBe(false);
   });
 
+  it("recusa data civil impossível, que Date.parse rolaria para o mês seguinte", () => {
+    expect(isPublicContext(mutated((draft) => {
+      draft.generated_at = "2026-02-31T00:00:00Z";
+    }))).toBe(false);
+    expect(isPublicContext(mutated((draft) => {
+      draft.generated_at = "2027-02-29T00:00:00Z";
+    }))).toBe(false);
+  });
+
+  it("aceita 29 de fevereiro em ano bissexto", () => {
+    expect(isPublicContext(mutated((draft) => {
+      draft.generated_at = "2028-02-29T00:00:00Z";
+    }))).toBe(true);
+  });
+
+  it("recusa hora fora de faixa", () => {
+    expect(isPublicContext(mutated((draft) => {
+      draft.generated_at = "2026-08-18T99:00:00Z";
+    }))).toBe(false);
+  });
+
   it("recusa documento sem fonte creditada", () => {
     expect(isPublicContext(mutated((draft) => {
       draft.sources = [];

@@ -83,10 +83,36 @@ function textValidator(maximum: number): Validator {
     typeof value === "string" && value.length >= 1 && value.length <= maximum;
 }
 
+/**
+ * Instante que existe no calendário, e não só na gramática.
+ *
+ * `Date.parse` rola data impossível em vez de recusá-la: `2026-02-31` vira 3 de
+ * março, e `2027-02-29` vira 1º de março. Hora fora de faixa já cai em `NaN`,
+ * então só o dia civil precisa de checagem própria, feita por ida e volta —
+ * o dia é aceito quando a data reconstruída devolve o mesmo texto.
+ *
+ * Não é preciosismo de formato. Este documento é anônimo e cacheável por cache
+ * compartilhado, e a proveniência que ele carrega é obrigação de licença: um
+ * `observed_at` rolado mostraria ao leitor um instante de origem que a fonte
+ * nunca publicou, e um `retrieved_at` rolado deslocaria a classificação de
+ * frescor em dias, fazendo coleta velha se anunciar recente. O módulo já
+ * recusa licença servida fora de `https` pela mesma razão: a allowlist não
+ * pergunta se o nosso servidor erraria.
+ */
+function isRealInstant(text: string): boolean {
+  const day = text.slice(0, 10);
+  const reconstructed = new Date(`${day}T00:00:00Z`);
+  return (
+    Number.isFinite(Date.parse(text)) &&
+    Number.isFinite(reconstructed.getTime()) &&
+    reconstructed.toISOString().startsWith(day)
+  );
+}
+
 const isDateTime: Validator = (value) =>
   typeof value === "string" &&
   dateTimePattern.test(value) &&
-  Number.isFinite(Date.parse(value));
+  isRealInstant(value);
 
 const isHttpsUrl: Validator = (value) =>
   typeof value === "string" && httpsPattern.test(value);
