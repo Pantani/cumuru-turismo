@@ -2,6 +2,7 @@ package calendarfeed
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,7 +24,7 @@ func TestFetchRefusesToDialAnAddressInsideTheDeployment(t *testing.T) {
 	defer server.Close()
 
 	fetcher := NewHTTPFetcher(2*time.Second, DefaultFetchLimit)
-	if _, err := fetcher.Fetch(context.Background(), server.URL); err != ErrUnavailable {
+	if _, err := fetcher.Fetch(context.Background(), server.URL); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("Fetch(loopback) error = %v, want ErrUnavailable", err)
 	}
 	if served.Load() {

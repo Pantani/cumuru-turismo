@@ -171,7 +171,23 @@ GRANT UPDATE (
 
 GRANT SELECT, INSERT, UPDATE ON TABLE core.calendar_reservations TO app_runtime;
 
-GRANT SELECT, INSERT ON TABLE core.calendar_reservations TO worker_runtime;
+GRANT SELECT ON TABLE core.calendar_reservations TO worker_runtime;
+
+-- O INSERT é por coluna, e não table-wide, para que a fronteira que o comentário
+-- abaixo declara seja imposta pelo banco: sem isto o worker poderia escrever
+-- stay_id, que é o campo que transforma observação em presença publicada.
+GRANT INSERT (
+  id,
+  feed_id,
+  external_uid_hmac,
+  external_uid_key_version,
+  arrival_on,
+  departure_on,
+  kind,
+  first_seen_at,
+  last_seen_at,
+  updated_at
+) ON TABLE core.calendar_reservations TO worker_runtime;
 
 -- O worker reconcilia o que a origem ainda mostra: atualiza datas, natureza e
 -- presença no feed, e retira da fila o que sumiu. Ele nunca escreve `stay_id`

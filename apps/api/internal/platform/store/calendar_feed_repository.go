@@ -96,6 +96,11 @@ func (r *CalendarFeedRepository) writeCalendarFeed(
 	if err != nil {
 		return storedMutation{}, calendarFeedQueryError(err)
 	}
+	// Um feed numa acomodação que não recebe estadia é tráfego de saída sem
+	// destino: o worker buscaria o host a cada ciclo e toda confirmação falharia.
+	if !accommodation.Status(property.Status).Allows(accommodation.OperationCreateStay) {
+		return storedMutation{}, calendarfeed.ErrConflict
+	}
 	feed, err := r.insertCalendarFeed(ctx, q, command, sealed, fingerprint, now)
 	if err != nil {
 		return storedMutation{}, err
@@ -126,9 +131,6 @@ func (r *CalendarFeedRepository) finishFeedRegistration(
 	})
 }
 
-// A feed may only be registered against an accommodation whose status still
-// allows stays: an address that will never produce one is outbound traffic with
-// no destination.
 func (r *CalendarFeedRepository) insertCalendarFeed(
 	ctx context.Context,
 	q generated.Querier,
@@ -611,12 +613,33 @@ func feedFromCreate(row generated.CreateCalendarFeedRow) calendarfeed.Feed {
 	}
 }
 
+// A conversão é campo a campo, e não de struct inteira: os tipos gerados só
+// coincidem enquanto nome, tipo e ordem baterem, então reordenar duas colunas do
+// mesmo tipo numa query continuaria compilando e trocaria os valores em
+// silêncio — com arrival_on e departure_on isso inverteria o intervalo da
+// estadia.
 func feedFromList(row generated.ListCalendarFeedsRow) calendarfeed.Feed {
-	return feedFromCreate(generated.CreateCalendarFeedRow(row))
+	return calendarfeed.Feed{
+		ID: idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
+		Provider: calendarfeed.Provider(row.Provider), Label: row.Label,
+		Status:              calendarfeed.FeedStatus(row.Status),
+		LastSyncedAt:        optionalInstant(row.LastSyncedAt),
+		LastSyncOutcome:     optionalOutcome(row.LastSyncOutcome),
+		ConsecutiveFailures: row.ConsecutiveFailures, Version: row.Version,
+		CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
+	}
 }
 
 func feedFromRemove(row generated.RemoveCalendarFeedRow) calendarfeed.Feed {
-	return feedFromCreate(generated.CreateCalendarFeedRow(row))
+	return calendarfeed.Feed{
+		ID: idFromPG(row.ID), AccommodationID: idFromPG(row.AccommodationID),
+		Provider: calendarfeed.Provider(row.Provider), Label: row.Label,
+		Status:              calendarfeed.FeedStatus(row.Status),
+		LastSyncedAt:        optionalInstant(row.LastSyncedAt),
+		LastSyncOutcome:     optionalOutcome(row.LastSyncOutcome),
+		ConsecutiveFailures: row.ConsecutiveFailures, Version: row.Version,
+		CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
+	}
 }
 
 func reservationFromList(row generated.ListCalendarReservationsRow) calendarfeed.Reservation {
@@ -633,11 +656,29 @@ func reservationFromList(row generated.ListCalendarReservationsRow) calendarfeed
 }
 
 func reservationFromConfirm(row generated.ConfirmCalendarReservationRow) calendarfeed.Reservation {
-	return reservationFromList(generated.ListCalendarReservationsRow(row))
+	return calendarfeed.Reservation{
+		ID: idFromPG(row.ID), FeedID: idFromPG(row.FeedID),
+		ArrivalOn:   row.ArrivalOn.Time.Format(civilDateLayout),
+		DepartureOn: row.DepartureOn.Time.Format(civilDateLayout),
+		Kind:        calendarfeed.ReservationKind(row.Kind),
+		State:       calendarfeed.ReservationState(row.State),
+		StayID:      optionalID(row.StayID),
+		FirstSeenAt: row.FirstSeenAt.Time.UTC(),
+		LastSeenAt:  row.LastSeenAt.Time.UTC(), Version: row.Version,
+	}
 }
 
 func reservationFromDismiss(row generated.DismissCalendarReservationRow) calendarfeed.Reservation {
-	return reservationFromList(generated.ListCalendarReservationsRow(row))
+	return calendarfeed.Reservation{
+		ID: idFromPG(row.ID), FeedID: idFromPG(row.FeedID),
+		ArrivalOn:   row.ArrivalOn.Time.Format(civilDateLayout),
+		DepartureOn: row.DepartureOn.Time.Format(civilDateLayout),
+		Kind:        calendarfeed.ReservationKind(row.Kind),
+		State:       calendarfeed.ReservationState(row.State),
+		StayID:      optionalID(row.StayID),
+		FirstSeenAt: row.FirstSeenAt.Time.UTC(),
+		LastSeenAt:  row.LastSeenAt.Time.UTC(), Version: row.Version,
+	}
 }
 
 func optionalInstant(value pgtype.Timestamptz) *time.Time {

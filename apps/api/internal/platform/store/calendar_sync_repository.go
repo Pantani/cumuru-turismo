@@ -51,10 +51,16 @@ func dueFeedFromRow(row generated.ListDueCalendarFeedsRow) calendarfeed.DueFeed 
 // ApplySync writes the whole outcome of one feed in one transaction. A failure
 // touches only the feed's own fields: the queue says nothing about a network
 // error, and emptying it on every hiccup would make the screen unusable.
+// O prazo é aplicado aqui, e não só na abertura da transação: a reconciliação
+// percorre um evento por sentença, e um calendário de dois anos tem centenas —
+// sem deadline nas consultas o ciclo seguraria trava pelo tempo que o banco
+// levasse.
 func (r *CalendarFeedRepository) ApplySync(
 	ctx context.Context,
 	result calendarfeed.SyncResult,
 ) error {
+	ctx, cancel := context.WithTimeout(ctx, r.store.timeout)
+	defer cancel()
 	now := r.store.currentTime()
 	return r.store.inTransaction(ctx, func(q generated.Querier) error {
 		if result.Outcome != calendarfeed.OutcomeOK {
@@ -73,6 +79,7 @@ func (r *CalendarFeedRepository) markFeedFailed(
 	err := q.MarkCalendarFeedFailed(ctx, generated.MarkCalendarFeedFailedParams{
 		FeedID: idToPG(result.FeedID), SyncedAt: timeToPG(now),
 		Outcome: optionalText(string(result.Outcome)), Suspend: result.Suspend,
+		ExpectedVersion: result.Version,
 	})
 	if err != nil {
 		return calendarfeed.ErrUnavailable
@@ -99,15 +106,16 @@ func (r *CalendarFeedRepository) reconcileFeed(
 	}
 	if err := q.MarkCalendarFeedSynced(ctx, generated.MarkCalendarFeedSyncedParams{
 		FeedID: idToPG(result.FeedID), SyncedAt: timeToPG(now),
+		ExpectedVersion: result.Version,
 	}); err != nil {
 		return calendarfeed.ErrUnavailable
 	}
 	return nil
 }
 
-// A reservation that vanished and came back is the same reservation, so the
-// revival runs alongside the upsert: the upsert alone only reaches what is
-// still pending, and a withdrawn row would stay withdrawn forever.
+// applyObserved is one statement per event on purpose: the upsert already
+// covers the reservation that vanished and came back, so a calendar with
+// hundreds of events costs hundreds of round trips instead of twice that.
 func (r *CalendarFeedRepository) applyObserved(
 	ctx context.Context,
 	q generated.Querier,
@@ -121,17 +129,6 @@ func (r *CalendarFeedRepository) applyObserved(
 	}
 	if err := q.UpsertCalendarReservation(
 		ctx, upsertReservationParams(id, feedID, observed, now),
-	); err != nil {
-		return calendarfeed.ErrUnavailable
-	}
-	if err := q.ReviveWithdrawnCalendarReservation(
-		ctx, generated.ReviveWithdrawnCalendarReservationParams{
-			FeedID: idToPG(feedID), ExternalUidHmac: observed.UID.Digest,
-			ArrivalOn:   dateToPG(observed.ArrivalOn),
-			DepartureOn: dateToPG(observed.DepartureOn),
-			Kind:        string(observed.Kind),
-			SeenAt:      timeToPG(now),
-		},
 	); err != nil {
 		return calendarfeed.ErrUnavailable
 	}

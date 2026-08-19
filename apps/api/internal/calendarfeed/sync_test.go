@@ -97,6 +97,77 @@ func TestSyncDueSuspendsAFeedThatKeepsFailing(t *testing.T) {
 	}
 }
 
+// O comentário de SyncDue promete que um feed quebrado não para os outros. Com
+// a falha vindo do repositório, e não da busca, essa promessa só vale se o laço
+// continuar.
+func TestSyncDueKeepsGoingWhenOneFeedFailsToPersist(t *testing.T) {
+	t.Parallel()
+
+	sealer := testSealer(t)
+	first := dueFeed(t, sealer)
+	second := dueFeed(t, sealer)
+	second.ID = uuid.MustParse("019f0000-0000-7000-8000-0000000000f2")
+	repository := &syncRepository{
+		feeds:     []calendarfeed.DueFeed{first, second},
+		failFeeds: map[uuid.UUID]bool{first.ID: true},
+	}
+	synchronizer := newSynchronizer(t, repository, stubFetcher(bookingCalendar), sealer)
+
+	count, err := synchronizer.SyncDue(context.Background(), 10)
+	if err == nil {
+		t.Fatal("SyncDue() error = nil, want the failed feed reported")
+	}
+	if count != 1 {
+		t.Fatalf("SyncDue() = %d, want the second feed still processed", count)
+	}
+}
+
+// Um corpo que é calendário mas tem evento quebrado precisa chegar como
+// malformed: é o que distingue "arquivo estranho" de "site fora do ar".
+func TestSyncDueReportsAMalformedEvent(t *testing.T) {
+	t.Parallel()
+
+	sealer := testSealer(t)
+	repository := &syncRepository{feeds: []calendarfeed.DueFeed{dueFeed(t, sealer)}}
+	broken := "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\n" +
+		"DTSTART;VALUE=DATE:20260818\r\nDTEND;VALUE=DATE:20260815\r\n" +
+		"UID:booking-0001\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	synchronizer := newSynchronizer(t, repository, stubFetcher(broken), sealer)
+
+	if _, err := synchronizer.SyncDue(context.Background(), 10); err != nil {
+		t.Fatalf("SyncDue() error = %v", err)
+	}
+	if repository.applied[0].Outcome != calendarfeed.OutcomeMalformed {
+		t.Fatalf("ApplySync() outcome = %s", repository.applied[0].Outcome)
+	}
+}
+
+// Abrir a URL falha por motivo local — chave rotacionada, versão ausente. O
+// feed remoto está saudável, e contabilizar isso como falha dele suspenderia
+// todos eles apontando o operador para um endereço que nunca quebrou.
+func TestSyncDueDoesNotPenalizeAFeedForALocalKeyFailure(t *testing.T) {
+	t.Parallel()
+
+	feed := dueFeed(t, testSealer(t))
+	other := calendarfeed.Keyring{
+		CurrentVersion: "feed-v9",
+		Keys:           map[string][]byte{"feed-v9": []byte("calendar-feed-other-key-32bytes!")},
+	}
+	rotated, err := calendarfeed.NewURLSealer(other, other)
+	if err != nil {
+		t.Fatalf("NewURLSealer() error = %v", err)
+	}
+	repository := &syncRepository{feeds: []calendarfeed.DueFeed{feed}}
+	synchronizer := newSynchronizer(t, repository, stubFetcher(bookingCalendar), rotated)
+
+	if _, err := synchronizer.SyncDue(context.Background(), 10); err == nil {
+		t.Fatal("SyncDue() error = nil, want the key failure reported")
+	}
+	if len(repository.applied) != 0 {
+		t.Fatalf("ApplySync() ran for a local key failure: %+v", repository.applied)
+	}
+}
+
 func newSynchronizer(
 	t *testing.T,
 	repository calendarfeed.SyncRepository,
@@ -129,8 +200,9 @@ func dueFeed(t *testing.T, sealer *calendarfeed.URLSealer) calendarfeed.DueFeed 
 }
 
 type syncRepository struct {
-	feeds   []calendarfeed.DueFeed
-	applied []calendarfeed.SyncResult
+	feeds     []calendarfeed.DueFeed
+	applied   []calendarfeed.SyncResult
+	failFeeds map[uuid.UUID]bool
 }
 
 func (r *syncRepository) DueFeeds(context.Context, int32) ([]calendarfeed.DueFeed, error) {
@@ -138,6 +210,9 @@ func (r *syncRepository) DueFeeds(context.Context, int32) ([]calendarfeed.DueFee
 }
 
 func (r *syncRepository) ApplySync(_ context.Context, result calendarfeed.SyncResult) error {
+	if r.failFeeds[result.FeedID] {
+		return errors.New("write conflict")
+	}
 	r.applied = append(r.applied, result)
 	return nil
 }

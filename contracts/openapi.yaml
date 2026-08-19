@@ -4827,6 +4827,7 @@ components:
         client_submission_id:
           type: string
           format: uuid
+          pattern: "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-7[0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$"
     RejectStayRequest:
       type: object
       required: [reason_code]

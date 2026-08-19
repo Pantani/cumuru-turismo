@@ -26,6 +26,10 @@ type CalendarFeedConfig struct {
 const (
 	maximumCalendarFetchTimeout = 30 * time.Second
 	maximumCalendarBatchSize    = 200
+	// O corpo vem de host informado por usuário, então o teto é o que mantém a
+	// memória de cada ciclo limitada; sem ele o limite inferior sozinho não
+	// impede um valor que remove o limite.
+	maximumCalendarFetchLimit = 16 << 20
 )
 
 func loadCalendarFeed(
@@ -54,11 +58,18 @@ func calendarFeedSettings(
 	lookup LookupEnv,
 ) (CalendarFeedConfig, error) {
 	reader := newEnvReader(lookup)
+	// O lote é conferido antes de estreitar para int32: em 64 bits a conversão
+	// dá a volta em silêncio, e 4294967297 viraria 1 — um valor que o operador
+	// não escolheu e que passaria por qualquer validação posterior.
+	batchSize := reader.integer("CALENDAR_FEED_BATCH_SIZE", 25)
+	if batchSize <= 0 || batchSize > maximumCalendarBatchSize {
+		return CalendarFeedConfig{}, invalid("CALENDAR_FEED_BATCH_SIZE")
+	}
 	config := CalendarFeedConfig{
 		Enabled:      true,
 		FetchTimeout: reader.duration("CALENDAR_FEED_FETCH_TIMEOUT", 10*time.Second),
 		FetchLimit:   int64(reader.integer("CALENDAR_FEED_FETCH_LIMIT", 4<<20)),
-		BatchSize:    int32(reader.integer("CALENDAR_FEED_BATCH_SIZE", 25)),
+		BatchSize:    int32(batchSize),
 	}
 	if err := reader.Err(); err != nil {
 		return CalendarFeedConfig{}, err
@@ -124,7 +135,7 @@ func (c CalendarFeedConfig) validateFetch() error {
 	if c.FetchTimeout <= 0 || c.FetchTimeout > maximumCalendarFetchTimeout {
 		return invalid("CALENDAR_FEED_FETCH_TIMEOUT")
 	}
-	if c.FetchLimit <= 0 {
+	if c.FetchLimit <= 0 || c.FetchLimit > maximumCalendarFetchLimit {
 		return invalid("CALENDAR_FEED_FETCH_LIMIT")
 	}
 	return nil

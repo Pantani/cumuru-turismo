@@ -125,6 +125,9 @@ ORDER BY feed.last_synced_at NULLS FIRST
 LIMIT sqlc.arg(batch_size);
 
 -- name: MarkCalendarFeedSynced :exec
+-- A versão lida no início do ciclo entra na condição: o lote não trava linha
+-- (a busca HTTP acontece entre a leitura e a escrita), então dois ciclos
+-- sobrepostos poderiam contabilizar a mesma passagem duas vezes.
 -- O sucesso zera a contagem de falhas: o que interessa é a sequência corrente,
 -- não o histórico, porque o objetivo é suspender quem está quebrado agora.
 UPDATE core.calendar_feeds AS feed
@@ -134,7 +137,8 @@ SET
   consecutive_failures = 0,
   updated_at = sqlc.arg(synced_at),
   version = feed.version + 1
-WHERE feed.id = sqlc.arg(feed_id);
+WHERE feed.id = sqlc.arg(feed_id)
+  AND feed.version = sqlc.arg(expected_version);
 
 -- name: MarkCalendarFeedFailed :exec
 -- A suspensão vem decidida do domínio e chega como argumento: o SQL carimba, e
@@ -148,15 +152,21 @@ SET
   status = CASE WHEN sqlc.arg(suspend)::boolean THEN 'suspended' ELSE feed.status END,
   updated_at = sqlc.arg(synced_at),
   version = feed.version + 1
-WHERE feed.id = sqlc.arg(feed_id);
+WHERE feed.id = sqlc.arg(feed_id)
+  AND feed.version = sqlc.arg(expected_version);
 
 -- name: UpsertCalendarReservation :exec
 -- O UID cego é a identidade da reserva na origem, e por isso o conflito é o
 -- caminho normal e não a exceção: toda sincronização revê o mesmo calendário.
 --
--- A atualização não toca estado já decidido. Datas mudadas na plataforma
--- alcançam o que ainda está na fila; o que a hospedagem já confirmou é estadia,
--- e estadia se corrige na tela dela, não por um arquivo remoto.
+-- A mesma sentença cobre a reserva que sumiu e voltou, que é a mesma reserva:
+-- ela volta para a fila com as datas de agora, porque some e volta justamente
+-- quando é alterada na plataforma. Uma segunda query para reviver custaria mais
+-- uma ida ao banco por evento, e um calendário de dois anos tem centenas.
+--
+-- Estado já decidido não é tocado. Datas mudadas na plataforma alcançam o que
+-- ainda está na fila; o que a hospedagem já confirmou é estadia, e estadia se
+-- corrige na tela dela, não por um arquivo remoto.
 INSERT INTO core.calendar_reservations (
   id,
   feed_id,
@@ -186,32 +196,12 @@ SET
   arrival_on = EXCLUDED.arrival_on,
   departure_on = EXCLUDED.departure_on,
   kind = EXCLUDED.kind,
+  state = 'pending',
+  withdrawn_at = NULL,
   last_seen_at = EXCLUDED.last_seen_at,
   updated_at = EXCLUDED.updated_at,
   version = core.calendar_reservations.version + 1
-WHERE core.calendar_reservations.state = 'pending';
-
--- name: ReviveWithdrawnCalendarReservation :exec
--- Uma reserva que sumiu e voltou é a mesma reserva. Sem isto ela permaneceria
--- retirada para sempre, porque o upsert acima só alcança o que está pendente.
---
--- As datas e a natureza vêm junto, e não só o estado: uma reserva costuma sumir
--- e voltar justamente porque foi alterada na plataforma, e reviver só o estado
--- devolveria à fila as datas antigas — que a hospedagem confirmaria como se
--- fossem as de agora.
-UPDATE core.calendar_reservations AS reservation
-SET
-  state = 'pending',
-  withdrawn_at = NULL,
-  arrival_on = sqlc.arg(arrival_on),
-  departure_on = sqlc.arg(departure_on),
-  kind = sqlc.arg(kind),
-  last_seen_at = sqlc.arg(seen_at),
-  updated_at = sqlc.arg(seen_at),
-  version = reservation.version + 1
-WHERE reservation.feed_id = sqlc.arg(feed_id)
-  AND reservation.external_uid_hmac = sqlc.arg(external_uid_hmac)
-  AND reservation.state = 'withdrawn';
+WHERE core.calendar_reservations.state IN ('pending', 'withdrawn');
 
 -- name: WithdrawUnseenCalendarReservations :exec
 -- Some do feed quem foi cancelado na plataforma, e o arquivo não diz isso: diz

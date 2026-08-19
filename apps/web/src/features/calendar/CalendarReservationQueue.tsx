@@ -3,7 +3,7 @@ import { useCallback, useId, useState } from "react";
 import { createUuidV7 } from "../../shared/identity/uuid-v7";
 import { useAuthSession } from "../../shared/auth/AuthSession";
 import { OperationStatus } from "../../shared/forms/FieldFeedback";
-import { useOperation } from "../operator/use-operation";
+import { describeFailure, useOperation } from "../operator/use-operation";
 import {
   entityTagFor,
   useCalendarReservations,
@@ -113,7 +113,8 @@ export function CalendarReservationQueue({
   onConfirmed,
 }: CalendarReservationQueueProps) {
   const { coreClient: client } = useAuthSession();
-  const { reservations, loading, reload } = useCalendarReservations(accommodationId);
+  const { error, reservations, loading, reload } =
+    useCalendarReservations(accommodationId);
   const operation = useOperation();
   const titleId = useId();
 
@@ -156,6 +157,17 @@ export function CalendarReservationQueue({
 
   if (loading) {
     return <p>Carregando as reservas importadas…</p>;
+  }
+
+  // Falha de leitura antes de fila vazia: "nenhuma reserva" e "não consegui
+  // perguntar" são fatos diferentes, e mostrar o primeiro no lugar do segundo
+  // faria a hospedagem parar de conferir.
+  if (error !== null) {
+    return (
+      <p className="operation-status tone-failed" role="alert">
+        {describeFailure(error)}
+      </p>
+    );
   }
 
   return (

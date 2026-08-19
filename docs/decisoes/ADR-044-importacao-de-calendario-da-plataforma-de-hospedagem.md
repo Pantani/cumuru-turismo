@@ -101,6 +101,15 @@ parece melhorá-lo.
   verdade. Reserva cancelada some do feed sem dizer que foi cancelada, e o
   sistema trata desaparecimento como retirada da fila, nunca como cancelamento
   de estadia já confirmada. Corrigir estadia continua sendo ato da hospedagem.
+- **Limitação declarada:** rotacionar o keyring da impressão digital exige
+  backfill. A cifra tolera rotação — cada linha guarda a versão que a selou, e
+  `Open` escolhe por ela —, mas a impressão digital é sempre calculada com a
+  versão corrente, e digest com chave não se recomputa a partir do que está
+  gravado. Depois de uma rotação, as linhas antigas mantêm o digest antigo e a
+  recusa de feed duplicado deixa de casar até que alguém releia cada URL,
+  reselando e reimprimindo. A coluna `url_fingerprint_key_version` existe para
+  esse dia; o procedimento não está escrito porque a primeira rotação ainda não
+  tem data, e escrevê-lo agora seria adivinhar o cenário.
 - **Limitação declarada:** nada aqui prova que o feed cadastrado pertence à
   acomodação que o cadastrou. A URL é colada por quem está autenticado naquela
   hospedagem, e é isso que se sabe.

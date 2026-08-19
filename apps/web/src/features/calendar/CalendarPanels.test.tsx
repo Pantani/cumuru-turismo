@@ -87,8 +87,13 @@ describe("calendário da plataforma de hospedagem", () => {
 
     renderWithSession(<CalendarFeedPanel accommodationId={accommodationId} />);
 
-    expect(await screen.findByText(/Chalé 3/u)).toBeInTheDocument();
-    expect(screen.getByText(/última leitura funcionou/u)).toBeInTheDocument();
+    // A espera é pelo estado da sincronização, não pelo rótulo: "Chalé 3" também
+    // é o exemplo da dica do formulário, e casar com ele passaria antes de a
+    // lista chegar.
+    expect(
+      await screen.findByText(/última leitura funcionou/u),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("list")).toHaveTextContent("Chalé 3");
     // O endereço é segredo portador: a API não o devolve e a tela não o exibe.
     expect(document.body.textContent).not.toContain("ical.booking.com");
   });
@@ -128,6 +133,11 @@ describe("calendário da plataforma de hospedagem", () => {
       new URL(call.url).pathname.endsWith(`/${reservationId}/confirm`),
     );
     expect(confirmCall?.headers.get("If-Match")).toBe('"1"');
+    // O número digitado é a única parte que o calendário não sabe: se ele não
+    // chegar ao servidor, a estadia nasce com a contagem errada e ninguém vê.
+    expect(await confirmCall?.clone().json()).toMatchObject({
+      expected_guest_count: 4,
+    });
   });
 
   /**
@@ -168,6 +178,20 @@ describe("calendário da plataforma de hospedagem", () => {
         calls.some((call) => new URL(call.url).pathname.endsWith("/dismiss")),
       ).toBe(true);
     });
+  });
+
+  it("mostra a falha de leitura em vez de fingir fila vazia", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new TypeError("network down"))),
+    );
+
+    renderWithSession(<CalendarReservationQueue accommodationId={accommodationId} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Não foi possível falar com o serviço/u,
+    );
+    expect(screen.queryByText("Nenhuma reserva esperando por você.")).toBeNull();
   });
 
   it("não inventa fila quando nada chegou", async () => {

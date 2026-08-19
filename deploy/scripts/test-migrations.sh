@@ -747,6 +747,91 @@ for protected_column in \
      WHERE id = '00000000-0000-7000-8000-000000000051'"
 done
 
+# O feed de calendário: o worker sincroniza e nunca confirma. stay_id é a coluna
+# que transforma observação em presença publicada, e o INSERT por coluna existe
+# para que essa fronteira seja imposta pelo banco, não só pelo comentário.
+#
+# A linha do feed é semeada antes das asserções de propósito. Sem ela o INSERT
+# falharia por chave estrangeira mesmo com o grant errado, e o teste passaria
+# pelo motivo errado — que é justamente o que ele existe para descartar.
+psql_as cumuru_migration cumuru-local-migration-only <<'SQL' >/dev/null
+INSERT INTO core.calendar_feeds (
+  id,
+  accommodation_id,
+  provider,
+  label,
+  url_ciphertext,
+  url_nonce,
+  url_key_version,
+  url_fingerprint,
+  url_fingerprint_key_version
+)
+VALUES (
+  '00000000-0000-7000-8000-0000000000c0',
+  '019fae11-0000-7000-8000-000000000001',
+  'booking',
+  'Chalé fictício',
+  '\x0102'::bytea,
+  '\x0304'::bytea,
+  'fixture-v1',
+  '\x0506'::bytea,
+  'fixture-v1'
+);
+SQL
+
+# Controle positivo: sem ele, uma lista de colunas incompleta no GRANT passaria
+# despercebida aqui e quebraria o worker só em runtime.
+psql_as cumuru_worker cumuru-local-worker-only --command="
+  INSERT INTO core.calendar_reservations (
+    id, feed_id, external_uid_hmac, external_uid_key_version,
+    arrival_on, departure_on, kind, first_seen_at, last_seen_at, updated_at
+  ) VALUES (
+    '00000000-0000-7000-8000-0000000000c1',
+    '00000000-0000-7000-8000-0000000000c0',
+    '\x0708'::bytea, 'fixture-v1',
+    DATE '2026-09-01', DATE '2026-09-03', 'reserved',
+    now(), now(), now()
+  )" >/dev/null
+
+expect_psql_failure \
+  cumuru_worker \
+  cumuru-local-worker-only \
+  "worker_runtime unexpectedly inserted core.calendar_reservations.stay_id" \
+  "INSERT INTO core.calendar_reservations (
+     id, feed_id, external_uid_hmac, external_uid_key_version,
+     arrival_on, departure_on, kind, stay_id
+   ) VALUES (
+     '00000000-0000-7000-8000-0000000000c2',
+     '00000000-0000-7000-8000-0000000000c0',
+     '\\x0900'::bytea, 'fixture-v1',
+     DATE '2026-09-05', DATE '2026-09-07', 'reserved',
+     '00000000-0000-7000-8000-000000000031'
+   )"
+
+expect_psql_failure \
+  cumuru_worker \
+  cumuru-local-worker-only \
+  "worker_runtime unexpectedly updated core.calendar_reservations.stay_id" \
+  "UPDATE core.calendar_reservations SET stay_id = NULL"
+
+expect_psql_failure \
+  cumuru_worker \
+  cumuru-local-worker-only \
+  "worker_runtime unexpectedly rewrote the sealed calendar feed address" \
+  "UPDATE core.calendar_feeds SET url_ciphertext = '\\x00'::bytea"
+
+expect_psql_failure \
+  cumuru_worker \
+  cumuru-local-worker-only \
+  "worker_runtime unexpectedly read the calendar feed fingerprint" \
+  "SELECT url_fingerprint FROM core.calendar_feeds"
+
+psql_as cumuru_migration cumuru-local-migration-only --command="
+  DELETE FROM core.calendar_reservations
+    WHERE feed_id = '00000000-0000-7000-8000-0000000000c0';
+  DELETE FROM core.calendar_feeds
+    WHERE id = '00000000-0000-7000-8000-0000000000c0';" >/dev/null
+
 expect_psql_failure \
   cumuru_worker \
   cumuru-local-worker-only \
@@ -1731,4 +1816,4 @@ final_version="$(
 )"
 test "${final_version}" = "4:false"
 
-echo "migrations zero-to-four, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup, public listing consent, calendar feed and fictitious tenant isolation passed"
+echo "migrations zero-to-four, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup, public listing consent, calendar feed worker boundary and fictitious tenant isolation passed"

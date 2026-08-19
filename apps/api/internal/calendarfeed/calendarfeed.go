@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Pantani/cumuru/apps/api/internal/access"
 	"github.com/google/uuid"
@@ -161,9 +162,9 @@ type ListFeedsRequest struct {
 	AccommodationID uuid.UUID
 }
 
-// ListReservationsRequest defaults to the pending queue because that is the
-// only list with something to do in it. An empty State means every state, for
-// the screen that explains what already happened.
+// ListReservationsRequest carries no default state: an empty State means every
+// state, for the screen that explains what already happened. Asking for the
+// pending queue is the caller's choice, not this type's.
 type ListReservationsRequest struct {
 	Actor           access.Principal
 	AccommodationID uuid.UUID
@@ -221,7 +222,7 @@ func (s *Service) CreateFeed(
 	if err != nil {
 		return Feed{}, false, err
 	}
-	if err := validateCreateFeed(command); err != nil {
+	if err := validateCreateFeed(&command); err != nil {
 		return Feed{}, false, err
 	}
 	sealed, fingerprint, err := s.sealFeedURL(command.AccommodationID, normalized)
@@ -305,12 +306,19 @@ func boundedLimit(limit int32) int32 {
 	return limit
 }
 
-func validateCreateFeed(command CreateFeedCommand) error {
+// validateCreateFeed normaliza o rótulo na própria comanda em vez de julgar uma
+// cópia: sem isso "  Chalé 3  " seria validado sem as bordas e gravado com
+// elas, e dois feeds que só diferem por espaço viravam dois rótulos na tela.
+//
+// O comprimento conta runas, não bytes. O contrato declara `maxLength: 120`, que
+// em JSON Schema são pontos de código, e rótulo em português tem acento — medir
+// bytes recusaria entrada que o contrato publicado aceita.
+func validateCreateFeed(command *CreateFeedCommand) error {
 	if command.AccommodationID == uuid.Nil || !command.Provider.Valid() {
 		return ErrInvalidInput
 	}
-	label := strings.TrimSpace(command.Label)
-	if label == "" || len(label) > MaxLabelLength {
+	command.Label = strings.TrimSpace(command.Label)
+	if command.Label == "" || utf8.RuneCountInString(command.Label) > MaxLabelLength {
 		return ErrInvalidInput
 	}
 	return nil

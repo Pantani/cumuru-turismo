@@ -48,15 +48,24 @@ func NewHTTPFetcher(timeout time.Duration, limit int64) *HTTPFetcher {
 // second lookup than on the first. Control runs after resolution, once per
 // connection, on the address about to be dialed — so a name that points inside
 // the deployment is refused whether it always did or only started to.
+//
+// The transport is built here instead of cloned from http.DefaultTransport: a
+// dependency that replaces the global would turn the clone into a panic at
+// startup, and this client wants a shape it declares rather than one it inherits.
 func guardedTransport(timeout time.Duration) *http.Transport {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.DialContext = (&net.Dialer{
-		Timeout:         timeout,
-		ControlContext:  controlDialedAddress,
-		FallbackDelay:   -1,
-		KeepAliveConfig: net.KeepAliveConfig{Enable: false},
-	}).DialContext
-	return transport
+	return &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:         timeout,
+			ControlContext:  controlDialedAddress,
+			FallbackDelay:   -1,
+			KeepAliveConfig: net.KeepAliveConfig{Enable: false},
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          8,
+		IdleConnTimeout:       30 * time.Second,
+		TLSHandshakeTimeout:   timeout,
+		ExpectContinueTimeout: time.Second,
+	}
 }
 
 func controlDialedAddress(_ context.Context, _, address string, _ syscall.RawConn) error {

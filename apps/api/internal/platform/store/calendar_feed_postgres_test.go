@@ -18,8 +18,11 @@ import (
 
 // O caminho inteiro contra PostgreSQL real: a hospedagem cadastra o feed, o
 // worker lê o que está vencido, aplica o que observou, e a confirmação cria a
-// estadia na mesma transação. É aqui que os grants por coluna do
-// worker_runtime são provados — eles não aparecem em teste de unidade.
+// estadia na mesma transação.
+//
+// As duas pontas rodam como `cumuru_app`. Os grants por coluna do
+// `worker_runtime` não são exercidos aqui — quem os prova é
+// `deploy/scripts/test-migrations.sh`, que conecta com cada papel.
 func TestCalendarFeedPostgreSQLRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()

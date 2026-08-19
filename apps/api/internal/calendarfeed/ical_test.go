@@ -1,6 +1,8 @@
 package calendarfeed_test
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -103,7 +105,7 @@ func TestParseCalendarRejectsAResponseThatIsNotACalendar(t *testing.T) {
 	t.Parallel()
 
 	_, err := calendarfeed.ParseCalendar("<html><body>Sign in</body></html>")
-	if err != calendarfeed.ErrNotCalendar {
+	if !errors.Is(err, calendarfeed.ErrNotCalendar) {
 		t.Fatalf("ParseCalendar(html) error = %v, want ErrNotCalendar", err)
 	}
 }
@@ -127,7 +129,7 @@ func TestParseCalendarRejectsMalformedEvents(t *testing.T) {
 			broken := strings.Replace(
 				calendarWithSummary("Reserved"), original, replacements[name], 1,
 			)
-			if _, err := calendarfeed.ParseCalendar(broken); err != calendarfeed.ErrMalformed {
+			if _, err := calendarfeed.ParseCalendar(broken); !errors.Is(err, calendarfeed.ErrMalformed) {
 				t.Fatalf("ParseCalendar(%s) error = %v, want ErrMalformed", name, err)
 			}
 		})
@@ -141,4 +143,29 @@ func calendarWithSummary(summary string) string {
 		"UID:1f6d5a2e-booking-0001\r\n" +
 		"SUMMARY:" + summary + "\r\n" +
 		"END:VEVENT\r\nEND:VCALENDAR\r\n"
+}
+
+// MaxEvents é o único limite do parser contra um arquivo hostil. Sem teste, um
+// refactor de closeEvent derruba o teto e nenhum gate percebe.
+func TestParseCalendarRefusesACalendarBeyondTheEventCeiling(t *testing.T) {
+	t.Parallel()
+
+	var builder strings.Builder
+	builder.WriteString("BEGIN:VCALENDAR\r\n")
+	for index := range calendarfeed.MaxEvents + 1 {
+		fmt.Fprintf(
+			&builder,
+			"BEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20260815\r\n"+
+				"DTEND;VALUE=DATE:20260818\r\nUID:booking-%d\r\n"+
+				"SUMMARY:Reserved\r\nEND:VEVENT\r\n",
+			index,
+		)
+	}
+	builder.WriteString("END:VCALENDAR\r\n")
+
+	if _, err := calendarfeed.ParseCalendar(builder.String()); !errors.Is(
+		err, calendarfeed.ErrMalformed,
+	) {
+		t.Fatalf("ParseCalendar(oversized) error = %v, want ErrMalformed", err)
+	}
 }

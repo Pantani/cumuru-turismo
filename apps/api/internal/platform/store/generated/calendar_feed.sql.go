@@ -543,13 +543,15 @@ SET
   updated_at = $1,
   version = feed.version + 1
 WHERE feed.id = $4
+  AND feed.version = $5
 `
 
 type MarkCalendarFeedFailedParams struct {
-	SyncedAt pgtype.Timestamptz `json:"synced_at"`
-	Outcome  *string            `json:"outcome"`
-	Suspend  bool               `json:"suspend"`
-	FeedID   pgtype.UUID        `json:"feed_id"`
+	SyncedAt        pgtype.Timestamptz `json:"synced_at"`
+	Outcome         *string            `json:"outcome"`
+	Suspend         bool               `json:"suspend"`
+	FeedID          pgtype.UUID        `json:"feed_id"`
+	ExpectedVersion int64              `json:"expected_version"`
 }
 
 // A suspensão vem decidida do domínio e chega como argumento: o SQL carimba, e
@@ -561,6 +563,7 @@ func (q *Queries) MarkCalendarFeedFailed(ctx context.Context, arg MarkCalendarFe
 		arg.Outcome,
 		arg.Suspend,
 		arg.FeedID,
+		arg.ExpectedVersion,
 	)
 	return err
 }
@@ -574,17 +577,22 @@ SET
   updated_at = $1,
   version = feed.version + 1
 WHERE feed.id = $2
+  AND feed.version = $3
 `
 
 type MarkCalendarFeedSyncedParams struct {
-	SyncedAt pgtype.Timestamptz `json:"synced_at"`
-	FeedID   pgtype.UUID        `json:"feed_id"`
+	SyncedAt        pgtype.Timestamptz `json:"synced_at"`
+	FeedID          pgtype.UUID        `json:"feed_id"`
+	ExpectedVersion int64              `json:"expected_version"`
 }
 
+// A versão lida no início do ciclo entra na condição: o lote não trava linha
+// (a busca HTTP acontece entre a leitura e a escrita), então dois ciclos
+// sobrepostos poderiam contabilizar a mesma passagem duas vezes.
 // O sucesso zera a contagem de falhas: o que interessa é a sequência corrente,
 // não o histórico, porque o objetivo é suspender quem está quebrado agora.
 func (q *Queries) MarkCalendarFeedSynced(ctx context.Context, arg MarkCalendarFeedSyncedParams) error {
-	_, err := q.db.Exec(ctx, markCalendarFeedSynced, arg.SyncedAt, arg.FeedID)
+	_, err := q.db.Exec(ctx, markCalendarFeedSynced, arg.SyncedAt, arg.FeedID, arg.ExpectedVersion)
 	return err
 }
 
@@ -652,50 +660,6 @@ func (q *Queries) RemoveCalendarFeed(ctx context.Context, arg RemoveCalendarFeed
 	return i, err
 }
 
-const reviveWithdrawnCalendarReservation = `-- name: ReviveWithdrawnCalendarReservation :exec
-UPDATE core.calendar_reservations AS reservation
-SET
-  state = 'pending',
-  withdrawn_at = NULL,
-  arrival_on = $1,
-  departure_on = $2,
-  kind = $3,
-  last_seen_at = $4,
-  updated_at = $4,
-  version = reservation.version + 1
-WHERE reservation.feed_id = $5
-  AND reservation.external_uid_hmac = $6
-  AND reservation.state = 'withdrawn'
-`
-
-type ReviveWithdrawnCalendarReservationParams struct {
-	ArrivalOn       pgtype.Date        `json:"arrival_on"`
-	DepartureOn     pgtype.Date        `json:"departure_on"`
-	Kind            string             `json:"kind"`
-	SeenAt          pgtype.Timestamptz `json:"seen_at"`
-	FeedID          pgtype.UUID        `json:"feed_id"`
-	ExternalUidHmac []byte             `json:"external_uid_hmac"`
-}
-
-// Uma reserva que sumiu e voltou é a mesma reserva. Sem isto ela permaneceria
-// retirada para sempre, porque o upsert acima só alcança o que está pendente.
-//
-// As datas e a natureza vêm junto, e não só o estado: uma reserva costuma sumir
-// e voltar justamente porque foi alterada na plataforma, e reviver só o estado
-// devolveria à fila as datas antigas — que a hospedagem confirmaria como se
-// fossem as de agora.
-func (q *Queries) ReviveWithdrawnCalendarReservation(ctx context.Context, arg ReviveWithdrawnCalendarReservationParams) error {
-	_, err := q.db.Exec(ctx, reviveWithdrawnCalendarReservation,
-		arg.ArrivalOn,
-		arg.DepartureOn,
-		arg.Kind,
-		arg.SeenAt,
-		arg.FeedID,
-		arg.ExternalUidHmac,
-	)
-	return err
-}
-
 const upsertCalendarReservation = `-- name: UpsertCalendarReservation :exec
 INSERT INTO core.calendar_reservations (
   id,
@@ -726,10 +690,12 @@ SET
   arrival_on = EXCLUDED.arrival_on,
   departure_on = EXCLUDED.departure_on,
   kind = EXCLUDED.kind,
+  state = 'pending',
+  withdrawn_at = NULL,
   last_seen_at = EXCLUDED.last_seen_at,
   updated_at = EXCLUDED.updated_at,
   version = core.calendar_reservations.version + 1
-WHERE core.calendar_reservations.state = 'pending'
+WHERE core.calendar_reservations.state IN ('pending', 'withdrawn')
 `
 
 type UpsertCalendarReservationParams struct {
@@ -746,9 +712,14 @@ type UpsertCalendarReservationParams struct {
 // O UID cego é a identidade da reserva na origem, e por isso o conflito é o
 // caminho normal e não a exceção: toda sincronização revê o mesmo calendário.
 //
-// A atualização não toca estado já decidido. Datas mudadas na plataforma
-// alcançam o que ainda está na fila; o que a hospedagem já confirmou é estadia,
-// e estadia se corrige na tela dela, não por um arquivo remoto.
+// A mesma sentença cobre a reserva que sumiu e voltou, que é a mesma reserva:
+// ela volta para a fila com as datas de agora, porque some e volta justamente
+// quando é alterada na plataforma. Uma segunda query para reviver custaria mais
+// uma ida ao banco por evento, e um calendário de dois anos tem centenas.
+//
+// Estado já decidido não é tocado. Datas mudadas na plataforma alcançam o que
+// ainda está na fila; o que a hospedagem já confirmou é estadia, e estadia se
+// corrige na tela dela, não por um arquivo remoto.
 func (q *Queries) UpsertCalendarReservation(ctx context.Context, arg UpsertCalendarReservationParams) error {
 	_, err := q.db.Exec(ctx, upsertCalendarReservation,
 		arg.ReservationID,

@@ -75,32 +75,53 @@ func NewSynchronizer(
 	return &Synchronizer{repository: repository, fetcher: fetcher, sealer: sealer}, nil
 }
 
-// SyncDue returns how many feeds it touched so the caller can decide whether a
-// further batch is worth the budget.
+// SyncDue returns how many feeds it reconciled so the caller can decide whether
+// a further batch is worth the budget.
+//
+// A feed that fails does not stop the batch, and that includes a repository
+// failure: returning on the first one would let a single bad row silence every
+// feed behind it in the queue. The errors are joined and the count reports what
+// actually landed.
 func (s *Synchronizer) SyncDue(ctx context.Context, limit int32) (int, error) {
 	feeds, err := s.repository.DueFeeds(ctx, limit)
 	if err != nil {
 		return 0, err
 	}
+	processed := 0
+	failures := make([]error, 0)
 	for _, feed := range feeds {
-		if err := s.syncFeed(ctx, feed); err != nil {
-			return 0, err
+		if err := ctx.Err(); err != nil {
+			return processed, errors.Join(append(failures, err)...)
 		}
+		if err := s.syncFeed(ctx, feed); err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		processed++
 	}
-	return len(feeds), nil
+	return processed, errors.Join(failures...)
 }
 
-// syncFeed swallows no failure: a feed that cannot be read produces a result
-// that says so, which the lodging sees on its own screen. What it does refuse
-// to do is let one broken feed stop the others, because the failure belongs to
-// one address and not to the cycle.
+// syncFeed separates the two kinds of failure. A feed that cannot be read
+// produces a result that says so, which the lodging sees on its own screen. A
+// feed whose address cannot be unsealed is our problem, not the origin's: a
+// rotated keyring or a missing key version would otherwise be recorded as
+// "unreachable" and suspend every active feed after enough cycles, pointing the
+// operator at an address that was never broken.
 func (s *Synchronizer) syncFeed(ctx context.Context, feed DueFeed) error {
-	result := s.readFeed(ctx, feed)
-	return s.repository.ApplySync(ctx, result)
+	address, err := s.sealer.Open(feed.URL, feed.AccommodationID[:])
+	if err != nil {
+		return err
+	}
+	return s.repository.ApplySync(ctx, s.readFeed(ctx, feed, address))
 }
 
-func (s *Synchronizer) readFeed(ctx context.Context, feed DueFeed) SyncResult {
-	observed, err := s.observe(ctx, feed)
+func (s *Synchronizer) readFeed(
+	ctx context.Context,
+	feed DueFeed,
+	address string,
+) SyncResult {
+	observed, err := s.observe(ctx, feed, address)
 	if err != nil {
 		return failureResult(feed, err)
 	}
@@ -112,11 +133,11 @@ func (s *Synchronizer) readFeed(ctx context.Context, feed DueFeed) SyncResult {
 	}
 }
 
-func (s *Synchronizer) observe(ctx context.Context, feed DueFeed) ([]Observed, error) {
-	address, err := s.sealer.Open(feed.URL, feed.AccommodationID[:])
-	if err != nil {
-		return nil, err
-	}
+func (s *Synchronizer) observe(
+	ctx context.Context,
+	feed DueFeed,
+	address string,
+) ([]Observed, error) {
 	body, err := s.fetcher.Fetch(ctx, address)
 	if err != nil {
 		return nil, err

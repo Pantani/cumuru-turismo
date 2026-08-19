@@ -265,6 +265,9 @@ type Querier interface {
 	// o limite continua sendo uma regra legível em Go em vez de uma aritmética
 	// escondida numa cláusula CASE.
 	MarkCalendarFeedFailed(ctx context.Context, arg MarkCalendarFeedFailedParams) error
+	// A versão lida no início do ciclo entra na condição: o lote não trava linha
+	// (a busca HTTP acontece entre a leitura e a escrita), então dois ciclos
+	// sobrepostos poderiam contabilizar a mesma passagem duas vezes.
 	// O sucesso zera a contagem de falhas: o que interessa é a sequência corrente,
 	// não o histórico, porque o objetivo é suspender quem está quebrado agora.
 	MarkCalendarFeedSynced(ctx context.Context, arg MarkCalendarFeedSyncedParams) error
@@ -289,14 +292,6 @@ type Querier interface {
 	RequestQuestionnaireVersionChanges(ctx context.Context, arg RequestQuestionnaireVersionChangesParams) (SurveyQuestionnaireVersion, error)
 	RetireCurrentPublishedVersion(ctx context.Context, arg RetireCurrentPublishedVersionParams) error
 	RetireQuestionnaireVersion(ctx context.Context, arg RetireQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
-	// Uma reserva que sumiu e voltou é a mesma reserva. Sem isto ela permaneceria
-	// retirada para sempre, porque o upsert acima só alcança o que está pendente.
-	//
-	// As datas e a natureza vêm junto, e não só o estado: uma reserva costuma sumir
-	// e voltar justamente porque foi alterada na plataforma, e reviver só o estado
-	// devolveria à fila as datas antigas — que a hospedagem confirmaria como se
-	// fossem as de agora.
-	ReviveWithdrawnCalendarReservation(ctx context.Context, arg ReviveWithdrawnCalendarReservationParams) error
 	// RevokeAccountSessions closes every open session of an account. A rotation
 	// ends the sessions the previous secret opened, including the one that
 	// requested it.
@@ -329,9 +324,14 @@ type Querier interface {
 	// O UID cego é a identidade da reserva na origem, e por isso o conflito é o
 	// caminho normal e não a exceção: toda sincronização revê o mesmo calendário.
 	//
-	// A atualização não toca estado já decidido. Datas mudadas na plataforma
-	// alcançam o que ainda está na fila; o que a hospedagem já confirmou é estadia,
-	// e estadia se corrige na tela dela, não por um arquivo remoto.
+	// A mesma sentença cobre a reserva que sumiu e voltou, que é a mesma reserva:
+	// ela volta para a fila com as datas de agora, porque some e volta justamente
+	// quando é alterada na plataforma. Uma segunda query para reviver custaria mais
+	// uma ida ao banco por evento, e um calendário de dois anos tem centenas.
+	//
+	// Estado já decidido não é tocado. Datas mudadas na plataforma alcançam o que
+	// ainda está na fila; o que a hospedagem já confirmou é estadia, e estadia se
+	// corrige na tela dela, não por um arquivo remoto.
 	UpsertCalendarReservation(ctx context.Context, arg UpsertCalendarReservationParams) error
 	UpsertPresenceDay(ctx context.Context, arg UpsertPresenceDayParams) (int64, error)
 	// The row count is the signal the caller needs: a fresh insert and a re-run

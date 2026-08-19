@@ -1,6 +1,7 @@
 package calendarfeed_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -84,8 +85,11 @@ func TestFingerprintIsStableAndDoesNotRevealTheAddress(t *testing.T) {
 	if string(first.Digest) != string(second.Digest) {
 		t.Fatal("Fingerprint() is not deterministic")
 	}
-	if len(first.Digest) != 32 || string(first.Digest) == address {
+	if len(first.Digest) != 32 {
 		t.Fatalf("Fingerprint() digest = %x", first.Digest)
+	}
+	if bytes.Contains(first.Digest, []byte(address)) {
+		t.Fatal("Fingerprint() digest carries the address")
 	}
 	other, _ := sealer.Fingerprint("https://ical.booking.com/v1/export?t=0000")
 	if string(other.Digest) == string(first.Digest) {
@@ -106,6 +110,12 @@ func TestFingerprintUIDIsScopedToItsFeed(t *testing.T) {
 	second, _ := sealer.FingerprintUID("feed-b", "booking-0001")
 	if string(first.Digest) == string(second.Digest) {
 		t.Fatal("FingerprintUID() collided across feeds")
+	}
+	// Reconhecer que o evento de hoje é o de ontem é a única função deste
+	// digest: se ele variasse, todo ciclo criaria fila nova e retiraria a velha.
+	repeated, _ := sealer.FingerprintUID("feed-a", "booking-0001")
+	if string(repeated.Digest) != string(first.Digest) {
+		t.Fatal("FingerprintUID() is not deterministic")
 	}
 }
 

@@ -1,8 +1,8 @@
-import { useCallback, useId, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 
 import { useAuthSession } from "../../shared/auth/AuthSession";
 import { OperationStatus } from "../../shared/forms/FieldFeedback";
-import { useOperation } from "../operator/use-operation";
+import { describeFailure, useOperation } from "../operator/use-operation";
 import {
   entityTagFor,
   useCalendarFeeds,
@@ -60,16 +60,64 @@ function FeedRow({
 }
 
 /**
+ * A falha de leitura vem antes da lista vazia: "nenhum calendário" e "não
+ * consegui perguntar" são fatos diferentes, e mostrar o primeiro no lugar do
+ * segundo faria a hospedagem achar que perdeu o cadastro.
+ */
+function FeedList({
+  busy,
+  error,
+  feeds,
+  loading,
+  onRemove,
+}: {
+  busy: boolean;
+  error: unknown;
+  feeds: readonly CalendarFeed[];
+  loading: boolean;
+  onRemove: (feed: CalendarFeed) => void;
+}) {
+  if (loading) {
+    return <p>Carregando os calendários…</p>;
+  }
+  if (error !== null) {
+    return (
+      <p className="operation-status tone-failed" role="alert">
+        {describeFailure(error)}
+      </p>
+    );
+  }
+  if (feeds.length === 0) {
+    return <p>Nenhum calendário cadastrado ainda.</p>;
+  }
+  return (
+    <ul className="calendar-feed-list">
+      {feeds.map((feed) => (
+        <FeedRow key={feed.id} feed={feed} busy={busy} onRemove={onRemove} />
+      ))}
+    </ul>
+  );
+}
+
+/**
  * O painel nunca mostra o endereço do calendário depois de salvo, e a API não o
  * devolve: quem tem o link lê o calendário do anúncio inteiro. O que a tela
  * mostra é o rótulo, o estado e quando foi lido pela última vez (ADR-044).
  */
 export function CalendarFeedPanel({ accommodationId }: CalendarFeedPanelProps) {
   const { coreClient: client } = useAuthSession();
-  const { feeds, loading, reload } = useCalendarFeeds(accommodationId);
+  const { error, feeds, loading, reload } = useCalendarFeeds(accommodationId);
   const operation = useOperation();
   const formId = useId();
   const [draft, setDraft] = useState({ label: "", url: "" });
+
+  // O rascunho pertence à hospedagem selecionada. Sem isto, trocar de
+  // hospedagem levaria junto o endereço digitado para a anterior — e cadastrá-lo
+  // no lugar errado é justamente o que ninguém consegue desfazer olhando a tela,
+  // porque a URL não é exibida depois de salva.
+  useEffect(() => {
+    setDraft({ label: "", url: "" });
+  }, [accommodationId]);
 
   const submit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -129,7 +177,7 @@ export function CalendarFeedPanel({ accommodationId }: CalendarFeedPanelProps) {
             required
           />
           <span className="field-hint">
-            É só para você se achar. Não escreva nome de hóspede aqui.
+            É só para você se achar — "Chalé 3", "Suíte da frente".
           </span>
         </label>
         <label className="field-control" htmlFor={`${formId}-url`}>
@@ -150,27 +198,23 @@ export function CalendarFeedPanel({ accommodationId }: CalendarFeedPanelProps) {
             Sincronizar calendários → Exportar. Copie o endereço que aparece.
           </span>
         </label>
+        <p className="privacy-warning" role="note">
+          O rótulo nunca deve conter nome, documento, contato, credencial ou dado
+          sensível: ele aparece na tela de quem opera a hospedagem.
+        </p>
         <OperationStatus operation={operation} />
         <button className="primary-action" type="submit" disabled={operation.busy}>
           Cadastrar calendário
         </button>
       </form>
 
-      {loading ? <p>Carregando os calendários…</p> : null}
-      {feeds.length === 0 && !loading ? (
-        <p>Nenhum calendário cadastrado ainda.</p>
-      ) : (
-        <ul className="calendar-feed-list">
-          {feeds.map((feed) => (
-            <FeedRow
-              key={feed.id}
-              feed={feed}
-              busy={operation.busy}
-              onRemove={(target) => void remove(target)}
-            />
-          ))}
-        </ul>
-      )}
+      <FeedList
+        busy={operation.busy}
+        error={error}
+        feeds={feeds}
+        loading={loading}
+        onRemove={(target) => void remove(target)}
+      />
     </section>
   );
 }
