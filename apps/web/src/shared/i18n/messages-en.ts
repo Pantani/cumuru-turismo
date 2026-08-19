@@ -11,6 +11,7 @@ export const messagesEn: Messages = {
   "app.nav.workspace": "Lodging area",
   "app.nav.administration": "Administration",
   "app.nav.questionnaires": "Questionnaires",
+  "app.nav.directory": "Where to stay",
   "app.nav.quality": "Quality",
   "app.nav.aria": "Main navigation",
   "app.skipLink": "Skip to content",
@@ -39,6 +40,7 @@ export const messagesEn: Messages = {
   "app.title.workspace": "Lodging area",
   "app.title.questionnaires": "Questionnaires",
   "app.title.quality": "Data quality",
+  "app.title.directory": "Places to stay in Cumuruxatiba",
   "app.title.notFound": "Page not found",
 
   // ------------------------------------------------------- Landing: seções
@@ -647,4 +649,32 @@ export const messagesEn: Messages = {
   "visitor.residenceCountry": "Country of residence of visitor {number}",
   "visitor.remove": "Remove visitor {number}",
   "visitor.add": "Add visitor",
+  // --------------------------------------- Public accommodation directory
+  "directory.eyebrow": "Where to stay",
+  "directory.pageTitle": "Places to stay in Cumuruxatiba",
+  "directory.intro":
+    "Hosts who asked to appear here. Each one chose to publish its own contact; the Observatory does not broker bookings or charge commission.",
+  "directory.loading": "Loading the list…",
+  "directory.failed": "The list could not be loaded now. Try again in a few minutes.",
+  "directory.empty":
+    "No host has published a contact yet. If you host in Cumuruxatiba, request access and publish yours.",
+  "directory.noMatches": "No host matches this filter.",
+  "directory.count": "{count} hosts published",
+  "directory.countOne": "1 host published",
+  "directory.updatedAt": "Updated on {date}",
+  "directory.search.label": "Search by name or area",
+  "directory.search.placeholder": "e.g. guesthouse, north beach",
+  "directory.filter.label": "Type of accommodation",
+  "directory.filter.all": "All types",
+  "directory.card.capacity": "Up to {count} guests",
+  "directory.card.call": "Call {name}",
+  "directory.card.whatsapp": "WhatsApp {name}",
+  "directory.card.website": "Website of {name}",
+  "directory.card.websiteLabel": "Website",
+  "directory.category.unclassified": "Unclassified",
+  "directory.publish.title": "Do you host and want to be listed?",
+  "directory.publish.body":
+    "Request access, open the host area and publish your phone whenever you want. You can withdraw it at any time.",
+  "directory.publish.action": "Request access",
+
 };

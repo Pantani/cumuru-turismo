@@ -98,18 +98,18 @@ migration_files="$(
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_presence_history_window.down.sql\n000002_presence_history_window.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_presence_history_window.down.sql\n000002_presence_history_window.up.sql\n000003_public_accommodation_directory.down.sql\n000003_public_accommodation_directory.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
 
-run_migrate up 2
+run_migrate up 3
 actual_migration_state="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${actual_migration_state}" = "2:false"
+test "${actual_migration_state}" = "3:false"
 
 psql_as cumuru_migration cumuru-local-migration-only <<'SQL'
 INSERT INTO core.organizations (id, name)
@@ -597,6 +597,53 @@ psql_as cumuru_app cumuru-local-app-only \
     SET capacity = 12, updated_at = now(), version = version + 1
     WHERE id = '00000000-0000-7000-8000-000000000011'
   "
+
+# Lista pública: publicar é ato da hospedagem, e app_runtime escreve as cinco
+# colunas do consentimento pela mesma rota que edita a acomodação.
+psql_as cumuru_app cumuru-local-app-only \
+  --command="
+    UPDATE core.accommodations
+    SET
+      public_listing_enabled = true,
+      public_contact_phone = '+5573999990001',
+      public_contact_whatsapp = true,
+      public_website_url = 'https://pousada-ficticia.invalid/',
+      public_listing_consented_at = now(),
+      updated_at = now(),
+      version = version + 1
+    WHERE id = '00000000-0000-7000-8000-000000000011'
+  "
+
+published_directory_rows="$(
+  psql_as cumuru_app cumuru-local-app-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT count(*)
+      FROM core.accommodations
+      WHERE public_listing_enabled = true
+        AND status = 'active'
+        AND public_contact_phone IS NOT NULL
+    "
+)"
+test "${published_directory_rows}" = "1"
+
+# O banco recusa a publicação incoerente, mesmo que a aplicação deixe passar:
+# publicada sem telefone, publicada sem carimbo de consentimento, carimbo sem
+# publicação, telefone fora de E.164 e site que não é https.
+while IFS='|' read -r listing_case listing_statement; do
+  expect_psql_failure \
+    cumuru_app \
+    cumuru-local-app-only \
+    "core.accommodations unexpectedly accepted ${listing_case}" \
+    "UPDATE core.accommodations SET ${listing_statement}
+     WHERE id = '00000000-0000-7000-8000-000000000011'"
+done <<'CASES'
+published listing without a phone|public_contact_phone = NULL
+published listing without consent|public_listing_consented_at = NULL
+consent stamp without publication|public_listing_enabled = false
+phone outside E.164|public_contact_phone = '(73) 99999-0001'
+website outside https|public_website_url = 'http://pousada-ficticia.invalid/'
+CASES
 
 psql_as cumuru_app cumuru-local-app-only \
   --command="
@@ -1656,7 +1703,7 @@ psql_as cumuru_migration cumuru-local-migration-only \
 
 # Round trip completo: a baseline e a janela histórica sobem, descem e
 # reaplicam de forma limpa.
-run_migrate down 2
+run_migrate down 3
 schemas_left="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
@@ -1676,12 +1723,12 @@ schemas_left="$(
 )"
 test "${schemas_left}" = "0"
 
-run_migrate up 2
+run_migrate up 3
 final_version="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${final_version}" = "2:false"
+test "${final_version}" = "3:false"
 
-echo "migrations zero-to-two, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"
+echo "migrations zero-to-three, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup and fictitious tenant isolation passed"

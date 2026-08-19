@@ -1,5 +1,6 @@
 import { useAuthSession } from "../../shared/auth/AuthSession";
 import { AccommodationAccessPanel } from "../accommodation/AccommodationAccessPanel";
+import { PublicListingPanel } from "../accommodation/PublicListingPanel";
 import { useAccommodations } from "../accommodation/use-accommodations";
 import { ApprovalQueue } from "../approval/ApprovalQueue";
 import { AccommodationPicker } from "./AccommodationPicker";
@@ -54,7 +55,7 @@ function SelfServicePanels({ accommodation }: { accommodation: Accommodation }) 
 }
 
 export function OperatorWorkspace() {
-  const { accommodations, loading, operation, selected, setSelected } =
+  const { accommodations, load, loading, operation, selected, setSelected } =
     useAccommodations("Carregando suas hospedagens");
 
   return (
@@ -73,6 +74,11 @@ export function OperatorWorkspace() {
       {selected === null ? null : (
         <>
           <StayBoard accommodation={selected} />
+          <PublicListingPanel
+            key={selected.id}
+            accommodation={selected}
+            onSaved={() => void load()}
+          />
           <SelfServicePanels accommodation={selected} />
         </>
       )}

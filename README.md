@@ -51,6 +51,7 @@ Jornadas disponíveis na aplicação web:
 | Rota | Para quem | O que faz |
 | --- | --- | --- |
 | `/` | qualquer pessoa | Capa pública trilíngue e painel de indicadores anônimos |
+| `/hospedagens` | quem procura onde ficar | Lista pública das hospedagens que consentiram em publicar o contato |
 | `/acesso` | hospedagem ou administração | Login por e-mail e senha; a conta cai na área da hospedagem ou na da administração, conforme o escopo `accommodations:onboard` |
 | `/registro` | hóspede convidado | Registro do grupo a partir do convite nominal |
 | `/pesquisa` | hóspede convidado | Pesquisa turística opcional |
@@ -392,6 +393,22 @@ autocadastro, e a pendência expira em 72 horas com auditoria. O canal é
 protegido por rate limit e proof-of-work, sem serviço de terceiro e sem cookie.
 A capability de ativação é de uso único e revogável; o token trafega no
 fragmento da URL e nunca em log, trace, métrica, audit ou outbox.
+
+### Lista pública de hospedagens
+
+`/hospedagens` e `GET /api/v1/public/accommodations` publicam nome, categoria,
+localidade, capacidade, telefone, WhatsApp e site das hospedagens ativas que
+pediram para aparecer — e nada além disso. A publicação é ato da própria
+hospedagem, no painel "Aparecer na lista pública" da área da hospedagem: nasce
+desligada, exige telefone em E.164 e guarda o instante do consentimento.
+Desmarcar retira a hospedagem da lista na mesma transação, sem fila e sem
+espera.
+
+O documento é único, ordenado por nome, sem cursor e cacheável por inteiro
+(`max-age=300`, ETag forte); filtrar por tipo e buscar por nome acontecem no
+navegador. Não há reserva, preço, disponibilidade nem avaliação: o Observatório
+não intermedeia hospedagem
+([ADR-043](docs/decisoes/ADR-043-lista-publica-de-hospedagens.md)).
 
 ### Imagens, proveniência e rede local
 
