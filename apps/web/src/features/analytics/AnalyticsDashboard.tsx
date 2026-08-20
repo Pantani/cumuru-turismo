@@ -29,6 +29,8 @@ import {
   type SeriesStats,
   type WeekdayAverage,
 } from "./presence-stats";
+import { contextCopyFor } from "./external-context/context-copy";
+import { ExternalContextTab } from "./external-context/ExternalContextTab";
 
 type Schemas = components["schemas"];
 type PresenceWindow = components["parameters"]["PresenceWindow"];
@@ -42,6 +44,14 @@ const SMOOTH_DAYS = 7;
 interface AnalyticsDashboardProps {
   client?: AnalyticsClient;
 }
+
+/**
+ * Camada medida e camada copiada. Não compartilham eixo, escala nem legenda
+ * porque não compartilham tela.
+ */
+const DASHBOARD_LAYERS = ["presence", "external"] as const;
+
+type DashboardLayer = (typeof DASHBOARD_LAYERS)[number];
 
 /** Reúne o que todo painel interno precisa sem repetir dois hooks por bloco. */
 interface Copy {
@@ -1100,9 +1110,7 @@ function usePublicAnalytics(client: AnalyticsClient, history: HistorySelection) 
   return { forecast, methodology, preferences, presence, summary };
 }
 
-export function AnalyticsDashboard({
-  client = publicAnalyticsClient,
-}: AnalyticsDashboardProps) {
+function PresencePanel({ client }: { client: AnalyticsClient }) {
   const { t } = useLocale();
   const format = usePresenceFormat();
   const [history, setHistory] = useState<HistorySelection>({
@@ -1179,5 +1187,44 @@ export function AnalyticsDashboard({
       <Preferences preferences={loaded.preferences.data} t={t} />
       <Methodology methodology={methodology} t={t} />
     </section>
+  );
+}
+
+/**
+ * As duas camadas do painel, e só uma na tela por vez.
+ *
+ * A aba é o registro da camada externa neste arquivo, e é tudo o que ele sabe
+ * dela: o card mora em `external-context/`, com cliente, allowlist e texto
+ * próprios. Alternar em vez de empilhar não é preferência de layout — dois
+ * gráficos visíveis ao mesmo tempo produzem leitura causal mesmo sem nenhuma
+ * frase de correlação, e nenhum aviso desfaz isso (ADR-045 §2 e §4).
+ *
+ * A escolha fica acima do carregamento da série medida de propósito: analytics
+ * fora do ar não pode derrubar a camada externa, e fonte externa morta não
+ * atrasa a presença (ADR-045 §3).
+ */
+export function AnalyticsDashboard({
+  client = publicAnalyticsClient,
+}: AnalyticsDashboardProps) {
+  const { locale, t } = useLocale();
+  const [layer, setLayer] = useState<DashboardLayer>("presence");
+  const contextCopy = contextCopyFor(locale);
+  return (
+    <div className="analytics-layers">
+      <SegmentedControl
+        label={contextCopy.tabsLabel}
+        onChange={setLayer}
+        options={DASHBOARD_LAYERS}
+        optionLabel={(option) =>
+          option === "presence" ? t("analytics.title") : contextCopy.tabLabel
+        }
+        value={layer}
+      />
+      {layer === "presence" ? (
+        <PresencePanel client={client} />
+      ) : (
+        <ExternalContextTab />
+      )}
+    </div>
   );
 }

@@ -22,6 +22,16 @@ import {
   saveDraft,
 } from "../../shared/offline/encrypted-drafts";
 
+/**
+ * O replay disparado pelo evento "online" atravessa IndexedDB, decifra o
+ * rascunho e só então sincroniza. O orçamento padrão de 1 s do findBy é curto
+ * para essa cadeia quando o runner está disputado, e o estouro aparece como
+ * "texto não encontrado" — que se lê como regressão de UI em vez de falta de
+ * tempo. Mesma folga já adotada em SelfRegistrationJourney. As demais esperas
+ * do arquivo seguem no padrão: só o replay depende dessa cadeia.
+ */
+const REPLAY_SYNC_TIMEOUT_MS = 10_000;
+
 function renderRegistration(element: ReactElement) {
   return render(<LocaleProvider initial="pt">{element}</LocaleProvider>);
 }
@@ -190,7 +200,9 @@ describe("registro por convite", () => {
 
       window.dispatchEvent(new Event("online"));
 
-      await screen.findByText("Grupo enviado com sucesso.");
+      await screen.findByText("Grupo enviado com sucesso.", undefined, {
+        timeout: REPLAY_SYNC_TIMEOUT_MS,
+      });
       expect(
         screen.getByRole("button", { name: "Responder pesquisa voluntária" }),
       ).toBeInTheDocument();
@@ -307,7 +319,9 @@ describe("registro por convite", () => {
 
     window.dispatchEvent(new Event("online"));
 
-    await screen.findByText("Convite expirado.");
+    await screen.findByText("Convite expirado.", undefined, {
+      timeout: REPLAY_SYNC_TIMEOUT_MS,
+    });
     expect(peekInviteCapability()).toBeNull();
     await expect(inspectDraftPresence(draftId!)).resolves.toEqual({
       draft: false,

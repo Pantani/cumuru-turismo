@@ -1,0 +1,178 @@
+/*
+ * Estilo da aba de contexto externo.
+ *
+ * Fica ao lado do componente, e não no `styles.css` da aplicação, pela mesma
+ * razão de o payload ter endpoint próprio: uma regra escrita ao lado das
+ * regras do gráfico de presença acabaria herdando eixo, escala e paleta da
+ * série medida, que é exatamente o que a ADR-045 §2 separa.
+ *
+ * Nenhum `url(...)` remoto: a CSP publica `img-src 'self' data:`, e ativo de
+ * terceiro simplesmente não carrega.
+ */
+
+.external-context {
+  display: grid;
+  gap: var(--space-block);
+}
+
+.external-context-disclaimer {
+  border-left: 3px solid var(--line-strong);
+  color: var(--ink-2);
+  margin: 0;
+  padding-left: 0.875rem;
+}
+
+.external-context-status {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+
+.external-cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.external-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+}
+
+.external-card h4 {
+  margin: 0;
+}
+
+.external-card-value {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.external-card-value strong {
+  font-family: var(--font-num);
+  font-size: 1.75rem;
+  line-height: 1.1;
+}
+
+.external-card-unit {
+  color: var(--ink-2);
+}
+
+/*
+ * O traço é o conteúdo, não um espaço reservado: a caixa indisponível não
+ * carrega numeral algum, nem zero, nem barra de altura zero.
+ */
+.external-card-absent {
+  color: var(--ink-3);
+}
+
+.external-card-reason,
+.external-card-note {
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+  margin: 0;
+}
+
+/*
+ * `fresh` e `stale` diferem em texto antes de diferir em cor: a frase muda, e
+ * a borda apenas reforça. Quem não distingue as duas cores continua lendo que
+ * a coleta está defasada.
+ */
+.external-card-freshness {
+  border-left: 3px solid var(--positive);
+  color: var(--ink-2);
+  font-size: 0.875rem;
+  margin: 0;
+  padding-left: 0.625rem;
+}
+
+.external-card-freshness[data-card-freshness="stale"] {
+  border-left-color: var(--coral);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.external-card[data-card-status="unavailable"] {
+  background: var(--surface-sunken);
+  border-style: dashed;
+}
+
+.external-card-provenance {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-top: 0.75rem;
+}
+
+.external-card-provenance dt {
+  color: var(--ink-3);
+  font-size: 0.8125rem;
+}
+
+.external-card-provenance dd {
+  color: var(--ink-2);
+  font-size: 0.875rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.external-series-details summary {
+  cursor: pointer;
+}
+
+.external-series-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.external-series-table th,
+.external-series-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.external-sources {
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-block);
+}
+
+.external-sources ul {
+  display: grid;
+  gap: 1rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.external-source-name {
+  font-weight: 600;
+  margin: 0;
+}
+
+.external-source-attribution {
+  color: var(--ink-2);
+  font-size: 0.875rem;
+  margin: 0.25rem 0;
+}
+
+.external-source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .external-series-details summary {
+    transition: none;
+  }
+}

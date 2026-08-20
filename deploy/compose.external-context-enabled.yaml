@@ -1,0 +1,32 @@
+name: cumuru-external-context
+
+# Fase B: a camada externa ligada, com o upstream PARADO e sem nenhuma saída
+# para internet pública.
+#
+# `extra_hosts` fixa `api.open-meteo.com` no loopback do próprio contêiner: a
+# URL do alvo é constante em código e não pode ser reapontada por configuração,
+# então é a resolução de nome que modela o stub parado. Nada escuta em 443 ali,
+# a conexão é recusada na hora, e nenhum byte deste gate alcança a internet —
+# que é a regra dura da onda 8, não uma conveniência de laboratório.
+services:
+  api:
+    environment:
+      EXTERNAL_CONTEXT_ENABLED: "true"
+    extra_hosts:
+      - "api.open-meteo.com:127.0.0.1"
+      - "archive-api.open-meteo.com:127.0.0.1"
+  worker:
+    environment:
+      # A reconciliação de analytics é ancorada no relógio: uma estadia que
+      # termina entre as duas medidas move `coverage.ratio` e `updated_at`
+      # sozinha. Congelá-la na fase B é o que torna a identidade byte a byte
+      # das quatro rotas uma afirmação sobre a camada externa, e não sobre o
+      # tempo que passou entre os dois curl.
+      ANALYTICS_ENABLED: "false"
+      EXTERNAL_CONTEXT_ENABLED: "true"
+      EXTERNAL_INGESTION_INTERVAL: 5s
+      EXTERNAL_BATCH_BUDGET: 3s
+      EXTERNAL_REQUEST_TIMEOUT: 2s
+    extra_hosts:
+      - "api.open-meteo.com:127.0.0.1"
+      - "archive-api.open-meteo.com:127.0.0.1"

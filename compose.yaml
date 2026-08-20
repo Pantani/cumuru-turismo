@@ -38,6 +38,15 @@ x-core-local-environment: &core-local-environment
   ANALYTICS_PRE_REGISTERED_WEIGHT: ${ANALYTICS_PRE_REGISTERED_WEIGHT:-0.80}
   ANALYTICS_INCREMENTAL_INTERVAL: ${ANALYTICS_INCREMENTAL_INTERVAL:-15m}
   ANALYTICS_FULL_RECONCILIATION_INTERVAL: ${ANALYTICS_FULL_RECONCILIATION_INTERVAL:-24h}
+  # Camada de contexto externo (ADR-045). Desligada por padrão: com ela ligada
+  # o worker abre o primeiro egresso HTTP do produto. A API não recebe DSN
+  # novo — ela lê a camada pela quinta view, através do pool público.
+  EXTERNAL_CONTEXT_ENABLED: ${EXTERNAL_CONTEXT_ENABLED:-false}
+  EXTERNAL_ALLOWED_HOSTS: ${EXTERNAL_ALLOWED_HOSTS:-api.open-meteo.com}
+  EXTERNAL_REQUEST_TIMEOUT: ${EXTERNAL_REQUEST_TIMEOUT:-10s}
+  EXTERNAL_BATCH_BUDGET: ${EXTERNAL_BATCH_BUDGET:-2m}
+  EXTERNAL_MAX_RESPONSE_BYTES: ${EXTERNAL_MAX_RESPONSE_BYTES:-2097152}
+  EXTERNAL_INGESTION_INTERVAL: ${EXTERNAL_INGESTION_INTERVAL:-6h}
   # autoatendimento: autoatendimento e aprovação. Sem esta habilitação as rotas do canal
   # aberto não são registradas, e qualquer gate que sonde /accommodation-invite
   # ou /activation fica verde por ausência de rota em vez de por comportamento.
@@ -148,6 +157,11 @@ services:
       <<: *core-local-environment
       APP_ENV: local
       DATABASE_URL: postgres://cumuru_worker:cumuru-local-worker-only@postgres:5432/cumuru?sslmode=disable
+      # Papel próprio da ingestão externa (ADR-045 §1): o mesmo processo, pool
+      # distinto. cumuru_worker escreve a série protegida e não alcança
+      # `external`; cumuru_external escreve `external` e não alcança
+      # core/survey/analytics/public_data.
+      EXTERNAL_DATABASE_URL: postgres://cumuru_external:cumuru-local-external-only@postgres:5432/cumuru?sslmode=disable
       OIDC_MODE: fake
       OIDC_ISSUER: https://oidc.invalid/local
       OIDC_AUDIENCE: cumuru-local

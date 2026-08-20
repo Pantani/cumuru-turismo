@@ -98,18 +98,18 @@ migration_files="$(
     -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
     LC_ALL=C sort
 )"
-expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_presence_history_window.down.sql\n000002_presence_history_window.up.sql\n000003_public_accommodation_directory.down.sql\n000003_public_accommodation_directory.up.sql\n000004_calendar_feed.down.sql\n000004_calendar_feed.up.sql'
+expected_migration_files=$'000001_initial_schema.down.sql\n000001_initial_schema.up.sql\n000002_presence_history_window.down.sql\n000002_presence_history_window.up.sql\n000003_public_accommodation_directory.down.sql\n000003_public_accommodation_directory.up.sql\n000004_calendar_feed.down.sql\n000004_calendar_feed.up.sql\n000005_external_context.down.sql\n000005_external_context.up.sql'
 test "${migration_files}" = "${expected_migration_files}"
 
 "${COMPOSE[@]}" up --detach --wait postgres
 
-run_migrate up 4
+run_migrate up 5
 actual_migration_state="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${actual_migration_state}" = "4:false"
+test "${actual_migration_state}" = "5:false"
 
 psql_as cumuru_migration cumuru-local-migration-only <<'SQL'
 INSERT INTO core.organizations (id, name)
@@ -1490,11 +1490,13 @@ analytics_public_views="$(
           'current_summary',
           'current_presence',
           'current_preferences',
-          'current_methodology'
+          'current_methodology',
+          'current_external_context',
+          'current_external_sources'
         )
     "
 )"
-test "${analytics_public_views}" = "4"
+test "${analytics_public_views}" = "6"
 
 analytics_public_role="$(
   psql_as cumuru_public cumuru-local-public-only \
@@ -1507,7 +1509,9 @@ for public_view in \
   current_summary \
   current_presence \
   current_preferences \
-  current_methodology; do
+  current_methodology \
+  current_external_context \
+  current_external_sources; do
   psql_as cumuru_public cumuru-local-public-only \
     --command="SET ROLE public_runtime;
       SELECT count(*) FROM public_data.${public_view}"
@@ -1524,6 +1528,380 @@ expect_psql_failure \
   cumuru-local-public-only \
   "public_runtime unexpectedly read analytics.presence_days" \
   "SET ROLE public_runtime; SELECT count(*) FROM analytics.presence_days"
+
+# Direcionalidade da camada de contexto externo (ADR-045 §1). A fronteira é
+# aplicada pelo PostgreSQL, não por convenção de código, então ela é provada
+# nos dois sentidos e pelo lado negativo.
+
+# 1. O papel público lê a quinta view e nada da base. A view mora em
+#    `public_data` e lê `external` sob os privilégios do dono, e é por isso que
+#    `public_runtime` não precisa de USAGE em `external` — nem o recebe.
+for external_base_table in \
+  sources \
+  series \
+  observations \
+  fetch_runs \
+  tide_stations \
+  tide_harmonics; do
+  expect_psql_failure \
+    cumuru_public \
+    cumuru-local-public-only \
+    "public_runtime unexpectedly read external.${external_base_table}" \
+    "SET ROLE public_runtime;
+      SELECT count(*) FROM external.${external_base_table}"
+done
+
+# 2. A prova mais importante da onda: o papel que reconcilia presença,
+#    cobertura e forecast não alcança a camada externa. Sem esta asserção, a
+#    direcionalidade seria afirmação de documento, não fato do banco.
+for external_base_table in \
+  sources \
+  series \
+  observations \
+  fetch_runs \
+  tide_stations \
+  tide_harmonics; do
+  expect_psql_failure \
+    cumuru_worker \
+    cumuru-local-worker-only \
+    "worker_runtime unexpectedly read external.${external_base_table}" \
+    "SELECT count(*) FROM external.${external_base_table}"
+  expect_psql_failure \
+    cumuru_app \
+    cumuru-local-app-only \
+    "app_runtime unexpectedly read external.${external_base_table}" \
+    "SELECT count(*) FROM external.${external_base_table}"
+done
+
+external_schema_usage="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT
+        has_schema_privilege('worker_runtime', 'external', 'USAGE')::integer
+        || ':'
+        || has_schema_privilege('app_runtime', 'external', 'USAGE')::integer
+        || ':'
+        || has_schema_privilege('public_runtime', 'external', 'USAGE')::integer
+        || ':'
+        || has_schema_privilege(
+          'external_runtime', 'external', 'USAGE'
+        )::integer
+    "
+)"
+test "${external_schema_usage}" = "0:0:0:1"
+
+# 3. E o inverso: a ingestão externa escreve na própria camada e não enxerga
+#    nada da série protegida nem do operacional.
+psql_as cumuru_external cumuru-local-external-only \
+  --command="SELECT count(*) FROM external.observations"
+
+for protected_relation in \
+  core.stays \
+  core.accommodations \
+  survey.responses \
+  survey.answers \
+  analytics.presence_days \
+  analytics.metric_catalog \
+  public_data.publications \
+  public_data.metric_cells \
+  public_data.current_external_context \
+  public_data.current_external_sources; do
+  expect_psql_failure \
+    cumuru_external \
+    cumuru-local-external-only \
+    "external_runtime unexpectedly read ${protected_relation}" \
+    "SELECT count(*) FROM ${protected_relation}"
+done
+
+external_write_matrix="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT
+        has_table_privilege(
+          'external_runtime', 'external.observations', 'INSERT'
+        )::integer
+        || ':'
+        || has_table_privilege(
+          'external_runtime', 'analytics.presence_days', 'INSERT'
+        )::integer
+        || ':'
+        || has_table_privilege(
+          'external_runtime', 'public_data.metric_cells', 'INSERT'
+        )::integer
+        || ':'
+        || has_table_privilege(
+          'worker_runtime', 'external.observations', 'INSERT'
+        )::integer
+        || ':'
+        || has_table_privilege(
+          'worker_runtime', 'external.observations', 'SELECT'
+        )::integer
+    "
+)"
+test "${external_write_matrix}" = "1:0:0:0:0"
+
+# 4. Nenhuma chave estrangeira atravessa a fronteira. Uma FK de `external` para
+#    a série protegida acoplaria as duas camadas por integridade referencial,
+#    que é exatamente o que a ADR-045 §1 recusa — e o inverso transformaria
+#    dado de terceiro em pré-requisito de escrita da série medida.
+crossing_foreign_keys="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT count(*)
+      FROM pg_catalog.pg_constraint AS constraint_row
+      JOIN pg_catalog.pg_class AS source_table
+        ON source_table.oid = constraint_row.conrelid
+      JOIN pg_catalog.pg_namespace AS source_schema
+        ON source_schema.oid = source_table.relnamespace
+      JOIN pg_catalog.pg_class AS target_table
+        ON target_table.oid = constraint_row.confrelid
+      JOIN pg_catalog.pg_namespace AS target_schema
+        ON target_schema.oid = target_table.relnamespace
+      WHERE constraint_row.contype = 'f'
+        AND (
+          (
+            source_schema.nspname = 'external'
+            AND target_schema.nspname IN (
+              'core', 'survey', 'analytics', 'public_data',
+              'identity', 'platform', 'auth'
+            )
+          )
+          OR
+          (
+            target_schema.nspname = 'external'
+            AND source_schema.nspname IN (
+              'core', 'survey', 'analytics', 'public_data',
+              'identity', 'platform', 'auth'
+            )
+          )
+        )
+    "
+)"
+test "${crossing_foreign_keys}" = "0"
+
+# 5. A view com `external.observations` e `external.fetch_runs` VAZIAS. É o
+#    estado normal do card de maré, que nasce e permanece `unavailable` por
+#    U-4, e o estado de qualquer fonte antes da primeira coleta bem-sucedida.
+#    A view precisa devolver **uma linha** para a série sem observação, com
+#    proveniência completa e os campos da observação nulos — é isso que a
+#    ADR-045 §7 exige do ramo indisponível, e é o que faz `GET /public/context`
+#    responder 200 com o card `unavailable` em vez de 503 (§3).
+#
+#    Sem esta asserção o gate fica cego para nulabilidade: `migration-test`
+#    valida DDL, grants e direcionalidade, e `generated-check` valida
+#    reprodutibilidade do gerado. Nenhum dos dois executava a view vazia, e foi
+#    exatamente aí que três colunas de LEFT JOIN LATERAL saíram do sqlc como
+#    tipo de valor em vez de ponteiro.
+psql_as cumuru_migration cumuru-local-migration-only <<'SQL'
+INSERT INTO external.sources (
+  source_code, publisher, license_code, license_url,
+  attribution_text, terms_url, commercial_use_allowed, active
+) VALUES (
+  'chm_harmonics',
+  'Centro de Hidrografia da Marinha',
+  'LicenseRef-CHM-BNDO',
+  'https://www.marinha.mil.br/chm/dados-do-goos-brasil/bndo',
+  'Constantes harmonicas do Centro de Hidrografia da Marinha (CHM/BNDO).',
+  'https://www.marinha.mil.br/chm/dados-do-goos-brasil/bndo',
+  false,
+  true
+);
+
+INSERT INTO external.series (
+  source_code, series_code, card_code, unit_code, period_kind, value_kind,
+  declared_lag, retention_days, public_exposable, geo_scope,
+  definition_version, data_mode, derived, derivation_code,
+  unavailable_reason_code
+) VALUES (
+  'chm_harmonics', 'tide_height', 'tide', 'metre', 'hour', 'scalar',
+  interval '0', 730, true, 'station',
+  1, 'real_source', true, 'tide_harmonic_prediction',
+  'constants_not_imported'
+);
+SQL
+
+empty_lateral_shape="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT concat_ws(
+        ':',
+        count(*),
+        count(*) FILTER (WHERE quality_flag IS NULL),
+        count(*) FILTER (WHERE revision IS NULL),
+        count(*) FILTER (WHERE last_fetch_outcome IS NULL),
+        count(*) FILTER (WHERE period_start IS NULL),
+        count(*) FILTER (WHERE observed_value IS NULL),
+        count(*) FILTER (WHERE retrieved_at IS NULL),
+        count(*) FILTER (WHERE attribution_text <> ''),
+        count(*) FILTER (WHERE license_url <> ''),
+        count(*) FILTER (WHERE unavailable_reason_code
+          = 'constants_not_imported')
+      )
+      FROM public_data.current_external_context
+      WHERE source_code = 'chm_harmonics'
+    "
+)"
+# Uma linha; observação e run inteiramente nulas; proveniência inteira presente.
+test "${empty_lateral_shape}" = "1:1:1:1:1:1:1:1:1:1"
+
+# E pelo caminho de runtime, que é o que a rota pública percorre.
+public_empty_lateral="$(
+  psql_as cumuru_public cumuru-local-public-only \
+    --tuples-only --no-align \
+    --command="SET ROLE public_runtime;
+      SELECT count(*) FROM public_data.current_external_context
+      WHERE source_code = 'chm_harmonics' AND revision IS NULL"
+)"
+test "${public_empty_lateral}" = "SET"$'\n'"1"
+
+
+# 7. Idempotência de escrita no banco real, contada em linhas e não pelo
+#    retorno de nenhuma função Go. É o comportamento de que a ingestão passou a
+#    depender ao trocar a segunda leitura de revisão pela contagem de linhas
+#    afetadas: digest igual precisa recusar a gravação, digest diferente
+#    precisa entrar como revisão nova.
+psql_as cumuru_migration cumuru-local-migration-only <<'SQL'
+INSERT INTO external.fetch_runs (id, source_code, started_at, outcome)
+VALUES (
+  '00000000-0000-7000-8000-0000000009f1',
+  'chm_harmonics',
+  now(),
+  'ok'
+);
+SQL
+
+# Os três INSERT rodam em statements separados de propósito: dentro de um mesmo
+# statement, um CTE não enxerga a linha que outro CTE acabou de inserir, e o
+# ON CONFLICT passaria sem conflitar de verdade.
+first_write="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --command="
+      INSERT INTO external.observations (
+        source_code, series_code, period_kind, period_start, period_end,
+        revision, observed_value, quality_flag, retrieved_at, payload_digest,
+        fetch_run_id
+      ) VALUES (
+        'chm_harmonics', 'tide_height', 'hour',
+        timestamptz '2026-01-01 00:00:00+00',
+        timestamptz '2026-01-01 01:00:00+00',
+        1, 1.25, 'ok', now(), repeat('a', 64),
+        '00000000-0000-7000-8000-0000000009f1'
+      )
+      ON CONFLICT (source_code, series_code, period_start, payload_digest)
+      DO NOTHING"
+)"
+test "${first_write}" = "INSERT 0 1"
+
+repeated_write="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --command="
+      INSERT INTO external.observations (
+        source_code, series_code, period_kind, period_start, period_end,
+        revision, observed_value, quality_flag, retrieved_at, payload_digest,
+        fetch_run_id
+      ) VALUES (
+        'chm_harmonics', 'tide_height', 'hour',
+        timestamptz '2026-01-01 00:00:00+00',
+        timestamptz '2026-01-01 01:00:00+00',
+        1, 1.25, 'ok', now(), repeat('a', 64),
+        '00000000-0000-7000-8000-0000000009f1'
+      )
+      ON CONFLICT (source_code, series_code, period_start, payload_digest)
+      DO NOTHING"
+)"
+# Zero linha afetada é o no-op idempotente, e é o valor que a ingestão lê.
+test "${repeated_write}" = "INSERT 0 0"
+
+revised_write="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --command="
+      INSERT INTO external.observations (
+        source_code, series_code, period_kind, period_start, period_end,
+        revision, observed_value, quality_flag, retrieved_at, payload_digest,
+        fetch_run_id
+      ) VALUES (
+        'chm_harmonics', 'tide_height', 'hour',
+        timestamptz '2026-01-01 00:00:00+00',
+        timestamptz '2026-01-01 01:00:00+00',
+        2, 1.31, 'ok', now(), repeat('b', 64),
+        '00000000-0000-7000-8000-0000000009f1'
+      )
+      ON CONFLICT (source_code, series_code, period_start, payload_digest)
+      DO NOTHING"
+)"
+test "${revised_write}" = "INSERT 0 1"
+
+# Duas linhas para o mesmo período, revisões 1 e 2, e a original preservada: a
+# revisão é fato gravado, nunca sobrescrita in-place que apaga o que já foi
+# servido.
+idempotency_shape="$(
+  psql_as cumuru_migration cumuru-local-migration-only \
+    --tuples-only --no-align \
+    --command="
+      SELECT concat_ws(
+        ':',
+        count(*),
+        count(*) FILTER (WHERE revision = 1 AND observed_value = 1.25),
+        count(*) FILTER (WHERE revision = 2 AND observed_value = 1.31),
+        count(DISTINCT payload_digest)
+      )
+      FROM external.observations
+      WHERE source_code = 'chm_harmonics'
+        AND series_code = 'tide_height'
+        AND period_start = timestamptz '2026-01-01 00:00:00+00'
+    "
+)"
+test "${idempotency_shape}" = "2:1:1:2"
+
+psql_as cumuru_migration cumuru-local-migration-only \
+  --command="DELETE FROM external.observations
+    WHERE source_code = 'chm_harmonics'"
+psql_as cumuru_migration cumuru-local-migration-only \
+  --command="DELETE FROM external.fetch_runs
+    WHERE source_code = 'chm_harmonics'"
+
+psql_as cumuru_migration cumuru-local-migration-only \
+  --command="DELETE FROM external.series WHERE source_code = 'chm_harmonics'"
+psql_as cumuru_migration cumuru-local-migration-only \
+  --command="DELETE FROM external.sources WHERE source_code = 'chm_harmonics'"
+
+# 6. Cada relação que a rota pública consulta, executada **como
+#    `public_runtime`**, na mesma sessão e com o mesmo `search_path` do pool
+#    público. Esta é a asserção que faltava e que deixou passar o 503
+#    incondicional: a ACL era provada de um lado e a consulta do outro, e nada
+#    fazia as duas se encontrarem. Uma consulta que leia tabela base de
+#    `external` falha aqui, em vez de falhar em produção.
+#
+#    O `search_path` é o mesmo de `publicRuntimeSearchPath`
+#    (`store/public_pool.go:14`), de propósito: se uma consulta só funcionar
+#    com um caminho mais largo, ela não funciona no runtime real.
+for public_relation in \
+  public_data.current_summary \
+  public_data.current_presence \
+  public_data.current_preferences \
+  public_data.current_methodology \
+  public_data.current_external_context \
+  public_data.current_external_sources; do
+  psql_as cumuru_public cumuru-local-public-only \
+    --command="SET ROLE public_runtime;
+      SET search_path = pg_catalog, public_data;
+      SELECT count(*) FROM ${public_relation}" >/dev/null
+done
+
+# E o par negativo, para que a asserção acima não passe por caminho largo
+# demais: sob o mesmo `search_path`, as tabelas base de `external` seguem
+# inalcançáveis.
+expect_psql_failure \
+  cumuru_public \
+  cumuru-local-public-only \
+  "public_runtime reached external.sources under the runtime search_path" \
+  "SET ROLE public_runtime;
+    SET search_path = pg_catalog, public_data;
+    SELECT count(*) FROM external.sources"
 
 psql_as cumuru_app cumuru-local-app-only \
   --command="SELECT count(*) FROM analytics.current_quality"
@@ -1786,9 +2164,9 @@ psql_as cumuru_migration cumuru-local-migration-only \
       );
   " >/dev/null
 
-# Round trip completo: a baseline, a janela histórica, a lista pública e o
-# feed de calendário sobem, descem e reaplicam de forma limpa.
-run_migrate down 4
+# Round trip completo: a baseline, a janela histórica, a lista pública, o feed
+# de calendário e o contexto externo sobem, descem e reaplicam de forma limpa.
+run_migrate down 5
 schemas_left="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
@@ -1802,18 +2180,19 @@ schemas_left="$(
         'analytics',
         'public_data',
         'platform',
-        'auth'
+        'auth',
+        'external'
       )
     "
 )"
 test "${schemas_left}" = "0"
 
-run_migrate up 4
+run_migrate up 5
 final_version="$(
   psql_as cumuru_migration cumuru-local-migration-only \
     --tuples-only --no-align \
     --command="SELECT version || ':' || dirty FROM public.schema_migrations"
 )"
-test "${final_version}" = "4:false"
+test "${final_version}" = "5:false"
 
-echo "migrations zero-to-four, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup, public listing consent, calendar feed worker boundary and fictitious tenant isolation passed"
+echo "migrations zero-to-five, rollback to zero, reapply, document uniqueness, self-service and approval, fnrh vocabulary, preventive audit/outbox RETURNING grants bounded to id, closed categories, onboarding and auth grants, bounded cleanup, public listing consent, calendar feed worker boundary, fictitious tenant isolation and external context directionality passed"
