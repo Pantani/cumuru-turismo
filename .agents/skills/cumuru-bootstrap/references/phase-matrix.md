@@ -355,3 +355,136 @@ a titulares reais.
 Envio de e-mail, FNRH, cofre `identity.visitor_identities`, alteração do
 dashboard público além do filtro de aprovação e qualquer novo valor no enum
 `core.stay_status`.
+
+## Fase 8 — Contexto externo
+
+### Dependências
+
+- Fase 1 `PASS`, porque a ingestão usa worker, config, migrations e telemetria;
+- Fase 4 `PASS`, porque a disciplina de pool público e views do ADR-030 é o
+  padrão a **imitar sem contaminar**, e a aba nova vive ao lado do painel;
+- governança `PASS` ou `PROTOTYPE_ONLY`;
+- Fases 2, 3, 5, 6 e 7 são irrelevantes para a elegibilidade.
+
+A fase **invalida a auditoria 6A**, porque muda a fronteira pública: o acesso
+positivo do papel público passa de quatro para seis views de `public_data`.
+
+### Gate externo
+
+Duas naturezas diferentes, e nenhuma delas é de disponibilidade de dado.
+
+`EXTERNAL_SOURCE_LICENSE` é **por fonte**: licença identificada por URL
+versionada, texto de atribuição redigido, limite de uso declarado e
+compatibilidade com o uso pretendido. A chave do manifesto é binária, mas a
+evidência **precisa trazer uma entrada nominal para cada `source_code` do
+vocabulário fechado da migration** — inclusive as que não publicam card, com o
+motivo. Um `PASS` global sobre evidência que descreve uma fonte só autorizaria
+em silêncio as demais, e o vocabulário é estático justamente para que essa
+conferência seja possível sem ler o banco. Fonte sem esse gate **não renderiza card
+público**, mesmo que a ingestão funcione. `PROTOTYPE_ONLY` **não** o dispensa,
+porque atribuição CC-BY não depende de o software ser protótipo.
+
+`TIDE_HARMONIC_CONSTANTS` é **gate de direitos**, não de dado. As fichas F-41 do
+CHM são públicas e entregam o datum vertical, mas não as constantes harmônicas.
+As constantes ficam no BNDO, só por solicitação, e pode ser exigido Termo de
+Compromisso que veda repasse a terceiro — publicar predição derivada num painel
+público é exatamente repasse. Destrava com ato humano: pedido a
+`chm.bndo@marinha.mil.br` das constantes da estação 40154 (Porto Seguro), com
+pedido expresso de autorização para publicar predições derivadas.
+
+Registre em `_workspace/cumuru-bootstrap/phase-8/external-gates.env`:
+
+```text
+EXTERNAL_SOURCE_LICENSE=PASS
+EXTERNAL_SOURCE_LICENSE_EVIDENCE=evidence/external-source-license.md
+TIDE_HARMONIC_CONSTANTS=PASS
+TIDE_HARMONIC_CONSTANTS_EVIDENCE=evidence/tide-harmonic-constants.md
+```
+
+As regras de contenção e formato são as mesmas da Fase 5. Sem
+`TIDE_HARMONIC_CONSTANTS`, a fase continua implementável e pode alcançar `PASS`
+técnico; o card de maré nasce `unavailable` com
+`reason_code = constants_not_imported` e o QA registra `TIDE_CARD=BLOCKED`.
+
+### Estudo paralelo
+
+1. Domínio/DB: schema `external`, revisão de série, `fetch_runs`, retenção e
+   direcionalidade por ACL.
+2. Contrato/UI: `GET /public/context`, três estados, proveniência por card,
+   `data_mode` por card e as views novas em `public_data`.
+3. Privacidade/segurança: egresso, differencing entre universo externo e
+   cobertura, licenças e atribuição.
+
+### Ordem de escrita
+
+1. Supervisor congela ADR-045, contrato, migration e grants.
+2. Platform materializa OpenAPI, `000005`, view, grants e geração.
+3. Backend implementa ingestão, breaker, handler e stub local de fixtures.
+4. Frontend implementa a aba separada e os três estados.
+5. QA prova isolamento com o upstream parado.
+
+### Ownership de implementação
+
+| Owner | Escopo |
+| --- | --- |
+| platform | `contracts/**`, `apps/api/migrations/000005_*`, `database/schema.sql`, gerados, `store/queries/**`, config, provisionamento de papéis, `deploy/scripts/test-migrations.sh`, `test-local-restore.sh` |
+| backend | `apps/api/internal/external/**`, worker, handler, stub de fixtures |
+| frontend | `apps/web/src/features/analytics/**` (aba nova apenas) |
+
+### Gate
+
+- dado externo não entra em `analytics`, `public_data.metric_cells`, forecast
+  nem cobertura; `policy.go`, `presence*.go`, `publication.go` e `coverage.go`
+  ficam byte a byte iguais;
+- `worker_runtime` **falha** ao ler `external.*` — é a prova da direcionalidade;
+- `external_runtime` **falha** ao ler `core`, `survey`, `analytics` e
+  `public_data`;
+- `public_runtime` lê as **seis** views de `public_data` — as quatro da série
+  protegida mais `current_external_context` e `current_external_sources` — e
+  **falha** nas tabelas base de `external`;
+  não recebe `USAGE` em `external` e `publicRuntimeSearchPath` não muda;
+- nenhuma FK atravessa `external` → `core|survey|analytics|public_data`;
+- o `down` dropa o schema `external`, **e a contagem de schemas remanescentes
+  inclui `external`**, senão um `down` incompleto passa em silêncio;
+- **com o stub parado, as quatro rotas públicas de analytics respondem corpo e
+  `ETag` idênticos**; `/public/context` responde `200` com o card `unavailable`,
+  nunca `503` por fonte de terceiro;
+- reconciliação de analytics produz digest idêntico com `external` populado e
+  vazio;
+- ingestão idempotente: duas execuções sobre a mesma fixture produzem as mesmas
+  linhas; digest diferente insere `revision + 1`;
+- upstream com `500`, timeout, corpo truncado, JSON inválido e corpo acima do
+  limite: o ciclo termina, marca `unavailable`, incrementa métrica, **não**
+  aborta o worker e **não** apaga a última observação válida;
+- host fora da allowlist, `http://` e redirect para host não permitido são
+  recusados antes do DNS;
+- nenhum parâmetro controlado pelo cliente alcança a URL externa;
+- requisição ao painel **não** dispara chamada de egresso;
+- `User-Agent` constante, sem tenant, organização, acomodação, operador nem
+  sujeito OIDC;
+- log de egresso sem URL com query, corpo ou headers;
+- CSP servida mantém exatamente `connect-src 'self'` e `img-src 'self' data:`;
+- payload não contém `coverage`, `ratio`, `sample_size`, `accommodation_count`
+  nem contagem de acomodações;
+- nenhuma view, handler ou componente calcula razão entre número externo e
+  cobertura ou célula protegida — **inclusive no cliente**;
+- card renderiza fonte, licença, timestamp de origem e `data_mode` próprio no
+  render inicial, sem interação; ausência de qualquer um falha o teste;
+- **com `value` nulo o DOM não contém numeral** na região de medida — título,
+  estado, motivo e lugar do valor —, não desenha ponto no eixo nem barra de
+  altura zero, e mostra o motivo em linguagem leiga. A região de proveniência
+  (`[data-card-provenance]`) é exceção declarada: ela carrega data e rótulo de
+  licença, que a ADR-045 §7 exige justamente no ramo indisponível;
+- `stale` é visualmente distinto de `fresh`, com `observed_at` visível;
+- a aba não compartilha eixo, escala ou legenda com o gráfico de presença;
+- sem constantes do CHM, o card de maré é `unavailable` explícito, sem curva e
+  sem horário de extremo;
+- service worker não intercepta a rota nova;
+- nenhum gate depende de rede pública.
+
+### Fora de escopo
+
+Card público de maré com valor, Wikimedia Pageviews, ANAC, IBGE, Observatório
+do Turismo da Bahia, BrasilAPI feriados (primeiro incremento após a entrega 1),
+contagem publicada derivada do Cadastur, qualquer dado externo em `analytics` ou
+`public_data.metric_cells`, e retenção histórica longa na entrega 1.

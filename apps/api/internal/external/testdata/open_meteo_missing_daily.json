@@ -1,0 +1,9 @@
+{
+  "latitude": -17.1,
+  "longitude": -39.19,
+  "timezone": "America/Bahia",
+  "daily_units": {
+    "time": "iso8601",
+    "temperature_2m_max": "°C"
+  }
+}

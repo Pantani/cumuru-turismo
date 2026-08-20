@@ -11,7 +11,7 @@ import (
 func TestOpenAnalyticsServicesIsDisabledWithoutOpeningPublicPool(t *testing.T) {
 	t.Parallel()
 
-	publicReader, qualityReader, closeDatabase, err := openAnalyticsServices(
+	readers, closeDatabase, err := openAnalyticsServices(
 		context.Background(),
 		config.Config{},
 		&store.Store{},
@@ -19,8 +19,14 @@ func TestOpenAnalyticsServicesIsDisabledWithoutOpeningPublicPool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("openAnalyticsServices() error = %v", err)
 	}
-	if publicReader != nil || qualityReader != nil {
-		t.Fatalf("readers = %#v %#v", publicReader, qualityReader)
+	if readers.analytics != nil || readers.quality != nil {
+		t.Fatalf("readers = %#v %#v", readers.analytics, readers.quality)
+	}
+	// The external context rides the public pool, so it stays absent for the
+	// same reason: with analytics off there is no public connection at all, and
+	// GET /public/context is simply not registered.
+	if readers.context != nil {
+		t.Fatalf("context reader = %#v", readers.context)
 	}
 	closeDatabase()
 }

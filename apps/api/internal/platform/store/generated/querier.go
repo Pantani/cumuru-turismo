@@ -44,6 +44,10 @@ type Querier interface {
 	ConsumeActivationCapability(ctx context.Context, arg ConsumeActivationCapabilityParams) (ConsumeActivationCapabilityRow, error)
 	ConsumeInvite(ctx context.Context, arg ConsumeInviteParams) (ConsumeInviteRow, error)
 	ConsumeSurveyCapability(ctx context.Context, arg ConsumeSurveyCapabilityParams) (SurveyCapability, error)
+	// Sem constantes importadas o card de maré é `unavailable` declarado com
+	// `constants_not_imported` (ADR-045 §8). Nenhuma constante fictícia, nenhum
+	// fallback para altura de superfície do mar modelada.
+	CountExternalTideHarmonics(ctx context.Context, stationCode string) (int64, error)
 	// A resposta devolve só id e created_at porque a rota é aberta: ecoar o que foi
 	// gravado transformaria a criação em consulta de contato alheio. approval_state
 	// e version ficam no DEFAULT da tabela, que é a única fonte do estado inicial.
@@ -87,6 +91,10 @@ type Querier interface {
 	DeleteDraftConsentRequirements(ctx context.Context, questionnaireVersionID pgtype.UUID) error
 	DeleteDraftQuestionnaireContent(ctx context.Context, questionnaireVersionID pgtype.UUID) error
 	DeleteExpiredAuthSessions(ctx context.Context, cutoff pgtype.Timestamptz) error
+	// Retenção por série, em lote limitado: resposta bruta de terceiro é cache com
+	// prazo, não acervo. O teto existe porque o ciclo de ingestão tem orçamento
+	// próprio e não pode ficar pendurado no relógio de requisição.
+	DeleteExpiredExternalObservations(ctx context.Context, arg DeleteExpiredExternalObservationsParams) (int64, error)
 	DeletePresenceDay(ctx context.Context, arg DeletePresenceDayParams) (int64, error)
 	// Rejeição e expiração eliminam os visitantes generalizados e preservam a
 	// casca auditável em core.stays. Não há restrição de "pelo menos um visitante",
@@ -123,6 +131,7 @@ type Querier interface {
 	FindLocalDemoStay(ctx context.Context, arg FindLocalDemoStayParams) (pgtype.UUID, error)
 	FindOnboardedAccommodation(ctx context.Context, arg FindOnboardedAccommodationParams) (FindOnboardedAccommodationRow, error)
 	FindSeedAccount(ctx context.Context, email string) (FindSeedAccountRow, error)
+	FinishExternalFetchRun(ctx context.Context, arg FinishExternalFetchRunParams) error
 	GetAccessibleAccommodation(ctx context.Context, arg GetAccessibleAccommodationParams) (GetAccessibleAccommodationRow, error)
 	GetAccessibleStay(ctx context.Context, arg GetAccessibleStayParams) (GetAccessibleStayRow, error)
 	GetAccommodationInviteForCapability(ctx context.Context, inviteID pgtype.UUID) (GetAccommodationInviteForCapabilityRow, error)
@@ -135,6 +144,7 @@ type Querier interface {
 	GetCurrentMethodology(ctx context.Context) (GetCurrentMethodologyRow, error)
 	GetCurrentPublicationVersion(ctx context.Context) (int64, error)
 	GetInviteForCapability(ctx context.Context, inviteID pgtype.UUID) (GetInviteForCapabilityRow, error)
+	GetLatestExternalFetchRun(ctx context.Context, sourceCode string) (ExternalFetchRun, error)
 	GetLocalDemoAccommodation(ctx context.Context, id pgtype.UUID) (GetLocalDemoAccommodationRow, error)
 	GetLocalDemoAccount(ctx context.Context, id pgtype.UUID) (GetLocalDemoAccountRow, error)
 	GetLocalDemoMembership(ctx context.Context, id pgtype.UUID) (GetLocalDemoMembershipRow, error)
@@ -159,6 +169,12 @@ type Querier interface {
 	InsertAuthSession(ctx context.Context, arg InsertAuthSessionParams) error
 	InsertConsentDecision(ctx context.Context, arg InsertConsentDecisionParams) error
 	InsertConsentRequirement(ctx context.Context, arg InsertConsentRequirementParams) error
+	// Devolve a contagem de linhas afetadas. Zero significa que o índice único
+	// (source, series, period_start, payload_digest) recusou a gravação porque o
+	// fato já existia — é resultado esperado, não erro. Um significa revisão nova.
+	// É essa contagem que responde "a linha apareceu?", no lugar de reler a
+	// revisão depois do INSERT.
+	InsertExternalObservation(ctx context.Context, arg InsertExternalObservationParams) (int64, error)
 	InsertInviteVisitor(ctx context.Context, arg InsertInviteVisitorParams) (InsertInviteVisitorRow, error)
 	InsertLocalDemoAccommodation(ctx context.Context, arg InsertLocalDemoAccommodationParams) error
 	InsertLocalDemoAccount(ctx context.Context, arg InsertLocalDemoAccountParams) error
@@ -214,6 +230,20 @@ type Querier interface {
 	// feed, porque a hospedagem que tem três anúncios vê uma fila só.
 	ListCalendarReservations(ctx context.Context, arg ListCalendarReservationsParams) ([]ListCalendarReservationsRow, error)
 	ListConsentRequirementsForVersion(ctx context.Context, questionnaireVersionID pgtype.UUID) ([]SurveyConsentRequirement, error)
+	// As fontes creditadas do documento público. O Cadastur entra por aqui e só
+	// por aqui (U-7): atribuição e link, sem contagem calculada pela plataforma,
+	// sem card com valor e sem série de universo publicada.
+	// Lê a view, não `external.sources`: esta consulta roda no pool público, e
+	// `public_runtime` não tem USAGE em `external`. Ler a tabela base aqui fazia a
+	// rota responder 503 sempre, com o documento montável.
+	ListCreditedExternalSources(ctx context.Context) ([]PublicDataCurrentExternalSource, error)
+	// Camada de contexto externo (ADR-045). A leitura pública sai da view em
+	// `public_data`; a escrita entra em `external` sob `external_runtime`. Os dois
+	// caminhos nunca se cruzam com a série protegida.
+	// Documento único, sem seletor: `/public/context` responde a página inteira,
+	// como `/public/methodology`. A ordenação é estável para que o ETag do JSON
+	// canônico não dependa do plano de execução.
+	ListCurrentExternalContext(ctx context.Context) ([]PublicDataCurrentExternalContext, error)
 	ListCurrentPreferenceCells(ctx context.Context, periodSelector string) ([]PublicDataCurrentPreference, error)
 	ListCurrentPresenceCells(ctx context.Context, periodSelector string) ([]PublicDataCurrentPresence, error)
 	// A janela recente é medida contra o `as_of_on` da própria publicação: um
@@ -282,6 +312,10 @@ type Querier interface {
 	// não o histórico, porque o objetivo é suspender quem está quebrado agora.
 	MarkCalendarFeedSynced(ctx context.Context, arg MarkCalendarFeedSyncedParams) error
 	MarkReconciliationRunRunning(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Digest igual é no-op no INSERT; digest diferente entra como revisão nova.
+	// A revisão é fato gravado porque ERA5 e Wikimedia backfillam dado já
+	// publicado, e trocar o valor in-place apagaria o rastro.
+	NextExternalObservationRevision(ctx context.Context, arg NextExternalObservationRevisionParams) (int32, error)
 	PromoteCurrentPublication(ctx context.Context, publicationVersion int64) (int64, error)
 	PublishQuestionnaireVersion(ctx context.Context, arg PublishQuestionnaireVersionParams) (SurveyQuestionnaireVersion, error)
 	RecordAggregationFailureQualitySnapshot(ctx context.Context, arg RecordAggregationFailureQualitySnapshotParams) (RecordAggregationFailureQualitySnapshotRow, error)
@@ -325,6 +359,7 @@ type Querier interface {
 	// devolve a mesma resposta indistinguível dada a um desafio inválido, para o
 	// endpoint não virar oráculo.
 	SpendProofOfWorkChallenge(ctx context.Context, arg SpendProofOfWorkChallengeParams) (int64, error)
+	StartExternalFetchRun(ctx context.Context, arg StartExternalFetchRunParams) error
 	SubmitQuestionnaireVersionReview(ctx context.Context, arg SubmitQuestionnaireVersionReviewParams) (SurveyQuestionnaireVersion, error)
 	// O funil não coleta nada: ele conta o que o registro já guarda. Convite
 	// emitido, convite usado, convite que expirou sem uso — três estados que já
@@ -370,6 +405,11 @@ type Querier interface {
 	// ainda está na fila; o que a hospedagem já confirmou é estadia, e estadia se
 	// corrige na tela dela, não por um arquivo remoto.
 	UpsertCalendarReservation(ctx context.Context, arg UpsertCalendarReservationParams) error
+	// `unit_code` e `period_kind` não são atualizados aqui de propósito: mudar a
+	// unidade de uma série é `series_code` novo, senão a observação antiga passa a
+	// mentir sobre a própria unidade.
+	UpsertExternalSeries(ctx context.Context, arg UpsertExternalSeriesParams) error
+	UpsertExternalSource(ctx context.Context, arg UpsertExternalSourceParams) error
 	UpsertPresenceDay(ctx context.Context, arg UpsertPresenceDayParams) (int64, error)
 	// The row count is the signal the caller needs: a fresh insert and a re-run
 	// under the same organization both touch one row, so zero means the guard
@@ -377,6 +417,11 @@ type Querier interface {
 	UpsertSeedAccommodation(ctx context.Context, arg UpsertSeedAccommodationParams) (int64, error)
 	UpsertSeedMembership(ctx context.Context, arg UpsertSeedMembershipParams) error
 	UpsertSeedOrganization(ctx context.Context, arg UpsertSeedOrganizationParams) error
+	// `external` entra nesta lista pelo lado NEGATIVO (ADR-045, emenda ao
+	// ADR-030): a varredura só detecta grant indevido no que ela varre, então sem
+	// `external` aqui um SELECT concedido por engano a `public_runtime` em
+	// `external.*` passaria despercebido. `expected_schema_usage` continua só com
+	// `public_data`, porque o papel público não recebe USAGE em `external`.
 	ValidatePublicRuntimeSession(ctx context.Context) (ValidatePublicRuntimeSessionRow, error)
 	// Some do feed quem foi cancelado na plataforma, e o arquivo não diz isso: diz
 	// apenas que não está mais lá. Por isso a retirada alcança só a fila pendente —

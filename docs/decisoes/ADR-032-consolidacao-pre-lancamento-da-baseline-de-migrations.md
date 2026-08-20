@@ -2,6 +2,12 @@
 
 **Status:** aceito.
 
+> **Emendado pelo [ADR-045](ADR-045-camada-de-contexto-externo.md).** A
+> partir de `000003`, o regime é **append-only**: não há quarta onda de
+> squash. O regime já havia sido retomado na prática por
+> `000002_presence_history_window`. Nova consolidação, se algum dia houver,
+> exige emenda explícita a este ADR, não escolha silenciosa de uma onda.
+
 ## Contexto
 
 As Fases 1–4 foram implementadas antes da criação ou lançamento de qualquer

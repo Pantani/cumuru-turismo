@@ -80,6 +80,32 @@ arquivo.
   origem guardado sob HMAC e nenhuma coluna de identidade — a estadia só nasce
   por confirmação humana informando o número de hóspedes, que o arquivo não
   traz;
+- camada de contexto externo: schema `external` com `sources`, `series`,
+  `observations`, `fetch_runs`, `tide_stations` e `tide_harmonics`, migration
+  `000005_external_context` append-only, e `GET /public/context` como documento
+  único sob a tag `external` e o valor novo `x-cumuru-feature: external-context`
+  ([ADR-045](docs/decisoes/ADR-045-camada-de-contexto-externo.md));
+- papel de banco `external_runtime` (login local `cumuru_external`), dedicado à
+  ingestão externa: escreve em `external` e não recebe `SELECT` em `core`,
+  `survey`, `analytics` nem `public_data`. `worker_runtime`, que reconcilia a
+  série protegida, não recebe nenhum privilégio nem `USAGE` em `external`. A
+  direcionalidade é ACL do PostgreSQL, não convenção de código, e é provada nos
+  dois sentidos em `deploy/scripts/test-migrations.sh`, junto da asserção de que
+  nenhuma chave estrangeira atravessa a fronteira;
+- duas views públicas novas em `public_data`: `current_external_context`, com os
+  cards, e `current_external_sources`, com os créditos das fontes ativas — é
+  esta que carrega a atribuição do Cadastur, creditado sem card por não ter
+  contagem publicada. As duas leem `external` sob os privilégios do dono — o papel público
+  segue sem qualquer privilégio e sem `USAGE` no schema `external`, e o
+  `search_path` do pool público não muda;
+- proveniência por card no payload público — fonte, licença, texto de
+  atribuição, `terms_url`, `retrieved_at`, período coberto, defasagem declarada
+  e revisão — obrigatória **também** no card indisponível, e `data_mode` por
+  card em vez de rótulo global;
+- configuração do primeiro egresso HTTP do produto: allowlist de host em
+  configuração e nunca em banco, timeout próprio, orçamento de lote distinto de
+  `DATABASE_TIMEOUT`, teto de resposta e `User-Agent` institucional fixo.
+
 - autenticação local por e-mail e senha com Argon2id, sessão opaca, bloqueio
   por tentativas e `POST /auth/login`, `POST /auth/logout` e `GET /auth/session`
   no contrato, permitindo entrar sem CNPJ, Cadastur ou chave federal

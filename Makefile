@@ -158,6 +158,9 @@ local-demo-test: ## Valida seed local em banco novo, repetição e preservação
 local-demo-e2e: ## Executa a jornada local completa em Chromium e stack efêmera
 	@bash deploy/scripts/test-local-demo-e2e.sh
 
+external-context-isolation: ## Prova o isolamento da camada externa com o upstream parado via Docker
+	@bash deploy/scripts/test-external-context-isolation.sh
+
 analytics-remediation: ## Executa o build reproduzível de remediação do runtime local
 	@$(MAKE) --no-print-directory generated-check
 	@$(MAKE) --no-print-directory local-demo-test

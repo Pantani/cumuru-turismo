@@ -19,6 +19,7 @@ import (
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
 	"github.com/Pantani/cumuru/apps/api/internal/calendarfeed"
 	"github.com/Pantani/cumuru/apps/api/internal/directory"
+	"github.com/Pantani/cumuru/apps/api/internal/external"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/idempotency"
 	"github.com/Pantani/cumuru/apps/api/internal/questionnaire"
@@ -73,6 +74,7 @@ type Dependencies struct {
 	Questionnaires                 *questionnaire.Service
 	PublicAnalytics                analytics.PublicReader
 	PublicDirectory                directory.PublicReader
+	PublicContext                  external.ContextReader
 	AnalyticsQuality               analytics.QualityReader
 	AnalyticsFunnel                analytics.FunnelReader
 	OwnPerformance                 analytics.OwnPerformanceReader
@@ -187,6 +189,7 @@ func (d Dependencies) registerFeatureRoutes(mux *http.ServeMux, metrics *httpMet
 	d.registerOpenChannelRoutes(mux, metrics)
 	d.registerCalendarFeedRoutes(mux, metrics)
 	d.registerAnalyticsRoutes(mux, metrics)
+	d.registerExternalRoutes(mux, metrics)
 }
 
 type openChannelSurface struct {

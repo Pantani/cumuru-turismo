@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/Pantani/cumuru/apps/api/internal/analytics"
+	"github.com/Pantani/cumuru/apps/api/internal/calendarfeed"
+	"github.com/Pantani/cumuru/apps/api/internal/external"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/config"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/database"
 	"github.com/Pantani/cumuru/apps/api/internal/platform/logging"
@@ -117,13 +119,9 @@ func runWorkerWithResources(
 		Help:      "Total de deadlines excedidos ao aguardar pollers no shutdown.",
 	})
 	approvalExpiry := newApprovalExpiryMetrics()
-	approvals, err := approvalSweeper(platformStore, cfg)
+	approvals, calendarSync, err := workerSweepers(platformStore, cfg)
 	if err != nil {
-		return errors.New("approval expiry initialization failed")
-	}
-	calendarSync, err := calendarSyncWorker(platformStore, cfg)
-	if err != nil {
-		return errors.New("calendar feed synchronization initialization failed")
+		return err
 	}
 	calendarMetrics := calendarSyncMetricSet()
 	registry.MustRegister(
@@ -134,6 +132,17 @@ func runWorkerWithResources(
 	)
 	registry.MustRegister(approvalExpiry.collectors()...)
 	registry.MustRegister(calendarMetrics.failures, calendarMetrics.feeds)
+	externalContext, closeExternal, err := openExternalContext(
+		ctx, cfg, logger, registry,
+	)
+	if err != nil {
+		return err
+	}
+	// Closed on return. On the shutdown path that already timed out the pollers
+	// outlive this frame, and an in-flight ingestion query then fails — which is
+	// exactly the isolation the layer is built for: it logs, records nothing and
+	// never touches the protected series.
+	defer closeExternal()
 	alive.Set(1)
 	defer alive.Set(0)
 	updateReadiness(ctx, platformStore, ready)
@@ -157,6 +166,7 @@ func runWorkerWithResources(
 		},
 		approvals: approvals, approvalExpiry: approvalExpiry,
 		calendarSync: calendarSync, calendarMetrics: calendarMetrics,
+		externalContext: externalContext,
 	})
 	logger.Info("worker started", "component", "worker")
 	serveErr := server.Serve(
@@ -206,6 +216,27 @@ func workerServices(
 // approvalSweeper is nil when the feature is off. With the feature on and no usable
 // key the repository refuses to exist, and the worker fails to start rather
 // than sweeping for a feature the API is not serving.
+// Os dois varredores nascem do mesmo par (store, cfg) e cada um já decide
+// sozinho se está desligado. Ficam juntos para que acrescentar um terceiro
+// custe uma linha aqui, e não mais um ramo em `runWorkerWithResources`, que
+// é linear de propósito.
+func workerSweepers(
+	platformStore *store.Store,
+	cfg config.Config,
+) (approvalExpirer, *calendarfeed.Synchronizer, error) {
+	approvals, err := approvalSweeper(platformStore, cfg)
+	if err != nil {
+		return nil, nil, errors.New("approval expiry initialization failed")
+	}
+	calendarSync, err := calendarSyncWorker(platformStore, cfg)
+	if err != nil {
+		return nil, nil, errors.New(
+			"calendar feed synchronization initialization failed",
+		)
+	}
+	return approvals, calendarSync, nil
+}
+
 func approvalSweeper(
 	platformStore *store.Store,
 	cfg config.Config,
@@ -253,6 +284,7 @@ type workerPollerSpec struct {
 	approvalExpiry    approvalExpiryMetrics
 	calendarSync      calendarSynchronizer
 	calendarMetrics   calendarSyncMetrics
+	externalContext   *external.Ingestion
 }
 
 // Feature-gated pollers only start when their feature is enabled, so a disabled
@@ -286,6 +318,7 @@ func startFeaturePollers(pollers *pollerCoordinator, spec workerPollerSpec) {
 	}
 	startApprovalExpiryPoller(pollers, spec)
 	startCalendarSyncPoller(pollers, spec)
+	startExternalContextPoller(pollers, spec)
 	if !spec.cfg.Analytics.Enabled {
 		return
 	}
@@ -879,4 +912,81 @@ func runAnalyticsCycle(
 	}
 	runs.WithLabelValues(string(kind)).Inc()
 	logger.Info("analytics cycle completed", "run_kind", string(kind))
+}
+
+// The external context layer is the only outbound HTTP surface of the product
+// and it lives here, in the worker, never on the request path: what leaks in an
+// external integration is per-request cadence, and a fetch triggered by a panel
+// visit would hand the upstream the traffic of the panel (ADR-045 §6).
+//
+// It gets a pool of its own, under `external_runtime`. That role writes in
+// `external` and reaches neither `core`, `survey`, `analytics` nor
+// `public_data`, while `worker_runtime` — which reconciles the protected series
+// in the very same process — holds no privilege in `external`. Two pools, one
+// process, and the direction enforced by PostgreSQL.
+func openExternalContext(
+	ctx context.Context,
+	cfg config.Config,
+	logger *slog.Logger,
+	registry *prometheus.Registry,
+) (*external.Ingestion, func(), error) {
+	if !cfg.ExternalContext.Enabled {
+		return nil, func() {}, nil
+	}
+	pool, err := store.OpenExternalPool(
+		ctx, cfg.ExternalContext.DatabaseURL, cfg.ExternalContext.BatchBudget,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	fetcher, err := external.NewFetcher(cfg.ExternalContext, logger)
+	if err != nil {
+		pool.Close()
+		return nil, nil, errors.New("external fetcher initialization failed")
+	}
+	metrics := external.NewMetrics()
+	registry.MustRegister(metrics.Collectors()...)
+	repository := store.NewExternalIngestionRepository(
+		pool, cfg.ExternalContext.BatchBudget,
+	)
+	ingestion := external.NewIngestion(
+		repository, fetcher, cfg.ExternalContext, logger, metrics,
+	)
+	return ingestion, pool.Close, nil
+}
+
+func startExternalContextPoller(
+	pollers *pollerCoordinator,
+	spec workerPollerSpec,
+) {
+	if spec.externalContext == nil {
+		return
+	}
+	pollers.Go(func(pollerContext context.Context) {
+		pollExternalContext(
+			pollerContext,
+			spec.externalContext,
+			spec.cfg.ExternalContext.IngestionInterval,
+		)
+	})
+}
+
+// The schedule is a constant interval and nothing about it derives from
+// traffic, from the number of stays or from the hour anybody reads the panel.
+func pollExternalContext(
+	ctx context.Context,
+	ingestion *external.Ingestion,
+	interval time.Duration,
+) {
+	ingestion.RunCycle(ctx)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ingestion.RunCycle(ctx)
+		}
+	}
 }

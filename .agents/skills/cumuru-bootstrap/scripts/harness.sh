@@ -20,6 +20,7 @@ normalize_phase() {
     5 | 05) echo "5" ;;
     6 | 06 | 6A | 6a | 06A | 06a) echo "6" ;;
     7 | 07) echo "7" ;;
+    8 | 08) echo "8" ;;
     6B | 6b | 06B | 06b)
       echo "phase 6B is an operational pilot and is not executable by Prompt 6" >&2
       return 2
@@ -40,6 +41,7 @@ phase_title() {
     5) echo "FNRH piloto" ;;
     6) echo "6A Auditoria de prontidao" ;;
     7) echo "Autoatendimento e aprovacao" ;;
+    8) echo "Contexto externo" ;;
   esac
 }
 
@@ -52,6 +54,7 @@ phase_dependencies() {
     5) echo "Fase 4 PASS + cinco gates externos FNRH" ;;
     6) echo "Fases 1-4 PASS; Fase 5 PASS ou BLOCKED documentado" ;;
     7) echo "Fases 2 e 3 PASS; gate SELF_SERVICE_LEGAL_BASIS para dados reais" ;;
+    8) echo "Fases 1 e 4 PASS; gate EXTERNAL_SOURCE_LICENSE por fonte" ;;
   esac
 }
 
@@ -178,6 +181,15 @@ self_service_gate_status() {
   gates_status_for 7 SELF_SERVICE_LEGAL_BASIS
 }
 
+# Phase 8 publishes third-party data. The licence gate is per source and is not
+# waived by PROTOTYPE_ONLY, because CC-BY attribution does not depend on the
+# software being a prototype. The tide gate is a rights gate, not a data gate:
+# the CHM harmonic constants require written permission to publish derived
+# predictions, so the card stays unavailable until a human obtains it.
+external_context_gate_status() {
+  gates_status_for 8 EXTERNAL_SOURCE_LICENSE TIDE_HARMONIC_CONSTANTS
+}
+
 scm_state() {
   if git -C "${PROJECT_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "PRESENT"
@@ -229,6 +241,19 @@ eligibility_for_phase() {
     esac
     return
   fi
+  if [[ "${phase}" == "8" ]]; then
+    if [[ "$(status_for_phase 1)" != "PASS" ||
+    "$(status_for_phase 4)" != "PASS" ]]; then
+      echo "BLOCKED"
+      return
+    fi
+    case "$(governance_status)" in
+      PASS) echo "ELIGIBLE" ;;
+      PROTOTYPE_ONLY) echo "ELIGIBLE_PROTOTYPE_ONLY" ;;
+      *) echo "BLOCKED" ;;
+    esac
+    return
+  fi
   previous="$((phase - 1))"
   if [[ "$(status_for_phase "${previous}")" == "PASS" ]]; then
     if [[ "${phase}" == "5" ]]; then
@@ -256,7 +281,7 @@ extract_prompt() {
   awk -v phase="${phase}" '
     BEGIN { section = 0; block = 0; complete = 0 }
     $0 ~ "^## Prompt " phase " " { section = 1; next }
-    section && !block && $0 ~ "^## Prompt [1-7] " { exit 4 }
+    section && !block && $0 ~ "^## Prompt [1-8] " { exit 4 }
     section && $0 == "```text" { block = 1; next }
     block && $0 == "```" { complete = 1; exit }
     block { print }
@@ -302,6 +327,8 @@ validate_completion_contract() {
   local body
   local file
   local writer
+  local shell_lint_script
+  local shell_lint_body
 
   for writer in backend frontend platform; do
     for file in \
@@ -346,13 +373,19 @@ validate_completion_contract() {
   fi
 
   body="$(make_target_body lint-shell)"
-  grep -Fq $'\t@set -eu;' <<<"${body}"
-  grep -Fq "find . -type f -name '*.sh'" <<<"${body}"
-  grep -Fq 'while IFS= read -r file' <<<"${body}"
-  grep -Fq $'bash -n "$$file"' <<<"${body}"
-  grep -Fq 'SHELL_SYNTAX=PASS' <<<"${body}"
-  if grep -Eq '(^|[[:space:]])(\|\|[[:space:]]+true|-[[:space:]]*@?(bash|find))' \
-    <<<"${body}"; then
+  shell_lint_script="${PROJECT_ROOT}/deploy/scripts/lint-shell.sh"
+  grep -Fxq $'\t@bash deploy/scripts/lint-shell.sh' <<<"${body}"
+  test -f "${shell_lint_script}"
+  shell_lint_body="$(cat "${shell_lint_script}")"
+  grep -Fq 'set -euo pipefail' <<<"${shell_lint_body}"
+  grep -Fq "git ls-files -z --cached --others --exclude-standard -- '*.sh'" \
+    <<<"${shell_lint_body}"
+  grep -Fq 'while IFS= read -r -d ' <<<"${shell_lint_body}"
+  grep -Fq $'bash -n "${file}"' <<<"${shell_lint_body}"
+  grep -Fq $'test "${count}" -gt 0' <<<"${shell_lint_body}"
+  grep -Fq 'SHELL_SYNTAX=PASS' <<<"${shell_lint_body}"
+  if grep -Eq '(^|[[:space:]])(\|\|[[:space:]]+true|-[[:space:]]*@?(bash|git))' \
+    <<<"${body}"$'\n'"${shell_lint_body}"; then
     echo "SHELL_LINT_FAIL_OPEN_DRIFT=FAIL" >&2
     return 1
   fi
@@ -375,9 +408,9 @@ validate_completion_contract() {
     return 1
   fi
 
-  grep -Eq '^[[:space:]]+make post-task-quality[[:space:]]*$' \
+  grep -Eq '^[[:space:]]+(run:[[:space:]]+)?make post-task-quality[[:space:]]*$' \
     "${PROJECT_ROOT}/.github/workflows/ci.yml"
-  if grep -Eq '^[[:space:]]+make (complexity|lint)[[:space:]]*$' \
+  if grep -Eq '^[[:space:]]+(run:[[:space:]]+)?make (complexity|lint)[[:space:]]*$' \
     "${PROJECT_ROOT}/.github/workflows/ci.yml"; then
     echo "CI_QUALITY_DRIFT=separate-complexity-or-lint" >&2
     return 1
@@ -484,12 +517,12 @@ validate_harness() {
     return 1
   fi
 
-  prompt_count="$(grep -Ec '^## Prompt [1-7] ' "${PROMPT_FILE}")"
-  if [[ "${prompt_count}" != "7" ]]; then
+  prompt_count="$(grep -Ec '^## Prompt [1-8] ' "${PROMPT_FILE}")"
+  if [[ "${prompt_count}" != "8" ]]; then
     echo "INVALID_PROMPT_COUNT=${prompt_count}" >&2
     return 1
   fi
-  for phase in 1 2 3 4 5 6 7; do
+  for phase in 1 2 3 4 5 6 7 8; do
     extract_prompt "${phase}" >/dev/null
   done
 
@@ -545,7 +578,7 @@ print_status() {
   echo "SCM=$(scm_state)"
   echo "GOVERNANCE=$(governance_status)"
   echo "FNRH_EXTERNAL_GATES=$(external_gates_status)"
-  for phase in 1 2 3 4 5 6 7; do
+  for phase in 1 2 3 4 5 6 7 8; do
     echo "PHASE_${phase}=$(status_for_phase "${phase}")"
   done
 }
@@ -595,6 +628,22 @@ dry_run() {
       echo "REAL_DATA=BLOCKED"
     fi
     echo "SUPERSEDES_AUDIT=6A_BECOMES_UNVERIFIED"
+  fi
+  if [[ "${phase}" == "8" ]]; then
+    echo "EXTERNAL_GATES_STATUS=$(external_context_gate_status)"
+    echo "EXTERNAL_GATES=external_source_license,tide_harmonic_constants"
+    if [[ "$(gates_status_for 8 EXTERNAL_SOURCE_LICENSE)" == "PASS" ]]; then
+      echo "PUBLIC_CARDS=ELIGIBLE"
+    else
+      echo "PUBLIC_CARDS=BLOCKED"
+    fi
+    if [[ "$(gates_status_for 8 TIDE_HARMONIC_CONSTANTS)" == "PASS" ]]; then
+      echo "TIDE_CARD=ELIGIBLE"
+    else
+      echo "TIDE_CARD=BLOCKED"
+    fi
+    echo "SUPERSEDES_AUDIT=6A_BECOMES_UNVERIFIED"
+    echo "EGRESS=WORKER_ONLY"
   fi
   echo "MUTATIONS=NONE"
 }

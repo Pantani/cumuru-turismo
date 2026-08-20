@@ -8,8 +8,9 @@ info:
   description: >
     Contrato da fundação, estadias, questionários e métricas públicas. A
     extensão x-cumuru-feature informa a funcionalidade proprietária de cada
-    operação — platform, core, questionnaire, analytics ou self-service — e o
-    valor deferred marca a operação ainda não implementada. Tudo roda em modo
+    operação — platform, core, questionnaire, analytics, self-service ou
+    external-context — e o valor deferred marca a operação ainda não
+    implementada. Tudo roda em modo
     PROTOTYPE_ONLY e somente com fixtures fictícias e generalizadas.
 servers:
   - url: https://turismo.prado.ba.gov.br/api/v1
@@ -25,6 +26,11 @@ tags:
     description: Indicadores agregados e metodologia pública.
   - name: analytics
     description: Qualidade agregada interna, sem microdados.
+  - name: external
+    description: >
+      Contexto copiado de terceiro, com proveniência e licença por card. Não é
+      medição da plataforma, não passa por supressão k-anônima e nunca entra na
+      série protegida.
   - name: accommodations
     description: >
       Acomodações do Observatório local e seus vínculos operacionais. Categoria,
@@ -402,6 +408,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PublicMethodology"
+        "304":
+          $ref: "#/components/responses/PublicNotModified"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /public/context:
+    get:
+      summary: Consultar contexto externo creditado
+      description: >
+        Documento único da camada de contexto externo. Cada card carrega a
+        própria proveniência, licença e texto de atribuição, inclusive quando
+        está indisponível, e o próprio data_mode: fonte externa real e fixture
+        de protótipo não compartilham rótulo. Não é medição da plataforma e não
+        se combina aritmeticamente com a série protegida.
+      tags: [external]
+      security: []
+      operationId: getPublicContext
+      x-cumuru-feature: external-context
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Contexto externo corrente, creditado card a card.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/PublicCache"
+            ETag:
+              $ref: "#/components/headers/PublicEntityTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicContext"
         "304":
           $ref: "#/components/responses/PublicNotModified"
         "400":
@@ -6048,6 +6091,304 @@ components:
           items:
             type: string
             const: last_complete_month
+    ExternalSourceCode:
+      type: string
+      enum:
+        - open_meteo_forecast
+        - open_meteo_archive
+        - open_meteo_marine
+        - wikimedia_pageviews
+        - ibge_aggregates
+        - brasilapi_holidays
+        - cadastur
+        - chm_harmonics
+    ExternalUnitCode:
+      type: string
+      enum:
+        - celsius
+        - millimetre
+        - metre
+        - metre_per_second
+        - pageview
+        - person
+        - brl
+        - count
+        - degree
+    ExternalCoveredPeriod:
+      type: object
+      required: [start, end, end_exclusive, time_zone]
+      additionalProperties: false
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        end_exclusive:
+          type: boolean
+          const: true
+        time_zone:
+          type: string
+          const: America/Bahia
+    ExternalCreditedSource:
+      description: >
+        Fonte creditada do documento. Cadastur aparece aqui e somente aqui:
+        atribuição e link, sem contagem calculada pela plataforma, sem card com
+        valor e sem série de universo publicada.
+      type: object
+      required:
+        - source_code
+        - publisher
+        - license_code
+        - license_url
+        - attribution_text
+        - terms_url
+      additionalProperties: false
+      properties:
+        source_code:
+          $ref: "#/components/schemas/ExternalSourceCode"
+        publisher:
+          type: string
+          minLength: 1
+          maxLength: 200
+        license_code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        license_url:
+          type: string
+          format: uri
+        attribution_text:
+          type: string
+          minLength: 1
+          maxLength: 500
+        terms_url:
+          type: string
+          format: uri
+    ExternalProvenance:
+      description: >
+        Proveniência por célula, obrigatória também no ramo indisponível: fonte,
+        licença e atribuição existem porque a fonte existe, não porque a
+        requisição deu certo. Schema próprio, sem relação com PublicMetadata,
+        que descreve a série protegida.
+      type: object
+      required:
+        - source_code
+        - publisher
+        - license_code
+        - license_url
+        - attribution_text
+        - terms_url
+        - retrieved_at
+        - covered_period
+        - declared_lag_seconds
+        - revision
+        - derived
+      additionalProperties: false
+      properties:
+        source_code:
+          $ref: "#/components/schemas/ExternalSourceCode"
+        publisher:
+          type: string
+          minLength: 1
+          maxLength: 200
+        license_code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        license_url:
+          type: string
+          format: uri
+        attribution_text:
+          type: string
+          minLength: 1
+          maxLength: 500
+        terms_url:
+          type: string
+          format: uri
+        retrieved_at:
+          type: string
+          format: date-time
+        observed_at:
+          type: string
+          format: date-time
+          description: >
+            Instante a que o dado se refere na origem, distinto do horário da
+            coleta. Ausente quando a fonte não publicou período algum.
+        covered_period:
+          $ref: "#/components/schemas/ExternalCoveredPeriod"
+        declared_lag_seconds:
+          type: integer
+          minimum: 0
+          description: >
+            Defasagem que a fonte declara, distinta da defasagem observada.
+        revision:
+          type: integer
+          minimum: 0
+          description: >
+            Revisão da observação servida. Zero quando não há observação.
+        derived:
+          type: boolean
+        derivation_code:
+          type: string
+          enum: [tide_harmonic_prediction]
+        source_revision_label:
+          type: string
+          maxLength: 100
+      # derivation_code só existe quando a plataforma calculou o número. A
+      # restrição fica no contrato, e não só na prosa, porque é ela que impede
+      # um card afirmar derivação sem dizer qual.
+      if:
+        properties:
+          derived:
+            const: false
+      then:
+        properties:
+          derivation_code: false
+      else:
+        # A propriedade é redeclarada aqui porque o validador não resolve
+        # `required` dentro de `else` contra as `properties` do schema pai, e
+        # um warning novo deixa o gate mais surdo para o próximo.
+        required: [derivation_code]
+        properties:
+          derivation_code:
+            type: string
+            enum: [tide_harmonic_prediction]
+    ExternalSeriesPoint:
+      type: object
+      required: [period_start, period_end, value]
+      additionalProperties: false
+      properties:
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        value:
+          type: number
+          description: >
+            Sem multipleOf, por assimetria deliberada contra /public/presence.
+            Lá o arredondamento em base 10 é controle de divulgação; aqui não há
+            nada a suprimir, e copiar o arredondamento sugeriria que a
+            tubulação de supressão rodou sobre este número.
+    ExternalCardCode:
+      type: string
+      enum: [weather_daily, tide]
+    ExternalCardDataMode:
+      type: string
+      enum: [real_source, prototype_fixtures]
+      description: >
+        data_mode é por card. Uma página que mistura clima real com presença
+        fictícia sob um rótulo global mente nas duas direções.
+    PublishedContextCard:
+      description: >
+        O card diz o que o número afirma; a proveniência diz de onde ele veio e
+        se fomos nós que o calculamos. Por isso derived e derivation_code moram
+        somente em ExternalProvenance: o mesmo fato em duas posições do payload
+        pode divergir, e divergiria.
+      type: object
+      required:
+        - card_code
+        - status
+        - data_mode
+        - provenance
+        - unit_code
+        - series
+      additionalProperties: false
+      properties:
+        card_code:
+          $ref: "#/components/schemas/ExternalCardCode"
+        status:
+          type: string
+          const: published
+        data_mode:
+          $ref: "#/components/schemas/ExternalCardDataMode"
+        provenance:
+          $ref: "#/components/schemas/ExternalProvenance"
+        unit_code:
+          $ref: "#/components/schemas/ExternalUnitCode"
+        series:
+          type: array
+          minItems: 1
+          maxItems: 800
+          items:
+            $ref: "#/components/schemas/ExternalSeriesPoint"
+    UnavailableContextCard:
+      description: >
+        Fonte morta é 200 com este ramo, nunca 503 do documento inteiro e nunca
+        valor inventado, zero ou último valor conhecido servido em silêncio.
+        Status é published ou unavailable, jamais protected: protected, na série
+        protegida, significa reprovado pelo limiar k-anônimo, e reusar a palavra
+        aqui afirmaria que a supressão rodou sobre dado que não passou por ela.
+      type: object
+      required:
+        - card_code
+        - status
+        - data_mode
+        - provenance
+        - reason_code
+      additionalProperties: false
+      properties:
+        card_code:
+          $ref: "#/components/schemas/ExternalCardCode"
+        status:
+          type: string
+          const: unavailable
+        data_mode:
+          $ref: "#/components/schemas/ExternalCardDataMode"
+        provenance:
+          $ref: "#/components/schemas/ExternalProvenance"
+        reason_code:
+          type: string
+          enum:
+            - source_unavailable
+            - source_rate_limited
+            - source_not_licensed
+            - source_data_missing
+            - constants_not_imported
+            - stale_beyond_declared_lag
+    PublicContextCard:
+      oneOf:
+        - $ref: "#/components/schemas/PublishedContextCard"
+        - $ref: "#/components/schemas/UnavailableContextCard"
+    PublicContext:
+      description: >
+        Documento único da camada externa, sem seletor. Não carrega data_mode no
+        nível do documento: o rótulo é por card. Não carrega cobertura, razão,
+        tamanho de amostra nem contagem de acomodações, e nenhuma superfície
+        combina estes números com a série protegida.
+      type: object
+      required:
+        - generated_at
+        - layer
+        - disclaimer_code
+        - cards
+        - sources
+      additionalProperties: false
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        layer:
+          type: string
+          const: external_context
+        disclaimer_code:
+          type: string
+          const: external_context_not_platform_measurement
+        cards:
+          type: array
+          minItems: 1
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/PublicContextCard"
+        sources:
+          type: array
+          minItems: 1
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/ExternalCreditedSource"
     AvailableQualityCount:
       type: object
       required: [status, value]
