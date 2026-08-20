@@ -167,40 +167,34 @@ export function PublicListingPanel({
             />
           </label>
         </div>
-        <p className="field-control">
-          <label htmlFor={`${formId}-whatsapp`}>
-            <input
-              id={`${formId}-whatsapp`}
-              type="checkbox"
-              checked={draft.whatsapp}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  whatsapp: event.target.checked,
-                }))
-              }
-            />
-            {" "}
-            Esse número atende no WhatsApp
-          </label>
-        </p>
-        <p className="field-control">
-          <label htmlFor={`${formId}-enabled`}>
-            <input
-              id={`${formId}-enabled`}
-              type="checkbox"
-              checked={draft.enabled}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  enabled: event.target.checked,
-                }))
-              }
-            />
-            {" "}
-            Publicar minha hospedagem na lista
-          </label>
-        </p>
+        <label className="checkbox-control" htmlFor={`${formId}-whatsapp`}>
+          <input
+            id={`${formId}-whatsapp`}
+            type="checkbox"
+            checked={draft.whatsapp}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                whatsapp: event.target.checked,
+              }))
+            }
+          />
+          Esse número atende no WhatsApp
+        </label>
+        <label className="checkbox-control" htmlFor={`${formId}-enabled`}>
+          <input
+            id={`${formId}-enabled`}
+            type="checkbox"
+            checked={draft.enabled}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                enabled: event.target.checked,
+              }))
+            }
+          />
+          Publicar minha hospedagem na lista
+        </label>
         {issue === null ? null : (
           <p className="form-error" role="alert">
             {issue}

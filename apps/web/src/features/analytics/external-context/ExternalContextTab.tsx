@@ -368,7 +368,7 @@ function ContextPlaceholder({
   return (
     <div className="external-context-status">
       <p role="alert">{copy.errorTitle}</p>
-      <button className="ghost" onClick={onRetry} type="button">
+      <button className="ghost-action" onClick={onRetry} type="button">
         {copy.errorRetry}
       </button>
     </div>
@@ -397,7 +397,7 @@ export function ExternalContextTab({
   return (
     <section
       aria-labelledby="external-context-title"
-      className="external-context"
+      className="analytics-section external-context"
     >
       <div className="section-heading">
         <div>

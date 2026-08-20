@@ -804,6 +804,293 @@ h4 {
   border-top: 1px solid var(--line);
 }
 
+/* --------------------------------------------------------------------------
+   Contexto externo (ADR-045)
+
+   A camada não é medida nossa: nem observada, nem prevista. Por isso o cartão
+   não recebe a fita turquesa nem a coral — a fita neutra é o que diz, sem
+   legenda, que o número veio de terceiro. Proveniência e licença moram no
+   próprio cartão, porque a CC-BY se cumpre onde a obra aparece.
+   -------------------------------------------------------------------------- */
+
+.analytics-layers {
+  display: grid;
+  gap: var(--space-block);
+}
+
+.external-context {
+  display: grid;
+  align-content: start;
+  gap: var(--space-block);
+}
+
+.external-context-disclaimer {
+  max-width: 62ch;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  color: var(--ink-2);
+  background: var(--surface);
+  border-left: 3px solid var(--muted-mark);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.external-context-status {
+  display: grid;
+  justify-items: start;
+  gap: 0.85rem;
+  margin: 0;
+  color: var(--ink-3);
+  line-height: 1.55;
+}
+
+.external-context-status p {
+  margin: 0;
+}
+
+.external-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1rem;
+}
+
+.external-card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 0.7rem;
+  padding: 1.35rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.external-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--muted-mark);
+}
+
+.external-card h4 {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.external-card-freshness {
+  justify-self: start;
+  margin: 0;
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-num);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.external-card-freshness[data-card-freshness="fresh"] {
+  color: var(--brand-strong);
+  background: var(--brand-wash);
+}
+
+.external-card-freshness[data-card-freshness="stale"] {
+  color: var(--coral-strong);
+  background: var(--coral-wash);
+}
+
+.external-card-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.external-card-value > strong {
+  font-family: var(--font-num);
+  font-size: clamp(1.5rem, 2.6vw, 2.15rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  line-height: 1.15;
+}
+
+.external-card-unit {
+  color: var(--ink-3);
+  font-size: 0.86rem;
+  font-weight: 550;
+}
+
+/* Ausência é traço e motivo, nunca zero desenhado: o número apagado não pode
+   competir com o de um cartão que tem valor a afirmar. */
+.external-card-absent {
+  color: var(--ink-3);
+}
+
+.external-card-reason,
+.external-card-note {
+  max-width: 46ch;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.external-series-details {
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+}
+
+.external-series-details summary {
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.external-series-details .table-scroll {
+  margin-top: 0.7rem;
+}
+
+.external-series-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.external-series-table th,
+.external-series-table td {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.external-series-table thead th {
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.external-series-table tbody tr:last-child th,
+.external-series-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.external-card-provenance {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.external-card-provenance > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.external-card-provenance dt {
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.external-card-provenance dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.external-sources {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.25rem 1.35rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.external-sources h4 {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.external-sources > p {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.external-sources ul {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.external-sources li {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.external-source-name {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.external-source-attribution {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.external-source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+}
+
+.external-source-links a {
+  color: var(--brand-strong);
+  text-underline-offset: 0.22em;
+}
+
 /* Faixa secundária: os mesmos indicadores, metade do peso. Com os nove no
    mesmo tamanho, "quantos dias foram publicados" competia visualmente com
    "quantas pessoas por dia", e a hierarquia da leitura desaparecia. */
@@ -1333,13 +1620,16 @@ h4 {
 }
 
 .form-card {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
   max-width: 52rem;
 }
 
 .form-card h2,
 .operation-card h3,
 .operation-card h4 {
-  margin-bottom: 1rem;
+  margin: 0;
 }
 
 .form-card h2,
@@ -1354,7 +1644,7 @@ h4 {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
-  margin: 1.5rem 0;
+  margin: 0;
   padding: 1.25rem;
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -1397,6 +1687,14 @@ h4 {
   line-height: 1.55;
   font-family: var(--font-num);
   font-size: 0.85rem;
+}
+
+.form-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .field-error {
@@ -1465,7 +1763,7 @@ h4 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: 1px;
-  margin-block: 1.5rem;
+  margin: 0;
   background: var(--line);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1527,6 +1825,41 @@ h4 {
 
 .operation-card form > button {
   justify-self: start;
+}
+
+/* Formulário sem classe própria dentro de um cartão ou painel. Os blocos que
+   ele empilha — grade de campos, caixas de marcar, erro, estado da operação,
+   linha de botões — todos zeram a própria margem, então sem `gap` aqui eles
+   encostam uns nos outros e o botão nasce grudado no último campo. */
+.form-card form,
+.listing-panel form,
+.activation-panel form {
+  display: grid;
+  gap: 1rem;
+}
+
+/* Caixa de marcar é uma linha, não uma pilha: as regras de `label` dos cartões
+   pedem `display: grid`, o que empilharia a caixa acima do próprio texto. O
+   seletor de tipo entra para empatar com `.form-card label` em especificidade
+   e vencer por vir depois; sem ele a regra do cartão continuaria mandando. */
+label.checkbox-control,
+.checkbox-control {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-weight: 550;
+  line-height: 1.45;
+}
+
+.checkbox-control input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--brand);
+  cursor: pointer;
 }
 
 .field-grid {
@@ -1666,8 +1999,12 @@ h4 {
 }
 
 .qr-panel {
+  display: grid;
+  justify-items: center;
+  gap: 0.85rem;
   max-width: 22rem;
   padding: 1.35rem;
+  text-align: center;
   background: var(--surface);
   border: 1px solid var(--line);
   border-top: 3px solid var(--brand);
@@ -1679,13 +2016,24 @@ h4 {
   display: block;
   width: min(100%, 16rem);
   height: auto;
-  margin-block: 1rem;
+  margin-block: 0;
   padding: 0.6rem;
   background: #ffffff;
   border-radius: var(--radius-sm);
 }
 
+/* Largura cheia nos dois: pílulas de texto diferente centralizadas ficariam
+   com as bordas desencontradas, que é o que se lê como desalinhamento. */
+.qr-panel button {
+  width: 100%;
+}
+
+.qr-panel h3 {
+  margin: 0;
+}
+
 .qr-panel p {
+  margin: 0;
   color: var(--ink-3);
   font-size: 0.88rem;
   line-height: 1.55;
@@ -3092,7 +3440,7 @@ button.quiet-action:disabled {
 }
 
 .field-hint {
-  color: var(--ink-soft);
+  color: var(--ink-3);
   font-size: 0.82rem;
   line-height: 1.4;
 }
@@ -3121,7 +3469,7 @@ button.quiet-action:disabled {
 
 .calendar-feed-detail {
   margin: 0.3rem 0 0;
-  color: var(--ink-soft);
+  color: var(--ink-3);
   font-size: 0.85rem;
 }
 

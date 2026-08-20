@@ -661,7 +661,9 @@
   letter-spacing: -0.04em;
 }
 
-.lp-register > p {
+/* Só o parágrafo de apoio do topo: os rodapés têm ritmo próprio, e antes esta
+   regra vencia o deles por especificidade e zerava as duas margens. */
+.lp-register > p:not(.lp-register-footnote) {
   margin: 0 0 1.4rem;
   max-width: 40ch;
   color: color-mix(in srgb, var(--on-accent) 78%, transparent);
@@ -670,8 +672,16 @@
   text-wrap: pretty;
 }
 
-.lp-register-footnote {
-  margin: 0.9rem 0 0;
+/* `inline-flex` põe o botão numa caixa de linha, e a entrelinha abaixo da
+   base come a margem do rodapé: o link nascia colado no botão. Como filho
+   direto do cartão ele é bloco, e a margem volta a valer. */
+.lp-register > .lp-button-dark {
+  display: flex;
+}
+
+.lp-register > .lp-register-footnote {
+  margin: 1.25rem 0 0;
+  line-height: 1.6;
   color: color-mix(in srgb, var(--on-accent) 70%, transparent);
   font-family: var(--font-num);
   font-size: 0.68rem;
@@ -682,6 +692,10 @@
 /* O link de entrar divide o rodapé com a nota de custo, mas não é texto de
    apoio: recebe a tinta cheia do par coral e o sublinhado que diz que é alvo
    de clique. O cinza de 70% ficaria abaixo do contraste mínimo para um link. */
+.lp-register > .lp-register-footnote + .lp-register-footnote {
+  margin-top: 0.75rem;
+}
+
 .lp-register-footnote a {
   color: var(--on-accent);
   text-decoration: underline;

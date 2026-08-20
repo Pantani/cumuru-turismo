@@ -260,6 +260,44 @@ arquivo.
 
 ### Corrigido
 
+- blocos encostados uns nos outros em todo formulário sem classe própria dentro
+  de um cartão ou painel: `.listing-panel form`, `.activation-panel form` e
+  `.form-card form` não declaravam `gap`, e os blocos que eles empilham — grade
+  de campos, caixas de marcar, erro, estado da operação, linha de botões — todos
+  zeram a própria margem, então o botão nascia grudado no último campo. O
+  formulário passa a ser pilha com ritmo próprio, e `.form-card` também: o
+  título, o `fieldset` e o `context-summary` deixam de carregar margem avulsa,
+  que em grade soma ao `gap` em vez de colapsar com ele;
+- caixa de marcar empilhada acima do próprio texto no painel da lista pública:
+  o rótulo caía nas regras de `label` dos cartões, que pedem `display: grid`, e
+  a separação entre a caixa e a frase era um espaço literal no JSX. Passa a ser
+  `label.checkbox-control` em linha, com a caixa dimensionada e `accent-color`
+  de marca; o seletor leva o tipo de propósito, para empatar em especificidade
+  com `.form-card label` e vencer por vir depois;
+- `.form-error` usada em dois lugares e ausente da folha de estilo: a recusa de
+  publicar na lista e o erro do diretório saíam como texto de corpo, sem cor nem
+  peso de alerta;
+- dois botões grudados e desalinhados no cartão do QR, que era bloco sem `gap`:
+  o cartão passa a ser grade centralizada e os botões vão à largura da coluna,
+  porque duas pílulas de texto diferente centralizadas ficam com as bordas
+  desencontradas — que é o que se lê como desalinhamento;
+- link de entrar colado ao botão no cartão de cadastro da capa, por dois motivos
+  somados: `.lp-button-dark` é `inline-flex` e a entrelinha abaixo da base da
+  caixa de linha comia a margem do rodapé, e `.lp-register > p` vencia
+  `.lp-register-footnote` em especificidade e zerava as duas margens dele;
+- aba de contexto externo sem folha de estilo nenhuma: `.external-context`,
+  `.external-cards`, `.external-card`, a proveniência por card, a série, o
+  estado de carga e as fontes creditadas eram classes usadas e nunca definidas,
+  e a aba renderizava como HTML sem estilo. Ganham o mesmo sistema do painel de
+  indicadores, com uma diferença declarada — a fita do card é neutra, não
+  turquesa nem coral, porque a camada externa não é medida nossa: nem observada,
+  nem prevista. `.analytics-layers`, que separa o controle segmentado da aba,
+  tinha o mesmo problema;
+- `var(--ink-soft)` em `.field-hint` e `.calendar-feed-detail`: o token não
+  existe, a declaração era inválida e a dica herdava a tinta cheia do corpo em
+  vez do tom apagado;
+- botão de repetir do contexto externo com `className="ghost"`, classe que não
+  existe: passa a `ghost-action`, o nome do sistema;
 - caixa de texto fora do padrão em todo formulário que não morava num cartão
   conhecido: o estilo de campo estava preso a `.form-card`, `.panel-card`,
   `.login-card`, `.operation-card`, `.onboarding-card` e `.new-stay-form`, então
