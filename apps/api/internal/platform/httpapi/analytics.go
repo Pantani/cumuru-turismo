@@ -102,6 +102,23 @@ func (d Dependencies) analyticsQuality(writer http.ResponseWriter, request *http
 	writeJSON(writer, http.StatusOK, value)
 }
 
+// O funil fica ao lado do painel de qualidade: mesmo escopo interno, mesma
+// janela de trinta dias e mesmo no-store. Ele não entra em publicação nenhuma.
+func (d Dependencies) analyticsFunnel(writer http.ResponseWriter, request *http.Request) {
+	window, ok := analyticsSelector(request, "window", "last_30_days")
+	if !ok {
+		writePublicBadRequest(writer, request)
+		return
+	}
+	value, err := d.AnalyticsFunnel.Funnel(request.Context(), window)
+	if err != nil {
+		writePublicUnavailable(writer, request)
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusOK, value)
+}
+
 func (d Dependencies) writePublicAnalytics(
 	writer http.ResponseWriter,
 	request *http.Request,

@@ -108,12 +108,12 @@ function contractCases(): ReadonlyArray<
 }
 
 describe("cliente tipado do núcleo", () => {
-  it("declara exatamente as 26 operações do contrato da fase", () => {
+  it("declara exatamente as 27 operações do contrato da fase", () => {
     expectTypeOf(coreOperationNames).toMatchTypeOf<
       ReadonlyArray<keyof operations>
     >();
-    expect(coreOperationNames).toHaveLength(26);
-    expect(new Set(coreOperationNames).size).toBe(26);
+    expect(coreOperationNames).toHaveLength(27);
+    expect(new Set(coreOperationNames).size).toBe(27);
   });
 
   it("envia o onboarding fechado com autorização e chave idempotente", async () => {
@@ -306,6 +306,40 @@ describe("cliente tipado do núcleo", () => {
 
     const request = fetcher.mock.calls[0]?.[0] as Request;
     expect(request.headers.get("if-match")).toBe('"1"');
+  });
+
+  it("só serializa month dentro de window=month, como o servidor exige", async () => {
+    // Uma resposta nova por chamada: o corpo de um Response só pode ser lido
+    // uma vez, e este teste faz duas requisições.
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () =>
+      Response.json(
+        {
+          metadata: {},
+          window: "recent_90_days",
+          comparison: { status: "unavailable" },
+          occupancy: {},
+          series: [],
+        },
+        { headers: responseHeaders },
+      ),
+    );
+    const client = createCoreClient({ fetcher, getAccessToken: () => token });
+
+    // O par é discriminado no tipo: `month` fora de `window=month`, e
+    // `window=month` sem ele, não compilam. O servidor recusa os dois casos, e
+    // o compilador passa a recusá-los antes da requisição existir.
+    await client.getAccommodationPerformance(stayId, "recent_90_days");
+    const withoutMonth = fetcher.mock.calls[0]?.[0] as Request;
+    expect(new URL(withoutMonth.url).search).toBe("?window=recent_90_days");
+
+    await client.getAccommodationPerformance(stayId, "month", "2026-05");
+    const withMonth = fetcher.mock.calls[1]?.[0] as Request;
+    expect(new URL(withMonth.url).search).toBe("?window=month&month=2026-05");
+
+    // @ts-expect-error month não acompanha janela retroativa
+    void (() => client.getAccommodationPerformance(stayId, "recent_90_days", "2026-05"));
+    // @ts-expect-error window=month exige o mês
+    void (() => client.getAccommodationPerformance(stayId, "month"));
   });
 
   it.each([

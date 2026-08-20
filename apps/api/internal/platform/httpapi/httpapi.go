@@ -76,6 +76,8 @@ type Dependencies struct {
 	PublicDirectory                directory.PublicReader
 	PublicContext                  external.ContextReader
 	AnalyticsQuality               analytics.QualityReader
+	AnalyticsFunnel                analytics.FunnelReader
+	OwnPerformance                 analytics.OwnPerformanceReader
 	CORSAllowedOrigins             []string
 	TrustedProxyCIDRs              []netip.Prefix
 	CursorKeys                     config.KeyringConfig

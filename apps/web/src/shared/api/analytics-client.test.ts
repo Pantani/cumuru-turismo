@@ -374,7 +374,7 @@ const invalidPayloads: InvalidPayloadCase[] = [
 ];
 
 describe("cliente tipado de analytics", () => {
-  it("declara exatamente as cinco operações do contrato congelado", () => {
+  it("declara exatamente as seis operações do contrato congelado", () => {
     expectTypeOf(analyticsOperationNames).toMatchTypeOf<
       ReadonlyArray<keyof operations>
     >();
@@ -384,6 +384,7 @@ describe("cliente tipado de analytics", () => {
       "getPublicPreferences",
       "getPublicMethodology",
       "getAnalyticsQuality",
+      "getAnalyticsFunnel",
     ]);
   });
 

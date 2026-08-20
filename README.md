@@ -560,6 +560,7 @@ espelhando o Compose.
 | [`docs/10-questionario-inicial.md`](docs/10-questionario-inicial.md) | Perguntas de referência da pesquisa |
 | [`docs/11-decisoes-tecnicas.md`](docs/11-decisoes-tecnicas.md) | Escolhas de stack e referências |
 | [`docs/12-infraestrutura-e-deploy.md`](docs/12-infraestrutura-e-deploy.md) | Terraform, Ansible, ambientes e gates de infra |
+| [`docs/guias/`](docs/guias/) | Material de campo em linguagem simples, para hospedagem e piloto |
 | [`docs/decisoes/`](docs/decisoes/) | ADRs numerados; toda decisão divergente vira ADR |
 | [`contracts/openapi.yaml`](contracts/openapi.yaml) | Contrato público, fonte do cliente gerado |
 | [`database/schema.sql`](database/schema.sql) | Schema de referência |

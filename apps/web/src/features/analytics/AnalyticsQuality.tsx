@@ -81,6 +81,102 @@ function countItems(snapshot: Schemas["QualitySnapshot"]) {
   ] as const;
 }
 
+/**
+ * O funil conta estados que o registro já guarda; nada aqui vem de telemetria.
+ * A mediana some abaixo de dez submissões na janela — é decisão do servidor, e
+ * a tela só respeita a ausência em vez de inventar zero.
+ */
+function funnelRows(funnel: Schemas["AdoptionFunnel"]) {
+  return [
+    {
+      stage: "Convite nominal",
+      offered: funnel.invite.issued,
+      completed: funnel.invite.submitted,
+      lost: funnel.invite.expired_unused + funnel.invite.revoked,
+      median: funnel.invite.median_hours_to_submit,
+    },
+    {
+      stage: "Pesquisa",
+      offered: funnel.survey.issued,
+      // Concluída é a capability consumida — resposta ou recusa explícita. A
+      // API não enxerga a participação, então a separação não existe aqui.
+      completed: funnel.survey.completed,
+      lost: funnel.survey.expired_unanswered + funnel.survey.revoked,
+      median: funnel.survey.median_hours_to_answer,
+    },
+    {
+      stage: "Autocadastro",
+      offered: funnel.self_registration.started,
+      completed: funnel.self_registration.approved,
+      lost: funnel.self_registration.rejected + funnel.self_registration.expired,
+      median: undefined,
+    },
+  ] as const;
+}
+
+function conversionLabel(offered: number, completed: number) {
+  return offered === 0 ? "—" : `${Math.round((completed / offered) * 100)}%`;
+}
+
+function medianLabel(hours: number | undefined) {
+  return hours === undefined ? "—" : `${hours} h`;
+}
+
+function FunnelTable({ funnel }: { funnel: Schemas["AdoptionFunnel"] }) {
+  return (
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Etapa</th>
+            <th scope="col">Ofertados</th>
+            <th scope="col">Concluídos</th>
+            <th scope="col">Conversão</th>
+            <th scope="col">Perdidos</th>
+            <th scope="col">Mediana até concluir</th>
+          </tr>
+        </thead>
+        <tbody>
+          {funnelRows(funnel).map((row) => (
+            <tr key={row.stage}>
+              <th scope="row">{row.stage}</th>
+              <td>{row.offered}</td>
+              <td>{row.completed}</td>
+              <td>{conversionLabel(row.offered, row.completed)}</td>
+              <td>{row.lost}</td>
+              <td>{medianLabel(row.median)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AdoptionFunnelSection({ client }: AnalyticsQualityProps) {
+  const funnel = useQuery({
+    queryKey: ["analytics", "funnel", "last_30_days"],
+    queryFn: () => client.getFunnel(),
+    gcTime: 0,
+    retry: false,
+    staleTime: 0,
+  });
+  if (funnel.isPending || funnel.isError) {
+    return null;
+  }
+  return (
+    <section className="analytics-section" aria-labelledby="funnel-title">
+      <h3 id="funnel-title">Funil de adesão nos últimos 30 dias</h3>
+      <p>
+        Contagens de estados já registrados. Na pesquisa, concluída é a
+        capability consumida: quem respondeu e quem recusou explicitamente
+        contam juntos, porque a API grava a resposta e não a lê de volta.
+      </p>
+      <FunnelTable funnel={funnel.data.data} />
+    </section>
+  );
+}
+
 function QualityContent({ snapshot }: { snapshot: Schemas["QualitySnapshot"] }) {
   return (
     <>
@@ -163,6 +259,7 @@ export function AnalyticsQuality({ client }: AnalyticsQualityProps) {
         <span className="internal-badge">Acesso interno</span>
       </div>
       <QualityContent snapshot={quality.data.data} />
+      <AdoptionFunnelSection client={client} />
     </section>
   );
 }

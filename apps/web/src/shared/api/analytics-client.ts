@@ -3,6 +3,7 @@ import {
   isMethodology,
   isPreferences,
   isPresence,
+  isFunnel,
   isQuality,
   isSummary,
 } from "./analytics-payload";
@@ -30,6 +31,7 @@ export const analyticsOperationNames = [
   "getPublicPreferences",
   "getPublicMethodology",
   "getAnalyticsQuality",
+  "getAnalyticsFunnel",
 ] as const satisfies readonly (keyof operations)[];
 
 /**
@@ -67,6 +69,11 @@ export function createAnalyticsClient(options: HttpClientOptions) {
       published<Schemas["PublicMethodology"]>(
         "/api/v1/public/methodology",
         isMethodology,
+      ),
+    getFunnel: (window: QualityWindow = "last_30_days") =>
+      reader.authenticated<Schemas["AdoptionFunnel"]>(
+        `/api/v1/analytics/funnel?window=${encodeURIComponent(window)}`,
+        isFunnel,
       ),
     getQuality: (window: QualityWindow = "last_30_days") =>
       reader.authenticated<Schemas["QualitySnapshot"]>(

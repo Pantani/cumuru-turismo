@@ -19,6 +19,7 @@ export const coreOperationNames = [
   "listAccommodations",
   "createAccommodation",
   "getAccommodation",
+  "getAccommodationPerformance",
   "updateAccommodation",
   "listAccommodationMemberships",
   "createAccommodationMembership",
@@ -72,6 +73,9 @@ const successContracts = {
   listAccommodations: { status: 200 },
   createAccommodation: created,
   getAccommodation: versioned,
+  // O comparativo é dado de um inquilino só: sai com no-store e sem ETag,
+  // porque validador é promessa de cache compartilhado.
+  getAccommodationPerformance: { status: 200 },
   updateAccommodation: versioned,
   listAccommodationMemberships: { status: 200 },
   createAccommodationMembership: created,
@@ -135,6 +139,32 @@ export interface StayListFilters {
   provenance?: Schemas["StayProvenance"];
   status?: Schemas["StayStatus"];
 }
+
+/**
+ * `month` só acompanha `window=month`. O servidor recusa o par inconsistente em
+ * vez de ignorá-lo, então mandá-lo em outra janela renderia 400 — e o cliente
+ * tipado seria uma promessa que o contrato não cumpre. Mesma regra de
+ * `presenceQuery` no cliente de analytics.
+ */
+function performanceQuery(window: PerformanceWindow, month?: string) {
+  const query = new URLSearchParams({ window });
+  if (window === "month") {
+    query.set("month", month as string);
+  }
+  return `?${query.toString()}`;
+}
+
+/**
+ * `month` é obrigatório dentro de `window=month` e recusado fora dela — o
+ * servidor responde 400 nos dois casos. A tupla discriminada faz a chamada
+ * inválida falhar no compilador em vez de virar 400 em runtime.
+ */
+export type PerformanceSelector =
+  | [window: Exclude<PerformanceWindow, "month">]
+  | [window: "month", month: string];
+
+export type PerformanceWindow =
+  operations["getAccommodationPerformance"]["parameters"]["query"]["window"];
 
 /**
  * A fila do calendário não usa cursor: ela é limitada ao calendário de uma
@@ -238,6 +268,14 @@ export function createCoreClient(options: HttpClientOptions) {
       }),
     getAccommodation: (id: string) =>
       read("getAccommodation", accommodation(id)),
+    getAccommodationPerformance: (
+      id: string,
+      ...[window, month]: PerformanceSelector
+    ) =>
+      read(
+        "getAccommodationPerformance",
+        `${accommodation(id)}/performance${performanceQuery(window, month)}`,
+      ),
     updateAccommodation: (
       id: string,
       body: MergePatchRequest<"updateAccommodation">,

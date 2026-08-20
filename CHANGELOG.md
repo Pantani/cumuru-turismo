@@ -7,6 +7,52 @@ arquivo.
 
 ### Adicionado
 
+- material de campo em `docs/guias/`: o guia da hospedagem (onde colar o cartaz,
+  o que escrever ao lado do QR, a frase do anfitrião na chegada e na saída, as
+  respostas para as perguntas do hóspede) e o guia do piloto de 30 dias (dois
+  grupos comparados, calendário semana a semana e as três conclusões possíveis).
+  Ambos em linguagem para quem não é da área e ambos abrindo com o aviso de que
+  os gates legais precedem o primeiro hóspede real;
+- guia da administração para o dia a dia em `docs/guias/`: decidir a fila de
+  pedidos com critério escrito e os quatro motivos de recusa, cadastrar
+  hospedagem à mão, entregar o acesso de uso único, ler a qualidade e o funil, e
+  registrar pedido de titular. Este último documenta uma lacuna em vez de
+  escondê-la: não existe tela para direito de titular, então o caderno de
+  registro é o controle e será pedido em auditoria;
+- funil de adesão dos últimos 30 dias em `GET /analytics/funnel`, escopo
+  `analytics:read:internal`, exibido no painel `/qualidade`: convite emitido,
+  usado e expirado; pesquisa emitida, respondida, recusada e vencida;
+  autocadastro iniciado, pendente e decidido. Não abre canal de telemetria e
+  não coleta nada novo — conta estados que o registro já guarda. A mediana de
+  latência só aparece a partir de dez submissões na janela, porque abaixo disso
+  ela descreve uma pessoa e não um comportamento. Na pesquisa, concluída é a
+  capability consumida: resposta e recusa explícita contam juntas, porque
+  `app_runtime` grava em `survey.responses` e não lê de volta — privilégio
+  deliberado, não lacuna a corrigir com GRANT;
+- [ADR-045](docs/decisoes/ADR-045-retorno-do-dado-a-hospedagem-e-funil-de-adesao.md)
+  registrando as três decisões de privacidade desta entrega: limiar próprio do
+  comparativo, recusa de publicar ocupação como célula pública e funil que conta
+  estados em vez de instrumentar pessoas;
+- comparativo da própria hospedagem em
+  `GET /accommodations/{accommodation_id}/performance`: a série observada da
+  acomodação, exata porque é dado dela, ao lado do índice da publicação
+  corrente. Nenhuma família de célula nova é publicada — o lado da vila é o
+  mesmo documento da capa, com a mesma supressão — e o valor absoluto da vila
+  fica de fora do payload, porque quem conhece o próprio número é o único que
+  consegue calcular `outros = total - meu`. O comparativo fecha, mantendo só o
+  lado próprio, quando menos de cinco hospedagens reportaram na janela ou
+  quando a capacidade própria passa de um quarto do denominador reportante;
+- taxa de ocupação da janela no mesmo comparativo: a própria exata, a da vila
+  em banda de cinco pontos e só com o comparativo aberto. Ela **não** vira
+  célula publicada: presença já sai em múltiplos de 10 e a cobertura em
+  múltiplos de 5, então uma ocupação pública tornaria a capacidade da vila
+  inferível. O arredondamento impede determinar o valor exato — capacidades
+  vizinhas produzem publicações idênticas —, mas 730 dias estreitam o intervalo
+  a uma faixa de poucos leitos, e a diferença entre duas publicações estreita do
+  mesmo modo a capacidade do estabelecimento recém-admitido. Atributo de
+  estabelecimento identificável, ainda que por faixa, é dado individualizado
+  (Portaria MTur nº 41/2025). Um número por janela, para um leitor identificado,
+  é outra escala de exposição;
 - lista pública de hospedagens em `/hospedagens` e
   `GET /api/v1/public/accommodations`, com nome, categoria, localidade,
   capacidade, telefone em E.164, WhatsApp e site das hospedagens ativas que

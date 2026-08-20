@@ -262,6 +262,7 @@ describe("registro da aba no painel", () => {
       getPreferences: vi.fn().mockRejectedValue(new Error("release ausente")),
       getMethodology: vi.fn().mockRejectedValue(new Error("release ausente")),
       getQuality: vi.fn().mockRejectedValue(new Error("release ausente")),
+      getFunnel: vi.fn().mockRejectedValue(new Error("release ausente")),
     };
     render(
       <QueryClientProvider client={queryClient}>

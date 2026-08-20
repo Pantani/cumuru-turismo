@@ -7,6 +7,7 @@ import { useAccommodations } from "../accommodation/use-accommodations";
 import { ApprovalQueue } from "../approval/ApprovalQueue";
 import { CalendarFeedPanel } from "../calendar/CalendarFeedPanel";
 import { CalendarReservationQueue } from "../calendar/CalendarReservationQueue";
+import { PerformancePanel } from "../performance/PerformancePanel";
 import { AccommodationPicker } from "./AccommodationPicker";
 import { StayBoard } from "./StayBoard";
 import type { Accommodation } from "./stay-lifecycle";
@@ -91,6 +92,9 @@ export function OperatorWorkspace() {
             accommodation={selected}
             onSaved={() => void load()}
           />
+          {/* O comparativo é leitura retrospectiva: vem depois do que a
+              hospedagem precisa decidir hoje. */}
+          <PerformancePanel accommodation={selected} />
           <SelfServicePanels accommodation={selected} />
         </>
       )}

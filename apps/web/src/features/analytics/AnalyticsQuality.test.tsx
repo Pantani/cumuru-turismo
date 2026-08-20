@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -40,12 +40,42 @@ function qualityResult(): Promise<AnalyticsResult<QualitySnapshot>> {
   });
 }
 
-function client(getQuality: AnalyticsClient["getQuality"]): AnalyticsClient {
+const funnel: components["schemas"]["AdoptionFunnel"] = {
+  window: "last_30_days",
+  as_of: "2026-08-19T03:00:00Z",
+  invite: {
+    issued: 40,
+    submitted: 30,
+    expired_unused: 8,
+    revoked: 2,
+    median_hours_to_submit: 5,
+  },
+  // Sem mediana: o servidor a retira abaixo de dez submissões na janela.
+  survey: { issued: 30, completed: 13, expired_unanswered: 17, revoked: 0 },
+  self_registration: {
+    started: 12,
+    pending: 2,
+    approved: 8,
+    rejected: 1,
+    expired: 1,
+  },
+};
+
+function client(
+  getQuality: AnalyticsClient["getQuality"],
+  getFunnel: AnalyticsClient["getFunnel"] = () =>
+    Promise.resolve({
+      data: funnel,
+      etag: null,
+      requestId: "request-funnel-test",
+    }),
+): AnalyticsClient {
   return {
     getSummary: vi.fn(),
     getPresence: vi.fn(),
     getPreferences: vi.fn(),
     getMethodology: vi.fn(),
+    getFunnel,
     getQuality,
   };
 }
@@ -114,5 +144,23 @@ describe("painel interno agregado de qualidade", () => {
       await screen.findByText("Cadastros incompletos"),
     ).toBeInTheDocument();
     expect(getQuality).toHaveBeenCalledTimes(2);
+  });
+
+  it("mostra o funil e respeita a mediana retirada pelo servidor", async () => {
+    renderQuality(client(qualityResult));
+
+    const section = within(
+      (
+        await screen.findByRole("heading", {
+          name: "Funil de adesão nos últimos 30 dias",
+        })
+      ).closest("section") as HTMLElement,
+    );
+    // 30 de 40 convites submetidos; 13 de 30 capabilities consumidas.
+    expect(section.getByText("75%")).toBeTruthy();
+    expect(section.getByText("43%")).toBeTruthy();
+    expect(section.getByText("5 h")).toBeTruthy();
+    // A pesquisa e o autocadastro não têm mediana publicável nesta janela.
+    expect(section.getAllByText("—")).toHaveLength(2);
   });
 });

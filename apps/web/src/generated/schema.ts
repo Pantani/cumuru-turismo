@@ -257,6 +257,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analytics/funnel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar o funil de adesão dos últimos 30 dias
+         * @description Conta estados que o registro já guarda — convite emitido e usado,
+         *     capability de pesquisa emitida e consumida, autocadastro pendente e
+         *     decidido. Não abre canal de telemetria, não grava evento por pessoa e
+         *     não coleta nada novo. A mediana de latência só aparece a partir de dez
+         *     submissões na janela: abaixo disso ela descreveria uma pessoa, não um
+         *     comportamento. É diagnóstico interno e não entra em publicação alguma.
+         */
+        get: operations["getAnalyticsFunnel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/accommodations": {
         parameters: {
             query?: never;
@@ -294,6 +319,34 @@ export interface paths {
         head?: never;
         /** Alterar campos operacionais da acomodação */
         patch: operations["updateAccommodation"];
+        trace?: never;
+    };
+    "/accommodations/{accommodation_id}/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Comparar a própria hospedagem com a série publicada da vila
+         * @description Devolve a série observada da própria acomodação, exata porque é dado
+         *     dela, ao lado do índice da vila. O lado da vila é a publicação corrente
+         *     — mesma supressão, mesmo arredondamento e mesma versão do documento
+         *     público — e nunca traz valor absoluto: o absoluto continua em
+         *     `/public/presence`, e repeti-lo aqui entregaria composta a subtração
+         *     `outros = total - meu`, que só quem conhece o próprio número consegue
+         *     fazer. O comparativo fecha quando a vila tem poucos estabelecimentos
+         *     reportando na janela ou quando a capacidade própria domina o
+         *     denominador; nesses casos a série própria continua, sem índice.
+         */
+        get: operations["getAccommodationPerformance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/accommodations/{accommodation_id}/memberships": {
@@ -2025,6 +2078,43 @@ export interface components {
             status: "protected" | "unavailable";
         };
         ForecastPresencePoint: components["schemas"]["PublishedForecastPoint"] | components["schemas"]["ProtectedForecastPoint"];
+        AccommodationPerformance: {
+            metadata: components["schemas"]["PublicMetadata"];
+            /** @enum {string} */
+            window: "recent_30_days" | "recent_90_days" | "recent_365_days" | "recent_730_days" | "month";
+            month?: string;
+            comparison: components["schemas"]["PerformanceComparison"];
+            occupancy: components["schemas"]["PerformanceOccupancy"];
+            series: components["schemas"]["OwnPresencePoint"][];
+        };
+        /**
+         * @description Taxa de ocupação da janela: pessoas-dia sobre leitos disponíveis. A taxa
+         *     própria é exata; a da vila sai em banda de cinco pontos e só existe com
+         *     o comparativo aberto. Nenhuma das duas é publicada como célula pública:
+         *     com presença e cobertura já públicas, uma ocupação pública tornaria a
+         *     capacidade da vila derivável, e a média sobre a janela de 730 dias
+         *     converge para o valor exato — a diferença entre duas publicações
+         *     denunciaria a capacidade do estabelecimento recém-admitido, que é dado
+         *     individualizado de estabelecimento. Uma taxa acima de 100 indica
+         *     capacidade declarada menor que a operação real e não é aparada.
+         */
+        PerformanceOccupancy: {
+            own_percent?: number;
+            village_percent?: number;
+        };
+        PerformanceComparison: {
+            /** @enum {string} */
+            status: "available" | "unavailable";
+            /** @enum {string} */
+            reason?: "few_reporting_accommodations" | "own_capacity_share_too_high" | "no_published_series";
+        };
+        OwnPresencePoint: {
+            /** Format: date */
+            date: string;
+            own_person_days: number;
+            own_index?: number;
+            village_index?: number;
+        };
         ObservedPublicPresence: {
             metadata: components["schemas"]["PublicMetadata"];
             /** @enum {string} */
@@ -2249,6 +2339,42 @@ export interface components {
             status: "not_available";
         };
         QualityCoverage: components["schemas"]["AvailableQualityCoverage"] | components["schemas"]["UnavailableQualityCoverage"];
+        AdoptionFunnel: {
+            /** @constant */
+            window: "last_30_days";
+            /** Format: date-time */
+            as_of: string;
+            invite: components["schemas"]["InviteFunnel"];
+            survey: components["schemas"]["SurveyFunnel"];
+            self_registration: components["schemas"]["SelfRegistrationFunnel"];
+        };
+        InviteFunnel: {
+            issued: number;
+            submitted: number;
+            expired_unused: number;
+            revoked: number;
+            median_hours_to_submit?: number;
+        };
+        /**
+         * @description Concluída é a capability consumida, seja a participação resposta ou
+         *     recusa explícita. O funil não separa as duas porque a API grava em
+         *     `survey.responses` e não lê de volta — privilégio deliberado, não
+         *     lacuna: só o worker enxerga a participação.
+         */
+        SurveyFunnel: {
+            issued: number;
+            completed: number;
+            expired_unanswered: number;
+            revoked: number;
+            median_hours_to_answer?: number;
+        };
+        SelfRegistrationFunnel: {
+            started: number;
+            pending: number;
+            approved: number;
+            rejected: number;
+            expired: number;
+        };
         QualitySnapshot: {
             /** @constant */
             window: "last_30_days";
@@ -2456,6 +2582,12 @@ export interface components {
          *     parâmetro `month`. `next_30_days` é a única janela de previsão.
          */
         PresenceWindow: "recent_30_days" | "recent_90_days" | "recent_365_days" | "recent_730_days" | "next_30_days" | "month";
+        /**
+         * @description Recorte da série observada. A previsão não entra no comparativo: ela é
+         *     publicada como intervalo e a hospedagem não tem série própria para pôr
+         *     ao lado.
+         */
+        ObservedPresenceWindow: "recent_30_days" | "recent_90_days" | "recent_365_days" | "recent_730_days" | "month";
         /**
          * @description Mês civil consultado, obrigatório quando `window=month` e recusado em
          *     qualquer outra janela. Fora do histórico publicado o documento não
@@ -2927,6 +3059,35 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    getAnalyticsFunnel: {
+        parameters: {
+            query: {
+                window: components["parameters"]["QualityWindow"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contagens por etapa, agregadas e sem IDs. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdoptionFunnel"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     listAccommodations: {
         parameters: {
             query?: {
@@ -3062,6 +3223,49 @@ export interface operations {
             412: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             428: components["responses"]["Problem"];
+            500: components["responses"]["InternalServerProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccommodationPerformance: {
+        parameters: {
+            query: {
+                /**
+                 * @description Recorte da série observada. A previsão não entra no comparativo: ela é
+                 *     publicada como intervalo e a hospedagem não tem série própria para pôr
+                 *     ao lado.
+                 */
+                window: components["parameters"]["ObservedPresenceWindow"];
+                /**
+                 * @description Mês civil consultado, obrigatório quando `window=month` e recusado em
+                 *     qualquer outra janela. Fora do histórico publicado o documento não
+                 *     existe e a resposta é 503.
+                 */
+                month?: components["parameters"]["PresenceMonth"];
+            };
+            header?: never;
+            path: {
+                accommodation_id: components["parameters"]["AccommodationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Série própria e índice da vila na mesma janela publicada. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccommodationPerformance"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             500: components["responses"]["InternalServerProblem"];
             503: components["responses"]["Problem"];
         };

@@ -196,6 +196,8 @@ func apiDependencies(
 		PublicAnalytics:                readers.analytics,
 		PublicDirectory:                publicDirectory,
 		AnalyticsQuality:               readers.quality,
+		AnalyticsFunnel:                funnelReader(platformStore, readers.quality),
+		OwnPerformance:                 ownPerformanceReader(platformStore, readers.analytics),
 		PublicContext:                  readers.context,
 		CORSAllowedOrigins:             cfg.Core.CORSAllowedOrigins,
 		TrustedProxyCIDRs:              cfg.TrustedProxyCIDRs,
@@ -209,6 +211,34 @@ func apiDependencies(
 			BuiltAt:  build.BuiltAt,
 		},
 	}
+}
+
+// O funil lê tabelas do núcleo, não a publicação, mas mora na mesma tela do
+// painel de qualidade: com analytics desligado a rota não é registrada, para
+// que a tela não fique com metade dos números.
+func funnelReader(
+	platformStore *store.Store,
+	quality analytics.QualityReader,
+) analytics.FunnelReader {
+	if quality == nil {
+		return nil
+	}
+	return store.NewFunnelRepository(platformStore)
+}
+
+// Sem publicação corrente não existe lado da vila, e um comparativo com um lado
+// só não é comparativo: a rota deixa de ser registrada, o que é 404 em vez de
+// painel meio configurado.
+func ownPerformanceReader(
+	platformStore *store.Store,
+	public analytics.PublicReader,
+) analytics.OwnPerformanceReader {
+	if public == nil {
+		return nil
+	}
+	return store.NewOwnPerformanceRepository(
+		platformStore, public, analytics.DefaultComparisonPolicy(),
+	)
 }
 
 // The public and operations listeners are opened together so a partially bound

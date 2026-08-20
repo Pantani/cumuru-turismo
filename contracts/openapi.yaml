@@ -485,6 +485,45 @@ paths:
           $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/InternalServerProblem"
+  /analytics/funnel:
+    get:
+      summary: Consultar o funil de adesão dos últimos 30 dias
+      description: |
+        Conta estados que o registro já guarda — convite emitido e usado,
+        capability de pesquisa emitida e consumida, autocadastro pendente e
+        decidido. Não abre canal de telemetria, não grava evento por pessoa e
+        não coleta nada novo. A mediana de latência só aparece a partir de dez
+        submissões na janela: abaixo disso ela descreveria uma pessoa, não um
+        comportamento. É diagnóstico interno e não entra em publicação alguma.
+      tags: [analytics]
+      operationId: getAnalyticsFunnel
+      x-cumuru-feature: analytics
+      security:
+        - oidc: ["analytics:read:internal"]
+      parameters:
+        - $ref: "#/components/parameters/QualityWindow"
+      responses:
+        "200":
+          description: Contagens por etapa, agregadas e sem IDs.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdoptionFunnel"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
   /accommodations:
     get:
       summary: Listar acomodações acessíveis
@@ -651,6 +690,52 @@ paths:
         "422":
           $ref: "#/components/responses/Problem"
         "428":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/InternalServerProblem"
+  /accommodations/{accommodation_id}/performance:
+    get:
+      summary: Comparar a própria hospedagem com a série publicada da vila
+      description: |
+        Devolve a série observada da própria acomodação, exata porque é dado
+        dela, ao lado do índice da vila. O lado da vila é a publicação corrente
+        — mesma supressão, mesmo arredondamento e mesma versão do documento
+        público — e nunca traz valor absoluto: o absoluto continua em
+        `/public/presence`, e repeti-lo aqui entregaria composta a subtração
+        `outros = total - meu`, que só quem conhece o próprio número consegue
+        fazer. O comparativo fecha quando a vila tem poucos estabelecimentos
+        reportando na janela ou quando a capacidade própria domina o
+        denominador; nesses casos a série própria continua, sem índice.
+      tags: [accommodations]
+      operationId: getAccommodationPerformance
+      x-cumuru-feature: analytics
+      security:
+        - oidc: ["stays:read:own"]
+      parameters:
+        - $ref: "#/components/parameters/AccommodationId"
+        - $ref: "#/components/parameters/ObservedPresenceWindow"
+        - $ref: "#/components/parameters/PresenceMonth"
+      responses:
+        "200":
+          description: Série própria e índice da vila na mesma janela publicada.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccommodationPerformance"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
           $ref: "#/components/responses/Problem"
         "503":
           $ref: "#/components/responses/Problem"
@@ -2868,6 +2953,22 @@ components:
           - recent_365_days
           - recent_730_days
           - next_30_days
+          - month
+    ObservedPresenceWindow:
+      name: window
+      in: query
+      required: true
+      description: |
+        Recorte da série observada. A previsão não entra no comparativo: ela é
+        publicada como intervalo e a hospedagem não tem série própria para pôr
+        ao lado.
+      schema:
+        type: string
+        enum:
+          - recent_30_days
+          - recent_90_days
+          - recent_365_days
+          - recent_730_days
           - month
     PresenceMonth:
       name: month
@@ -5660,6 +5761,85 @@ components:
       oneOf:
         - $ref: "#/components/schemas/PublishedForecastPoint"
         - $ref: "#/components/schemas/ProtectedForecastPoint"
+    AccommodationPerformance:
+      type: object
+      required: [metadata, window, comparison, occupancy, series]
+      additionalProperties: false
+      properties:
+        metadata:
+          $ref: "#/components/schemas/PublicMetadata"
+        window:
+          type: string
+          enum:
+            - recent_30_days
+            - recent_90_days
+            - recent_365_days
+            - recent_730_days
+            - month
+        month:
+          type: string
+          pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
+        comparison:
+          $ref: "#/components/schemas/PerformanceComparison"
+        occupancy:
+          $ref: "#/components/schemas/PerformanceOccupancy"
+        series:
+          type: array
+          maxItems: 730
+          items:
+            $ref: "#/components/schemas/OwnPresencePoint"
+    PerformanceOccupancy:
+      type: object
+      description: |
+        Taxa de ocupação da janela: pessoas-dia sobre leitos disponíveis. A taxa
+        própria é exata; a da vila sai em banda de cinco pontos e só existe com
+        o comparativo aberto. Nenhuma das duas é publicada como célula pública:
+        com presença e cobertura já públicas, uma ocupação pública tornaria a
+        capacidade da vila derivável, e a média sobre a janela de 730 dias
+        converge para o valor exato — a diferença entre duas publicações
+        denunciaria a capacidade do estabelecimento recém-admitido, que é dado
+        individualizado de estabelecimento. Uma taxa acima de 100 indica
+        capacidade declarada menor que a operação real e não é aparada.
+      additionalProperties: false
+      properties:
+        own_percent:
+          type: integer
+          minimum: 0
+        village_percent:
+          type: integer
+          minimum: 0
+          multipleOf: 5
+    PerformanceComparison:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [available, unavailable]
+        reason:
+          type: string
+          enum:
+            - few_reporting_accommodations
+            - own_capacity_share_too_high
+            - no_published_series
+    OwnPresencePoint:
+      type: object
+      required: [date, own_person_days]
+      additionalProperties: false
+      properties:
+        date:
+          type: string
+          format: date
+        own_person_days:
+          type: integer
+          minimum: 0
+        own_index:
+          type: integer
+          minimum: 0
+        village_index:
+          type: integer
+          minimum: 0
     ObservedPublicPresence:
       type: object
       required: [metadata, window, series]
@@ -6265,6 +6445,88 @@ components:
       oneOf:
         - $ref: "#/components/schemas/AvailableQualityCoverage"
         - $ref: "#/components/schemas/UnavailableQualityCoverage"
+    AdoptionFunnel:
+      type: object
+      required: [window, as_of, invite, survey, self_registration]
+      additionalProperties: false
+      properties:
+        window:
+          type: string
+          const: last_30_days
+        as_of:
+          type: string
+          format: date-time
+        invite:
+          $ref: "#/components/schemas/InviteFunnel"
+        survey:
+          $ref: "#/components/schemas/SurveyFunnel"
+        self_registration:
+          $ref: "#/components/schemas/SelfRegistrationFunnel"
+    InviteFunnel:
+      type: object
+      required: [issued, submitted, expired_unused, revoked]
+      additionalProperties: false
+      properties:
+        issued:
+          type: integer
+          minimum: 0
+        submitted:
+          type: integer
+          minimum: 0
+        expired_unused:
+          type: integer
+          minimum: 0
+        revoked:
+          type: integer
+          minimum: 0
+        median_hours_to_submit:
+          type: integer
+          minimum: 0
+    SurveyFunnel:
+      description: |
+        Concluída é a capability consumida, seja a participação resposta ou
+        recusa explícita. O funil não separa as duas porque a API grava em
+        `survey.responses` e não lê de volta — privilégio deliberado, não
+        lacuna: só o worker enxerga a participação.
+      type: object
+      required: [issued, completed, expired_unanswered, revoked]
+      additionalProperties: false
+      properties:
+        issued:
+          type: integer
+          minimum: 0
+        completed:
+          type: integer
+          minimum: 0
+        expired_unanswered:
+          type: integer
+          minimum: 0
+        revoked:
+          type: integer
+          minimum: 0
+        median_hours_to_answer:
+          type: integer
+          minimum: 0
+    SelfRegistrationFunnel:
+      type: object
+      required: [started, pending, approved, rejected, expired]
+      additionalProperties: false
+      properties:
+        started:
+          type: integer
+          minimum: 0
+        pending:
+          type: integer
+          minimum: 0
+        approved:
+          type: integer
+          minimum: 0
+        rejected:
+          type: integer
+          minimum: 0
+        expired:
+          type: integer
+          minimum: 0
     QualitySnapshot:
       type: object
       required:

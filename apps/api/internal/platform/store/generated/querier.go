@@ -209,6 +209,16 @@ type Querier interface {
 	// filtro ausente devolve todos os estados.
 	ListAccommodationAccessRequests(ctx context.Context, arg ListAccommodationAccessRequestsParams) ([]ListAccommodationAccessRequestsRow, error)
 	ListAccommodationMemberships(ctx context.Context, arg ListAccommodationMembershipsParams) ([]ListAccommodationMembershipsRow, error)
+	// As pessoas-dia da própria hospedagem são derivadas de `core.stays` e
+	// `core.visitors`, não de `analytics.presence_days`: `app_runtime` tem SELECT
+	// nas duas primeiras e nenhum acesso à terceira, que é tabela do worker. A
+	// fronteira é deliberada e não se corrige com GRANT — o que a API devolve aqui
+	// é a mesma estadia que a hospedagem já lê em `GET /stays`, recortada por dia.
+	//
+	// A elegibilidade repete `presenceEligible`: estado contável e aprovação
+	// resolvida. Divergir dela faria a curva própria contar estadia que a
+	// publicação recusou.
+	ListAccommodationObservedPresence(ctx context.Context, arg ListAccommodationObservedPresenceParams) ([]ListAccommodationObservedPresenceRow, error)
 	ListAccommodationOnboardingOrganizations(ctx context.Context, arg ListAccommodationOnboardingOrganizationsParams) ([]ListAccommodationOnboardingOrganizationsRow, error)
 	ListActiveAccommodationCoverage(ctx context.Context, arg ListActiveAccommodationCoverageParams) ([]ListActiveAccommodationCoverageRow, error)
 	ListActiveMetricCatalog(ctx context.Context, privacyPolicyVersion string) ([]AnalyticsMetricCatalog, error)
@@ -351,6 +361,33 @@ type Querier interface {
 	SpendProofOfWorkChallenge(ctx context.Context, arg SpendProofOfWorkChallengeParams) (int64, error)
 	StartExternalFetchRun(ctx context.Context, arg StartExternalFetchRunParams) error
 	SubmitQuestionnaireVersionReview(ctx context.Context, arg SubmitQuestionnaireVersionReviewParams) (SurveyQuestionnaireVersion, error)
+	// O funil não coleta nada: ele conta o que o registro já guarda. Convite
+	// emitido, convite usado, convite que expirou sem uso — três estados que já
+	// existem em `core.invites`, lidos por janela.
+	// A estadia tem no máximo uma submissão (`group_submissions.stay_id` é único),
+	// mas pode ter mais de um convite: um revogado e outro emitido em seguida.
+	// Sem `use_count > 0` na junção, a mesma submissão seria contada uma vez por
+	// convite e inflaria a amostra da mediana.
+	SummarizeInviteFunnel(ctx context.Context, arg SummarizeInviteFunnelParams) (SummarizeInviteFunnelRow, error)
+	SummarizeSelfRegistrationFunnel(ctx context.Context, arg SummarizeSelfRegistrationFunnelParams) (SummarizeSelfRegistrationFunnelRow, error)
+	// A conclusão sai de `survey.capabilities.consumed_at`, não de
+	// `survey.responses`: `app_runtime` tem INSERT e não SELECT nas respostas — a
+	// API grava a resposta do hóspede e não a lê de volta, e isso é controle de
+	// privacidade, não lacuna a corrigir com GRANT.
+	//
+	// O preço é real e fica declarado: sem ler `participation`, o funil não separa
+	// quem respondeu de quem recusou explicitamente. As duas contam como concluídas.
+	// Essa separação só pode vir do worker, que é quem enxerga a resposta.
+	SummarizeSurveyFunnel(ctx context.Context, arg SummarizeSurveyFunnelParams) (SummarizeSurveyFunnelRow, error)
+	// O denominador do comparativo, e nada além dele. Os números decidem se a vila
+	// pode aparecer ao lado do dado próprio e morrem no processo: a resposta HTTP
+	// carrega apenas o veredito, porque "somos sete com 210 leitos" já é informação
+	// sobre terceiros.
+	//
+	// Uma passagem por acomodação, e sobre as mesmas tabelas do núcleo, pela mesma
+	// razão de privilégio da consulta acima. `reported` sai de count(*) para não
+	// depender de arredondamento.
+	SummarizeVillageReporting(ctx context.Context, arg SummarizeVillageReportingParams) (SummarizeVillageReportingRow, error)
 	TouchAuthSession(ctx context.Context, arg TouchAuthSessionParams) error
 	UpdateAccommodation(ctx context.Context, arg UpdateAccommodationParams) (UpdateAccommodationRow, error)
 	UpdateAccommodationMembership(ctx context.Context, arg UpdateAccommodationMembershipParams) (UpdateAccommodationMembershipRow, error)
